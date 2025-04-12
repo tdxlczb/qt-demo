@@ -8,6 +8,7 @@ namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
 class MainWidget;
+class WebSocketServer;
 
 class MainWindow : public QMainWindow
 {
@@ -21,5 +22,7 @@ private:
     Ui::MainWindow *ui;
 
     MainWidget * mainWidget_;
+
+    WebSocketServer * server_;
 };
 #endif // MAINWINDOW_H

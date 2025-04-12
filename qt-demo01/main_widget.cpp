@@ -1,10 +1,21 @@
 #include "main_widget.h"
-#include "common_widget.h"
+
 #include <windows.h>
 
-MainWidget::MainWidget(QWidget *parent) : QWidget(parent)
+#include <QDebug>
+
+#include "common_widget.h"
+#include "live_widget.h"
+#include "play_glwidget.h"
+
+
+MainWidget::MainWidget(QWidget *parent)
+    : QWidget(parent)
+    , vBoxLayout_(new QVBoxLayout(this))
+    , hBoxLayout_(new QHBoxLayout(this))
 {
-    this->resize(1200,800);
+    this->resize(400,300);
+    this->setWindowTitle("MainWidget");
     //设置主窗口背景颜色
     QPalette palette;
     palette.setColor(QPalette::Window,QColor(250, 150, 30));
@@ -12,38 +23,63 @@ MainWidget::MainWidget(QWidget *parent) : QWidget(parent)
     this->setPalette(palette);
     this->setAutoFillBackground(true);
 
-//    gridLayout1_ = new QGridLayout();
-//    gridLayout1_->setContentsMargins(1, 1, 1, 1);
-//    gridLayout1_->setSpacing(1);
-//    gridLayout2_ = new QGridLayout();
-//    gridLayout2_->setContentsMargins(1, 1, 1, 1);
-//    gridLayout2_->setSpacing(1);
+//    QPixmap pixmap(":/resource/image/logo.png");
 
-    commonWidget1_ = new CommonWidget(nullptr);
-//    commonWidget1_->setLayout(gridLayout1_);
+//    palette.setBrush(QPalette::Window, QBrush(pixmap));
+//    this->setPalette(palette);
 
-    commonWidget1_->setGeometry(100,100, 400,200);
-    commonWidget1_->raise();
-    {
-        HWND hwnd = (HWND)commonWidget1_->winId();
-        SetWindowPos(hwnd, HWND_TOP, 0, 0, 600, 400, SWP_NOMOVE );
+//    commonWidget1_ = new CommonWidget(nullptr);
+////    commonWidget1_->setLayout(gridLayout1_);
+
+//    commonWidget1_->setGeometry(100,100, 400,200);
+//    commonWidget1_->raise();
+//    {
+//        HWND hwnd = (HWND)commonWidget1_->winId();
+//        SetWindowPos(hwnd, HWND_TOP, 0, 0, 600, 400, SWP_NOMOVE );
+//    }
+////    commonWidget2_->setVisible(true);
+//    commonWidget1_->show();
+
+
+//    this->setStyleSheet(
+//                "background-image: url(:/resource/image/logo.png);"  // 资源文件路径
+//                "background-position: center;"            // 居中
+//                "background-repeat: no-repeat;"           // 不重复
+////                "background-color: transparent;"          // 透明背景
+//                );
+
+
+    liveWidget_ = new LiveWidget(nullptr);
+
+
+    HWND hwndParent = HWND(459960);
+    if(!SetParent((HWND)liveWidget_->winId(), hwndParent)) {
+        qCritical()<<"SetParent Error";
     }
-//    commonWidget2_->setVisible(true);
-    commonWidget1_->show();
+    liveWidget_->SetAttachParentHwnd(hwndParent);
+    liveWidget_->setGeometry(496,364,621,370);
+    liveWidget_->show();
 
 
-    commonWidget2_ = new CommonWidget(nullptr);
-//    commonWidget2_->setLayout(gridLayout1_);
+    button1_ = new QPushButton("button1",this);
+    button2_ = new QPushButton("button2",this);
+    vBoxLayout_->addWidget(button1_);
+    vBoxLayout_->addWidget(button2_);
+    connect(button1_,&QPushButton::clicked,[this, hwndParent](){
+        qDebug() << "button1 clicked";
 
-    commonWidget2_->setGeometry(100,100, 400,200);
-    commonWidget2_->raise();
-    {
-        HWND hwnd = (HWND)commonWidget2_->winId();
-        SetWindowPos(hwnd, HWND_TOP, 0, 0, 600, 400, SWP_NOMOVE );
-    }
-//    commonWidget2_->setVisible(true);
-    commonWidget2_->show();
+        liveWidget_->SetFullScreen();
+
+    });
+
+    connect(button2_,&QPushButton::clicked,[this, hwndParent](){
+        qDebug() << "button2 clicked";
+
+//        liveWidget_->QuitFullScreen();
+    });
 
 
-
+    playGLWidget_ = new PlayGLWidget();
+    playGLWidget_->PlayOneFrame();
+    playGLWidget_->show();
 }

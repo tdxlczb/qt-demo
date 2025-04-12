@@ -10,6 +10,7 @@
 #include <QJsonValue>
 #include <QJsonParseError>
 #include <QDataStream>
+#include <QHash>
 
 const QString data = "{\"method\":\"media.setWindowInitConfig\",\"info\":{\"PTZDisplayUserInfo\":\"1\",\"PTZReleaseTime\":\"0\",\"adaptivePictureLayout\":\"1\",\"adaptiveStream\":\"1\",\"addWatermark\":\"1\",\"authenticationType\":\"1\",\"autoRecord\":\"1\",\"cannotCoverSavingPool\":\"\",\"captureMode\":\"0\",\"cascadeEncodingType\":\"1\",\"coveredSavingPool\":\"\",\"deviceTiming\":\"1\",\"eventRetentionDuration\":\"1\",\"fieldDesensitization\":\"0\",\"fileStoragePath\":\"\",\"filterOfflinePoints\":\"1\",\"gpuHardDecode\":\"0\",\"imageMonitor\":\"0\",\"imageMonitorTime\":\"30\",\"limitedTimePreview\":\"0\",\"limitedTimePreviewDuration\":\"30\",\"loginType\":\"1,2\",\"mainStreamAdaptation\":\"1\",\"memoryPreviewWindow\":\"1\",\"mobileUserBinding\":\"0\",\"oneKeyWallPost\":\"1\",\"onlineStatus\":\"1\",\"osdTemplate\":\"{\\\"channelName\\\":{\\\"enabled\\\":true,\\\"left\\\":0,\\\"right\\\":0,\\\"top\\\":0,\\\"bottom\\\":0},\\\"dateTime\\\":{\\\"enabled\\\":true,\\\"hourOSDType\\\":0,\\\"left\\\":0,\\\"right\\\":0,\\\"top\\\":0,\\\"bottom\\\":0,\\\"osdType\\\":0},\\\"displayWeek\\\":false,\\\"osdAttribute\\\":1}\",\"pageWatermark\":\"1\",\"passwordExpirationDate\":\"1\",\"passwordValidityPeriod\":\"0\",\"playbackStreamFetch\":\"\",\"postDecodeBuffer\":\"6\",\"preDecodeBuffer\":\"1024\",\"previewPostDecodeBuffer\":\"6\",\"previewPreDecodeBuffer\":\"1024\",\"previewStreamFetch\":\"\",\"previewToolbar\":\"\",\"ptzMode\":\"1\",\"reconnectTimeGap\":\"10000\",\"retainPicture\":\"1\",\"securityAreaScenario\":\"1\",\"streamFetchReconnectCount\":\"3\",\"streamSwitchCount\":\"4\",\"timingCycle\":\"1\",\"userOnlineLimit\":\"200\",\"videoEditConfig\":\"0\",\"wCaptureImageFormat\":\"1\",\"wIntelligentRuleDisplay\":\"0\",\"wPlaybackToolbar\":\"\",\"watermarkContent\":\"\",\"watermarkTextColor\":\"1\",\"watermarkTransparency\":\"10\",\"captureImageFormat\":\"bmp\",\"recordPath\":\"\",\"snapShotPath\":\"\",\"decodeType\":2,\"snapType\":1,\"clientType\":1},\"id\":0}";
 
@@ -39,6 +40,40 @@ void JsonTest()
 
 
 #include "main_application.h"
+#include "live_widget.h"
+#include <thread>
+#include <Windows.h>
+#include <QRegularExpression>
+#include <QDebug>
+#include <QProcess>
+#include <QRandomGenerator>
+
+struct StWindowTitleInfo {      //窗口标题信息
+    HWND hwnd;              //窗口句柄
+    QString title;          //窗口标题
+};
+
+BOOL CALLBACK enumWindowsProcByTitle(HWND hwnd, LPARAM lParam) {
+    // 获取窗口标题
+    wchar_t windowTitle[256];
+    GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(wchar_t));
+
+    // 如果窗口标题不为空，将其保存
+    if (wcslen(windowTitle) > 0) {
+        QString title = QString::fromWCharArray(windowTitle);
+        QList<StWindowTitleInfo>* windowList = reinterpret_cast<QList<StWindowTitleInfo>*>(lParam);
+        windowList->append({ hwnd, title });
+    }
+
+    return TRUE; // 继续枚举其他窗口
+}
+
+
+
+
+
+
+#include <random>
 
 int main(int argc, char* argv[])
 {
@@ -54,10 +89,41 @@ int main(int argc, char* argv[])
     qCritical("This is a critical message at thisisqt.com");
     //qFatal("This is a fatal message at thisisqt.com");
 
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist(0, std::pow(10, 10) - 1);
+
+    int num = dist(gen);
+
+    QList<StWindowTitleInfo> windowList;
+
+    // 枚举所有窗口
+    EnumWindows(enumWindowsProcByTitle, reinterpret_cast<LPARAM>(&windowList));
+
+    const QString& pattern = "1744078714144";
+    QRegularExpression regex(pattern);
+    for (const StWindowTitleInfo& window : windowList) {
+        if (regex.match(window.title).hasMatch()) {
+            qDebug() << window.title;
+
+        }
+        qInfo() << "窗口:" << window.title;
+    }
+
+
+    QString str = "首页 | 综合安防管理平台-1744078714144 - Google Chrome";
+    if (regex.match(str).hasMatch()) {
+        qDebug() << str;
+
+    }
+
+
     MainWindow w;
     w.show();
-    return a.exec();
+    a.exec();
 
+    return 0;
 //    QWidget widget;
 //    widget.setFixedSize(0,0);
 //    widget.show();

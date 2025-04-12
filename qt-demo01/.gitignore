@@ -1,0 +1,12 @@
+*.pro.user
+*.TMP
+*.pro.user.*
+.vs
+.qmake.stash
+*.qtvscr
+*.vcxproj*
+*.sln
+*_resource.rc
+debug/*
+release/*
+build-*

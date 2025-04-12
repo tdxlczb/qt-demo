@@ -3,8 +3,15 @@
 
 #include <QWidget>
 #include <QGridLayout>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QHash>
+#include <QPushButton>
 
 class CommonWidget;
+class LiveWidget;
+class BaseLiveWidget;
+class PlayGLWidget;
 
 class MainWidget : public QWidget
 {
@@ -15,10 +22,17 @@ public:
 signals:
 
 private:
-    QGridLayout * gridLayout1_;
-    QGridLayout * gridLayout2_;
-    CommonWidget * commonWidget1_;
-    CommonWidget * commonWidget2_;
+
+    CommonWidget * commonWidget_;
+//    LiveWidget * liveWidget_;
+    LiveWidget * liveWidget_;
+    PlayGLWidget * playGLWidget_;
+
+    QVBoxLayout * vBoxLayout_;
+    QHBoxLayout * hBoxLayout_;
+    QPushButton * button1_;
+    QPushButton * button2_;
+
 };
 
 #endif // MAINWIDGET_H
