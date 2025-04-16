@@ -3,23 +3,29 @@
 #include <QKeyEvent>
 #include <QDebug>
 
-BaseLiveWidget::BaseLiveWidget(QWidget *parent)
+BaseLiveWidget::BaseLiveWidget(QWidget *parent,int widgetId)
     : QWidget(parent)
     , bgLabel_(new QLabel(this))
+    , bgLabel2_(new QLabel(this))
     , loadingLabel_(new QLabel(this))
-    , widgetId_(0)
+    , widgetId_(widgetId)
     , isFullScreen_(false)
     , hwndAttachParent_(NULL)
 {
+
+    QPalette palette;
+    palette.setColor(QPalette::Window,QColor(50, 50, 50));
+//    palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
+    this->setPalette(palette);
+    this->setAutoFillBackground(true);
+
     bgLabel_->setPixmap(QPixmap(":/resource/image/logo.png"));
     bgLabel_->setScaledContents(true);
     //    bgLabel_->hide();
 
 
-    //    QPalette palette;
-    //    palette.setColor(QPalette::Window,QColor(10, 150, 30));
-    //    loadingLabel_->setPalette(palette);
-    //    loadingLabel_->setAutoFillBackground(true);
+    bgLabel2_->hide();
+
 
 //    QMovie *movie = new QMovie(":/resource/image/loading.gif");
 //    movie->setScaledSize(QSize(200,200));
@@ -47,12 +53,22 @@ void BaseLiveWidget::SetAttachParentHwnd(HWND hwnd)
 
 void BaseLiveWidget::Play()
 {
+    bgLabel_->hide();
+    QPixmap pix("E:\\code\\media\\1.jpg");
+    bgLabel2_->setPixmap(pix);
+    bgLabel2_->show();
+    QResizeEvent event(size(), size());
+    resizeEvent(&event);
 
 }
 
 void BaseLiveWidget::Stop()
 {
-
+    bgLabel2_->hide();
+    bgLabel_->show();
+//    update();
+    QResizeEvent event(size(), size());
+    resizeEvent(&event);
 }
 
 
@@ -94,49 +110,29 @@ bool BaseLiveWidget::QuitFullScreen()
     return true;
 }
 
-void BaseLiveWidget::resizeEvent(QResizeEvent *event)
-{
-    bgLabel_->resize(this->size());
-    //手动设置居中
-    loadingLabel_->move((width()-200)/2, (height()-200)/2);
-}
 
-void BaseLiveWidget::mousePressEvent(QMouseEvent* event)
+void BaseLiveWidget::mousePressEvent(QMouseEvent *event)
 {
+    qDebug() << "mouse clicked";
     QWidget::mousePressEvent(event);
 }
 
-void BaseLiveWidget::mouseMoveEvent(QMouseEvent* event)
-{
-    QWidget::mouseMoveEvent(event);
-}
-
-void BaseLiveWidget::mouseReleaseEvent(QMouseEvent* event)
+void BaseLiveWidget::mouseReleaseEvent(QMouseEvent *event)
 {
     QWidget::mouseReleaseEvent(event);
 }
 
-void BaseLiveWidget::paintEvent(QPaintEvent* event)
+void BaseLiveWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    QWidget::paintEvent(event);
+    QWidget::mouseDoubleClickEvent(event);
 }
 
-void BaseLiveWidget::enterEvent(QEvent *event)
+void BaseLiveWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    QWidget::enterEvent(event);
+    QWidget::mouseDoubleClickEvent(event);
 }
 
-void BaseLiveWidget::leaveEvent(QEvent *event)
-{
-    QWidget::leaveEvent(event);
-}
-
-void BaseLiveWidget::hideEvent(QHideEvent *event)
-{
-    QWidget::hideEvent(event);
-}
-
-void BaseLiveWidget::wheelEvent(QWheelEvent* event)
+void BaseLiveWidget::wheelEvent(QWheelEvent *event)
 {
     QWidget::wheelEvent(event);
 }
@@ -149,4 +145,52 @@ void BaseLiveWidget::keyPressEvent(QKeyEvent *event)
     } else {
         QWidget::keyPressEvent(event);  // 保留默认处理
     }
+}
+
+void BaseLiveWidget::keyReleaseEvent(QKeyEvent *event)
+{
+    QWidget::keyReleaseEvent(event);
+}
+
+void BaseLiveWidget::focusInEvent(QFocusEvent *event)
+{
+    QWidget::focusInEvent(event);
+}
+
+void BaseLiveWidget::focusOutEvent(QFocusEvent *event)
+{
+    QWidget::focusOutEvent(event);
+}
+
+void BaseLiveWidget::enterEvent(QEvent *event)
+{
+    QWidget::enterEvent(event);
+}
+
+void BaseLiveWidget::leaveEvent(QEvent *event)
+{
+    QWidget::leaveEvent(event);
+}
+
+void BaseLiveWidget::paintEvent(QPaintEvent *event)
+{
+    QWidget::paintEvent(event);
+}
+
+void BaseLiveWidget::moveEvent(QMoveEvent *event)
+{
+    QWidget::moveEvent(event);
+}
+
+void BaseLiveWidget::resizeEvent(QResizeEvent *event)
+{
+    bgLabel_->resize(this->size());
+    bgLabel2_->resize(this->size());
+    //手动设置居中
+    loadingLabel_->move((width()-200)/2, (height()-200)/2);
+}
+
+void BaseLiveWidget::closeEvent(QCloseEvent *event)
+{
+    QWidget::closeEvent(event);
 }

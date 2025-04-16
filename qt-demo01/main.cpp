@@ -48,32 +48,12 @@ void JsonTest()
 #include <QProcess>
 #include <QRandomGenerator>
 
-struct StWindowTitleInfo {      //窗口标题信息
-    HWND hwnd;              //窗口句柄
-    QString title;          //窗口标题
-};
-
-BOOL CALLBACK enumWindowsProcByTitle(HWND hwnd, LPARAM lParam) {
-    // 获取窗口标题
-    wchar_t windowTitle[256];
-    GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(wchar_t));
-
-    // 如果窗口标题不为空，将其保存
-    if (wcslen(windowTitle) > 0) {
-        QString title = QString::fromWCharArray(windowTitle);
-        QList<StWindowTitleInfo>* windowList = reinterpret_cast<QList<StWindowTitleInfo>*>(lParam);
-        windowList->append({ hwnd, title });
-    }
-
-    return TRUE; // 继续枚举其他窗口
-}
-
-
-
 
 
 
 #include <random>
+
+#include "tool_utils.h"
 
 int main(int argc, char* argv[])
 {
@@ -96,27 +76,9 @@ int main(int argc, char* argv[])
 
     int num = dist(gen);
 
-    QList<StWindowTitleInfo> windowList;
-
-    // 枚举所有窗口
-    EnumWindows(enumWindowsProcByTitle, reinterpret_cast<LPARAM>(&windowList));
 
     const QString& pattern = "1744078714144";
-    QRegularExpression regex(pattern);
-    for (const StWindowTitleInfo& window : windowList) {
-        if (regex.match(window.title).hasMatch()) {
-            qDebug() << window.title;
-
-        }
-        qInfo() << "窗口:" << window.title;
-    }
-
-
-    QString str = "首页 | 综合安防管理平台-1744078714144 - Google Chrome";
-    if (regex.match(str).hasMatch()) {
-        qDebug() << str;
-
-    }
+    auto hwnd = ToolUtils::GetInstance().FindWindowByRegex(pattern);
 
 
     MainWindow w;

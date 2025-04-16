@@ -12,7 +12,8 @@
 MainWidget::MainWidget(QWidget *parent)
     : QWidget(parent)
     , vBoxLayout_(new QVBoxLayout(this))
-    , hBoxLayout_(new QHBoxLayout(this))
+//    , hBoxLayout_(new QHBoxLayout(this))
+//    , gridLayout_(new QGridLayout(this))
 {
     this->resize(400,300);
     this->setWindowTitle("MainWidget");
@@ -50,9 +51,7 @@ MainWidget::MainWidget(QWidget *parent)
 
 
     liveWidget_ = new LiveWidget(nullptr);
-
-
-    HWND hwndParent = HWND(459960);
+    HWND hwndParent = HWND(66780);
     if(!SetParent((HWND)liveWidget_->winId(), hwndParent)) {
         qCritical()<<"SetParent Error";
     }
@@ -63,23 +62,25 @@ MainWidget::MainWidget(QWidget *parent)
 
     button1_ = new QPushButton("button1",this);
     button2_ = new QPushButton("button2",this);
+
     vBoxLayout_->addWidget(button1_);
     vBoxLayout_->addWidget(button2_);
-    connect(button1_,&QPushButton::clicked,[this, hwndParent](){
+
+    connect(button1_,&QPushButton::clicked,[this](){
         qDebug() << "button1 clicked";
-
-        liveWidget_->SetFullScreen();
-
+        liveWidget_->activateWindow();
+//        liveWidget_->SetFullScreen();
+//        liveWidget_->Play();
     });
 
-    connect(button2_,&QPushButton::clicked,[this, hwndParent](){
+    connect(button2_,&QPushButton::clicked,[this](){
         qDebug() << "button2 clicked";
-
 //        liveWidget_->QuitFullScreen();
+//        liveWidget_->Stop();
     });
 
 
-    playGLWidget_ = new PlayGLWidget();
-    playGLWidget_->PlayOneFrame();
-    playGLWidget_->show();
+//    playGLWidget_ = new PlayGLWidget();
+//    playGLWidget_->PlayOneFrame();
+//    playGLWidget_->show();
 }

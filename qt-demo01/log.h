@@ -5,8 +5,14 @@
 namespace qlog
 {
 
-//日志装载
-void InstallLog(const QString& dirPath, const QString& fileName = "");
+///
+/// \brief 日志装载
+/// \param dirPath 日志目录
+/// \param fileName 日志初始文件名
+/// \param fileMaxSize 日志文件最大值字节，单位是MB
+/// \param fileVaildDay 日志文件保存几天
+///
+void InstallLog(const QString& dirPath, const QString& fileName = "", int fileMaxSize = 128, int fileVaildDay = 7);
 
 ///
 /// \brief 日志卸载，并关闭文件保存

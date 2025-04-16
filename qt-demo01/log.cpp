@@ -7,34 +7,64 @@
 
 namespace qlog
 {
-QtMessageHandler k_msgHndDef = nullptr;//默认的日志回调
-QFile k_fileLog;//日志文件
-static QMutex k_mutexFile;//日志锁，防止打印/输出的日志混杂
-static QString k_dirPath = "";
-static QString k_fileName = "";
+QtMessageHandler g_msgHndDef = nullptr;//默认的日志回调
+QFile g_fileLog;//日志文件
+static QMutex g_mutexFile;//日志锁，防止打印/输出的日志混杂
+static QString g_dirPath = "";
+static QString g_fileName = "qlog";
+static quint64 g_fileMaxByteSize = 128 * 1024 * 1024; //字节
+static int g_fileVaildDay = 7;
 
 void LogCallBack(QtMsgType, const QMessageLogContext&, const QString&);
 
-void InstallLog(const QString& dirPath, const QString& fileName)
+void InstallLog(const QString& dirPath, const QString& fileName, int fileMaxSize, int fileVaildDay)
 {
     //装载日志回调，并记录QT原有回调
-    k_msgHndDef = qInstallMessageHandler(LogCallBack);
-    k_dirPath = dirPath;
-    k_fileName = fileName;
-
-    if (fileName.isEmpty())
-        k_fileName = QString("qlog");
+    g_msgHndDef = qInstallMessageHandler(LogCallBack);
+    g_dirPath = dirPath;
+    if(fileName != "")
+        g_fileName = fileName;
+    if(fileMaxSize > 0)
+        g_fileMaxByteSize = fileMaxSize * 1024 * 1024;
+    if(fileVaildDay>0)
+        g_fileVaildDay = fileVaildDay;
 
     //准备日志文件的输出
-    const QString sLogDirPath{ k_dirPath + "/log" };
-    const QString sLogFilePath{ sLogDirPath + "/" + k_fileName + "_" + QDate::currentDate().toString("yyyy-MM-dd") + ".log" };
+    const QString sLogDirPath{ g_dirPath + "/log" };
     QDir dirLog(sLogDirPath);
     if (false == dirLog.exists() && false == dirLog.mkpath(sLogDirPath)) {
         qCritical() << "没有权限创建日志文件夹:" << sLogDirPath;
         return;
     }
-    k_fileLog.setFileName(sLogFilePath);
-    if (false == k_fileLog.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+
+    //    const QString sLogFilePath{ sLogDirPath + "/" + g_fileName + "_" + QDate::currentDate().toString("yyyy-MM-dd") + ".log" };
+    const QString sLogFilePath{ sLogDirPath + "/" + g_fileName + ".log" };
+
+    QDateTime dtNow = QDateTime::currentDateTime();
+    //日志文件存在的情况下进行文件日期有效性检查
+    QStringList listFiles = dirLog.entryList(QDir::Files);
+    for (const QString& szFileName : listFiles) {
+        QFileInfo fileInfo(dirLog.absoluteFilePath(szFileName));
+        // 获取文件的修改时间
+        QDateTime dtFileModifiedTime = fileInfo.lastModified();
+        // 计算时间差
+        int iDaysDif = dtFileModifiedTime.daysTo(dtNow);
+        if (fileInfo.fileName() != g_fileName && iDaysDif > fileVaildDay) { //日志文件超过有效期，并且不是最后一个文件，则删除该文件
+            if (dirLog.remove(szFileName)) {
+                qDebug() << "Deleted file:" << szFileName;
+            } else {
+                qDebug() << "Failed to delete file:" << szFileName;
+            }
+        } else if(fileInfo.fileName() == g_fileName && iDaysDif > 0) { //最后一个文件，并且不是当天日志，则重命名为最后编辑那天的日期
+            QString tempFileName{ g_fileName + "_" + dtFileModifiedTime.date().toString("yyyy-MM-dd") + ".log" };
+            if(!QFile::rename(szFileName,tempFileName)){
+                qDebug() << "file:" << szFileName << " rename to:"<< tempFileName << "Failed";
+            }
+        }
+    }
+
+    g_fileLog.setFileName(sLogFilePath);
+    if (false == g_fileLog.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
         qCritical() << "创建日志文件并打开失败:" << sLogFilePath;
         return;
     }
@@ -45,12 +75,6 @@ void InstallLog(const QString& dirPath, const QString& fileName)
 
 
 void LogCallBack(QtMsgType msgType, const QMessageLogContext& msgContext, const QString& sMsg) {
-#ifndef QT_DEBUG
-    //在非debug模式下，如果没有debug参数传入则不输出Debug信息
-    if (QtDebugMsg == msgType && false == qApp->IsDebug())
-        return;
-#endif
-
     //给消息追加详细参数
     const QString sTime = QDate::currentDate().toString("yyyy-MM-dd") + " " + QTime::currentTime().toString("hh:mm:ss");
     QString sColor;
@@ -94,31 +118,51 @@ void LogCallBack(QtMsgType msgType, const QMessageLogContext& msgContext, const 
     QString sFuncStr = QString(msgContext.function);
     QString sNewMessage = QString("[%1][%2][%3][%4:%5, %6]\t").arg(sTime).arg(sThreadIdStr).arg(sLevelStr).arg(msgContext.file).arg(msgContext.line).arg(sFuncStr.left(sFuncStr.indexOf('('))).append(sMsg);
 
-    k_mutexFile.lock();
-    if (k_fileLog.isOpen()) {
-        k_fileLog.write(sNewMessage.toLocal8Bit());
-        k_fileLog.write("\n");
-        k_fileLog.flush();
+    g_mutexFile.lock();
+    if (g_fileLog.isOpen()) {
+        g_fileLog.write(sNewMessage.toLocal8Bit());
+        g_fileLog.write("\n");
+        g_fileLog.flush();
+
+        if(g_fileLog.size() > g_fileMaxByteSize){
+            g_fileLog.close();
+            const QString temFilePath{ g_dirPath + "/log/" + g_fileName + "_" + QDate::currentDate().toString("yyyy-MM-dd") };
+            const QString sSuffix = ".log";
+            QString sLogFilePathCur = temFilePath + sSuffix;
+            int iFileNum = 1;
+            //找一个不存在的文件
+            while(QFile::exists(sLogFilePathCur)){
+                sLogFilePathCur = QString("%1_%2%3").arg(temFilePath).arg(iFileNum++).arg(sSuffix);
+            }
+            const QString sLogFilePath{ g_dirPath + "/log/" + g_fileName + ".log" };
+            if(!g_fileLog.rename(sLogFilePath,sLogFilePathCur)){
+                qDebug() << "file:" << sLogFilePath << " rename to:"<< sLogFilePathCur << "Failed";
+            }
+            g_fileLog.setFileName(sLogFilePath);
+            if (false == g_fileLog.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+                qCritical() << "创建日志文件并打开失败:" << sLogFilePathCur;
+            }
+        }
     }
     //输出到控制台
     sNewMessage = sColor + sNewMessage + "\033[0m";
-    k_msgHndDef(msgType, msgContext, sNewMessage);
-    k_mutexFile.unlock();
+    g_msgHndDef(msgType, msgContext, sNewMessage);
+    g_mutexFile.unlock();
 }
 
 void UnInstallLog(bool bErrExit)
 {
-    k_mutexFile.lock();
-    if (k_fileLog.isOpen()) {
-        k_fileLog.close();
+    g_mutexFile.lock();
+    if (g_fileLog.isOpen()) {
+        g_fileLog.close();
         if (bErrExit) {
-            const QString sLogDirPath{ k_dirPath + "/log" };
-            const QString sLogFilePath{ sLogDirPath + "/" + k_fileName + "_" + QDate::currentDate().toString("yyyy-MM-dd") + ".log" };
-            const QString sLogFilePathErrExit{ sLogDirPath + "/[崩溃日志]" + k_fileName + "_" + QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm-ss") + ".log" };
-            k_fileLog.rename(sLogFilePath, sLogFilePathErrExit);
+            const QString sLogDirPath{ g_dirPath + "/log" };
+            const QString sLogFilePath{ sLogDirPath + "/" + g_fileName + "_" + QDate::currentDate().toString("yyyy-MM-dd") + ".log" };
+            const QString sLogFilePathErrExit{ sLogDirPath + "/[崩溃日志]" + g_fileName + "_" + QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm-ss") + ".log" };
+            g_fileLog.rename(sLogFilePath, sLogFilePathErrExit);
         }
     }
-    k_mutexFile.unlock();
+    g_mutexFile.unlock();
 }
 
 }//namespace qlog
