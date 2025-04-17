@@ -47,15 +47,17 @@ void InstallLog(const QString& dirPath, const QString& fileName, int fileMaxSize
         QFileInfo fileInfo(dirLog.absoluteFilePath(szFileName));
         // 获取文件的修改时间
         QDateTime dtFileModifiedTime = fileInfo.lastModified();
+        QString tempName{ dtFileModifiedTime.toString("yyyy-MM-dd HH:mm::ss")};
+        qDebug() << "file:" << szFileName << ", modified time:" << tempName;
         // 计算时间差
         int iDaysDif = dtFileModifiedTime.daysTo(dtNow);
-        if (fileInfo.fileName() != g_fileName && iDaysDif > fileVaildDay) { //日志文件超过有效期，并且不是最后一个文件，则删除该文件
+        if (fileInfo.baseName() != g_fileName && iDaysDif > fileVaildDay) { //日志文件超过有效期，并且不是最后一个文件，则删除该文件
             if (dirLog.remove(szFileName)) {
                 qDebug() << "Deleted file:" << szFileName;
             } else {
                 qDebug() << "Failed to delete file:" << szFileName;
             }
-        } else if(fileInfo.fileName() == g_fileName && iDaysDif > 0) { //最后一个文件，并且不是当天日志，则重命名为最后编辑那天的日期
+        } else if(fileInfo.baseName() == g_fileName && iDaysDif > 0) { //最后一个文件，并且不是当天日志，则重命名为最后编辑那天的日期
             QString tempFileName{ g_fileName + "_" + dtFileModifiedTime.date().toString("yyyy-MM-dd") + ".log" };
             if(!QFile::rename(szFileName,tempFileName)){
                 qDebug() << "file:" << szFileName << " rename to:"<< tempFileName << "Failed";
