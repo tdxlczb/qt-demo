@@ -22,3 +22,54 @@ FORMS += \
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+
+
+#检查是否是unix环境
+unix {
+message('unix')
+}
+
+#检查是否是windows环境
+win32 {
+message('windows')
+}
+
+#检查是否是MinGW编译器
+win32-g++ {
+message('win32-g++')
+
+}
+
+#检查是否是MSVC编译器
+win32-msvc {
+message('win32-msvc')
+}
+
+# 判断是debug还是release
+CONFIG(debug,debug|release){
+   message('debug')
+}else{
+   message('release')
+}
+
+
+# 判断x64还是x86
+contains(TARGET_ARCH, x86_64){
+   message('x64-1')
+}else{
+   message('x86-1')
+}
+
+contains(QT_ARCH, arm64){
+    message("x64-2")
+}else{
+    message("x86-2")
+}
+
+contains(QT_ARCH, i386) {
+    message("x86-3")
+}else{
+    message("x64-3")
+}
+
