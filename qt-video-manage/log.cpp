@@ -58,9 +58,10 @@ void InstallLog(const QString& dirPath, const QString& fileName, int fileMaxSize
                 qDebug() << "Failed to delete file:" << szFileName;
             }
         } else if(fileInfo.baseName() == g_fileName && iDaysDif > 0) { //最后一个文件，并且不是当天日志，则重命名为最后编辑那天的日期
-            QString tempFileName{ g_fileName + "_" + dtFileModifiedTime.date().toString("yyyy-MM-dd") + ".log" };
-            if(!QFile::rename(szFileName,tempFileName)){
-                qDebug() << "file:" << szFileName << " rename to:"<< tempFileName << "Failed";
+            QString src = QString(sLogDirPath + "/" + szFileName);
+            QString dest = QString(sLogDirPath + "/" + g_fileName + "_" + dtFileModifiedTime.date().toString("yyyy-MM-dd") + ".log");
+            if(!QFile::rename(src, dest)) {
+                qDebug() << "file:" << src << " rename to:"<< dest << "Failed";
             }
         }
     }
