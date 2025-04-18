@@ -10,19 +10,29 @@ CONFIG += c++11
 
 SOURCES += \
     main.cpp \
-    main_window.cpp
+    main_widget.cpp \
+    main_window.cpp \
+    mask_widget.cpp \
+    test01_widget.cpp
 
 HEADERS += \
-    main_window.h
+    main_widget.h \
+    main_window.h \
+    mask_widget.h \
+    test01_widget.h
 
 FORMS += \
-    main_window.ui
+    main_widget.ui \
+    main_window.ui \
+    test01_widget.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
+RESOURCES += \
+    res.qrc
 
 
 #检查是否是unix环境
