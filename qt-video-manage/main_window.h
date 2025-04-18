@@ -8,6 +8,7 @@ namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
 class MainWidget;
+class MediaManagerWidget;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -18,6 +19,7 @@ public:
 
 private:
     Ui::MainWindow *ui;
-    MainWidget * pMainWidget_ = nullptr;
+    MainWidget * m_pMainWidget = nullptr;
+    MediaManagerWidget * m_pManagerWidget = nullptr;
 };
 #endif // MAINWINDOW_H

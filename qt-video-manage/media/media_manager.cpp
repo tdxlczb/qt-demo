@@ -24,5 +24,6 @@ std::shared_ptr<MediaReader> MediaManager::CreateMediaReader(const std::string& 
     {
         pReader->UnInit();
     }
+    m_mediaReaderList.emplace(uri,pReader);
     return pReader;
 }

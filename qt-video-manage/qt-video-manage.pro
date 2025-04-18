@@ -11,6 +11,7 @@ CONFIG += c++11
 #INCLUDEPATH += src
 include(gui/gui.pri)
 include(media/media.pri)
+include(media_player/media_player.pri)
 include(utils/utils.pri)
 
 SOURCES += \

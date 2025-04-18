@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "ui_main_window.h"
 #include "gui/main_widget.h"
+#include "gui/media_manager_widget.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -8,8 +9,11 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    pMainWidget_ = new MainWidget(nullptr);
-    pMainWidget_->show();
+    // m_pMainWidget = new MainWidget(nullptr);
+    // m_pMainWidget->show();
+
+    m_pManagerWidget = new MediaManagerWidget(nullptr);
+    m_pManagerWidget->show();
 }
 
 MainWindow::~MainWindow()
