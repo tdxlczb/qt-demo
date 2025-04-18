@@ -10,6 +10,7 @@ CONFIG += c++11
 
 #INCLUDEPATH += src
 include(gui/gui.pri)
+include(media/media.pri)
 include(utils/utils.pri)
 
 SOURCES += \
@@ -31,3 +32,82 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     res.qrc
+
+BUILD_DIR = ./build
+CONFIG(debug, debug|release) {
+    BUILD_DIR = $$BUILD_DIR/debug
+}else{
+    BUILD_DIR = $$BUILD_DIR/release
+}
+
+DESTDIR = $$BUILD_DIR/product
+OBJECTS_DIR = $$BUILD_DIR/objects
+MOC_DIR = $$BUILD_DIR/moc
+RCC_DIR = $$BUILD_DIR/rcc
+UI_DIR = $$BUILD_DIR/ui
+
+
+THIRDPARTY_DIR =$$PWD/../3rd
+
+#检查是否是MSVC编译器
+win32-msvc {
+
+contains(QT_ARCH, i386) {
+} else {
+
+    #ffmpeg
+    FFMPEG_DIR = $$THIRDPARTY_DIR/ffmpeg/ffmpeg_5.1
+    INCLUDEPATH += $$FFMPEG_DIR/include
+    DEPENDPATH += $$FFMPEG_DIR/include
+
+    #opencv
+    OPENCV_DIR = $$THIRDPARTY_DIR/opencv/opencv_4.1_new
+    INCLUDEPATH += $$OPENCV_DIR/include
+    DEPENDPATH += $$OPENCV_DIR/include
+
+    # 获取 thirdparty/lib 目录下所有 .lib 文件（Windows）
+    LIB_FILES = $$files($$FFMPEG_DIR/lib/x64/*.lib)
+    # 批量添加到 LIBS
+    for(lib, LIB_FILES) {
+        LIBS += $$lib
+    }
+
+    CONFIG(debug,debug|release){
+        LIBS += $$OPENCV_DIR/x64/vc14/lib/opencv_world410d.lib
+    }else{
+        LIBS += $$OPENCV_DIR/x64/vc14/lib/opencv_world410.lib
+    }
+
+} # contains(QT_ARCH, i386)
+
+} # win32-msvc
+
+
+#检查是否是MinGW编译器
+win32-g++ {
+
+contains(QT_ARCH, i386) {
+} else {
+
+    #ffmpeg
+    FFMPEG_DIR = $$THIRDPARTY_DIR/ffmpeg/ffmpeg_5.1_mingw
+    INCLUDEPATH += $$FFMPEG_DIR/include
+    DEPENDPATH += $$FFMPEG_DIR/include
+
+    #opencv
+    OPENCV_DIR = $$THIRDPARTY_DIR/opencv/opencv_4.1_mingw
+    INCLUDEPATH += $$OPENCV_DIR/include
+    DEPENDPATH += $$OPENCV_DIR/include
+
+    # 获取 thirdparty/lib 目录下所有 .lib 文件（Windows）
+    LIB_FILES = $$files($$FFMPEG_DIR/lib/x64/*.lib)
+    # 批量添加到 LIBS
+    for(lib, LIB_FILES) {
+        message('lib=$$lib')
+        LIBS += $$lib
+    }
+
+    LIBS += $$OPENCV_DIR/lib/x64/libopencv_*.dll.a
+}
+
+}
