@@ -14,7 +14,7 @@ Test01Widget::Test01Widget(QWidget *parent)
     //    // palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
     // this->setPalette(palette);
     QLabel * bgLabel = new QLabel(this);
-    bgLabel->setPixmap(QPixmap(":/res/bg.png"));
+    bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
     bgLabel->setScaledContents(true);
     bgLabel->show();
 }

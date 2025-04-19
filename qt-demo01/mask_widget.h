@@ -3,6 +3,10 @@
 
 #include <QWidget>
 
+/*
+ * 半透明蒙层实现中间镂空，使用QPainter设置绘制的组合模式，参考实例教程Composition Modes
+ */
+
 class MaskWidget : public QWidget
 {
     Q_OBJECT
