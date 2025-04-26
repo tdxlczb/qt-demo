@@ -8,17 +8,26 @@ CONFIG += c++11
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
+include(media/media.pri)
+include(media_player/media_player.pri)
+
 SOURCES += \
     main.cpp \
+    main_widget.cpp \
     main_window.cpp
 
 HEADERS += \
+    main_widget.h \
     main_window.h
 
 FORMS += \
+    main_widget.ui \
     main_window.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+RESOURCES += \
+    res.qrc
