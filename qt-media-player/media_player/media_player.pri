@@ -2,7 +2,11 @@ FORMS += \
     $$PWD/media_player.ui
 
 HEADERS += \
-    $$PWD/media_player.h
+    $$PWD/audio_render.h \
+    $$PWD/media_player.h \
+    $$PWD/video_render.h
 
 SOURCES += \
-    $$PWD/media_player.cpp
+    $$PWD/audio_render.cpp \
+    $$PWD/media_player.cpp \
+    $$PWD/video_render.cpp
