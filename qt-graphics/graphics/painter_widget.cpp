@@ -7,12 +7,13 @@
 PainterWidget::PainterWidget(QWidget *parent) : QWidget(parent)
 {
     this->resize(1600,900);
+    this->setWindowTitle("PainterWidget");
     //设置主窗口背景颜色
     QPalette palette;
     palette.setColor(QPalette::Window,QColor(50, 50, 50));
     //    palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
     this->setPalette(palette);
-
+    this->setAutoFillBackground(true);
 }
 
 PainterWidget::~PainterWidget()
@@ -21,12 +22,12 @@ PainterWidget::~PainterWidget()
 
 void PainterWidget::StartDraw()
 {
-    m_bStartDraw= true;
+    m_bStartDraw = true;
 }
 
 void PainterWidget::StopDraw()
 {
-    m_bStartDraw= false;
+    m_bStartDraw = false;
 }
 
 void PainterWidget::mousePressEvent(QMouseEvent *event)

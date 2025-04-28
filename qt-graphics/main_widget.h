@@ -7,7 +7,6 @@ namespace Ui {
 class MainWidget;
 }
 
-class PainterWidget;
 class MainWidget : public QWidget
 {
     Q_OBJECT
@@ -18,7 +17,6 @@ public:
 
 private:
     Ui::MainWidget *ui;
-    PainterWidget * m_pPainterWidget = nullptr;
 };
 
 #endif // MAIN_WIDGET_H

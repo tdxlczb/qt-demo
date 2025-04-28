@@ -4,6 +4,8 @@
 #include <QPushButton>
 #include <QDebug>
 #include "graphics/painter_widget.h"
+#include "graphics/graphics_widget.h"
+
 
 MainWidget::MainWidget(QWidget *parent) :
     QWidget(parent),
@@ -20,17 +22,20 @@ MainWidget::MainWidget(QWidget *parent) :
     vBoxLayout->addWidget(button01);
     vBoxLayout->addWidget(button02);
 
-    m_pPainterWidget = new PainterWidget();
-    m_pPainterWidget->show();
+    PainterWidget *pPainterWidget = new PainterWidget();
+    pPainterWidget->show();
 
-    connect(button01,&QPushButton::clicked,[this](){
+    GraphicsWidget *pGraphicsWidget = new GraphicsWidget();
+    pGraphicsWidget->show();
+
+    connect(button01,&QPushButton::clicked,[this,pPainterWidget](){
         qDebug() << "button01 clicked";
-        m_pPainterWidget->StartDraw();
+        pPainterWidget->StartDraw();
     });
 
-    connect(button02,&QPushButton::clicked,[this](){
+    connect(button02,&QPushButton::clicked,[this,pPainterWidget](){
         qDebug() << "button01 clicked";
-        m_pPainterWidget->StopDraw();
+        pPainterWidget->StopDraw();
     });
 }
 
