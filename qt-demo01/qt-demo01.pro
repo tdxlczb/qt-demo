@@ -36,6 +36,27 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 RESOURCES += \
     res.qrc
 
+# 打印qt版本号
+message(Qt Version = $$[QT_VERSION])
+
+# 判断版本号第一位大于qt4
+greaterThan(QT_MAJOR_VERSION, 4) : message(Qt Version > 4)
+# 判断版本号第一位小于qt6
+lessThan(QT_MAJOR_VERSION, 6) {
+    message(Qt Version < 6)
+}else{
+    message(Qt Version > 6)
+}
+
+#check Qt version
+QT_VERSION = $$[QT_VERSION]
+QT_VERSION = $$split(QT_VERSION, ".")
+QT_VER_MAJ = $$member(QT_VERSION, 0)
+QT_VER_MIN = $$member(QT_VERSION, 1)
+QT_VER_THR = $$member(QT_VERSION, 2)
+equals(QT_VER_MAJ, 5) | equals(QT_VER_MIN, 12) | equals(QT_VER_MIN, 12) {
+message(Qt Version = 5.12.12)
+}
 
 #检查是否是unix环境
 unix {
