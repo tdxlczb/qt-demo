@@ -2,6 +2,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QImageReader>
+#include <QDebug>
 #include <cmath>
 
 MaskWidget::MaskWidget(QWidget *parent)

@@ -5,6 +5,7 @@
 #include <QPushButton>
 
 #include "test01_widget.h"
+#include "custom_child_widget.h"
 
 MainWidget::MainWidget(QWidget *parent)
     : QWidget(parent)
@@ -17,6 +18,9 @@ MainWidget::MainWidget(QWidget *parent)
 
     Test01Widget * pWidget = new Test01Widget();
     pWidget->show();
+
+    CustomChildWidget * pChild = new CustomChildWidget(pWidget);
+    pChild->show();
 
     QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
     setLayout(vBoxLayout);

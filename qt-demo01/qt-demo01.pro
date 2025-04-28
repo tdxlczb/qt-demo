@@ -9,6 +9,7 @@ CONFIG += c++11
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    custom_child_widget.cpp \
     main.cpp \
     main_widget.cpp \
     main_window.cpp \
@@ -16,6 +17,7 @@ SOURCES += \
     test01_widget.cpp
 
 HEADERS += \
+    custom_child_widget.h \
     main_widget.h \
     main_window.h \
     mask_widget.h \
