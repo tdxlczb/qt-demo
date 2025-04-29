@@ -3,7 +3,7 @@
 
 #include <atomic>
 #include <cstring>
-#include <memory>
+#include <stdexcept>
 #include <mutex>
 
 class BufferBase {
