@@ -33,3 +33,6 @@
 
 build-*
 3rd/
+.vs
+debug
+release
