@@ -6,6 +6,7 @@
 
 #include "test01_widget.h"
 #include "custom_child_widget.h"
+#include "custom_toolbar.h"
 
 MainWidget::MainWidget(QWidget *parent)
     : QWidget(parent)
@@ -15,12 +16,14 @@ MainWidget::MainWidget(QWidget *parent)
     this->resize(400,300);
     this->setWindowTitle("MainWidget");
 
+    CustomToolBar * pToolBar = new CustomToolBar();
+    pToolBar->show();
 
     Test01Widget * pWidget = new Test01Widget();
-    pWidget->show();
+    pWidget->hide();
 
-    CustomChildWidget * pChild = new CustomChildWidget(pWidget);
-    pChild->show();
+//    CustomChildWidget * pChild = new CustomChildWidget(pWidget);
+//    pChild->show();
 
     QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
     setLayout(vBoxLayout);

@@ -4,5 +4,14 @@
         <file>res/bg02.jpg</file>
         <file>res/bg03.jpg</file>
         <file>res/bg04.jpg</file>
+        <file>res/icon/Down.png</file>
+        <file>res/icon/DownLeft.png</file>
+        <file>res/icon/DownRight.png</file>
+        <file>res/icon/Left.png</file>
+        <file>res/icon/Right.png</file>
+        <file>res/icon/Up.png</file>
+        <file>res/icon/UpLeft.png</file>
+        <file>res/icon/UpRight.png</file>
+        <file>res/icon/More.png</file>
     </qresource>
 </RCC>

@@ -10,6 +10,7 @@ CONFIG += c++11
 
 SOURCES += \
     custom_child_widget.cpp \
+    custom_toolbar.cpp \
     main.cpp \
     main_widget.cpp \
     main_window.cpp \
@@ -18,6 +19,7 @@ SOURCES += \
 
 HEADERS += \
     custom_child_widget.h \
+    custom_toolbar.h \
     main_widget.h \
     main_window.h \
     mask_widget.h \
