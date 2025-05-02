@@ -16,11 +16,11 @@ MainWidget::MainWidget(QWidget *parent)
     this->resize(400,300);
     this->setWindowTitle("MainWidget");
 
-    CustomToolBar * pToolBar = new CustomToolBar();
-    pToolBar->show();
+//    CustomToolBar * pToolBar = new CustomToolBar();
+//    pToolBar->show();
 
     Test01Widget * pWidget = new Test01Widget();
-    pWidget->hide();
+    pWidget->show();
 
 //    CustomChildWidget * pChild = new CustomChildWidget(pWidget);
 //    pChild->show();

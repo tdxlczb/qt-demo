@@ -1,27 +1,36 @@
 #include "test01_widget.h"
 #include "ui_test01_widget.h"
 #include <QLabel>
+#include <QHBoxLayout>
 #include "mask_widget.h"
 #include "custom_child_widget.h"
+#include "LiveWidget.h"
 
+LiveWidget * pLiveWidget = nullptr;
 Test01Widget::Test01Widget(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::Test01Widget)
 {
     ui->setupUi(this);
     this->resize(960,540);
-    // QPalette palette;
-    // palette.setColor(QPalette::Window,QColor(50, 50, 150));
-    //    // palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
-    // this->setPalette(palette);
+//     QPalette palette;
+//     palette.setColor(QPalette::Window,QColor(150, 150, 150));
+//        // palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
+//     this->setPalette(palette);
+
     QLabel * bgLabel = new QLabel(this);
     bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
     bgLabel->setScaledContents(true);
     bgLabel->show();
 
-    CustomChildWidget * pChild = new CustomChildWidget(this);
-    pChild->move(200,200);
-    pChild->show();
+//    CustomChildWidget * pChild = new CustomChildWidget(this);
+//    pChild->move(200,200);
+//    pChild->show();
+
+    QHBoxLayout* layout = new QHBoxLayout(this);
+     pLiveWidget = new LiveWidget(this);
+     //pLiveWidget->setFixedSize(size());
+     layout->addWidget(pLiveWidget);
 }
 
 Test01Widget::~Test01Widget()

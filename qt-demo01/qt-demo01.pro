@@ -9,6 +9,10 @@ CONFIG += c++11
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    BaseMenu.cpp \
+    LiveBottomFloatingBar.cpp \
+    LiveWidget.cpp \
+    MoreMenu.cpp \
     custom_child_widget.cpp \
     custom_toolbar.cpp \
     main.cpp \
@@ -18,6 +22,10 @@ SOURCES += \
     test01_widget.cpp
 
 HEADERS += \
+    BaseMenu.h \
+    LiveBottomFloatingBar.h \
+    LiveWidget.h \
+    MoreMenu.h \
     custom_child_widget.h \
     custom_toolbar.h \
     main_widget.h \
@@ -26,6 +34,7 @@ HEADERS += \
     test01_widget.h
 
 FORMS += \
+    LiveBottomFloatingBar.ui \
     main_widget.ui \
     main_window.ui \
     test01_widget.ui
