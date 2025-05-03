@@ -7,6 +7,7 @@ extern "C"
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/frame.h>
+#include <libavutil/time.h>
 #include <libswscale/swscale.h>
 }
 
@@ -187,7 +188,7 @@ bool MediaReader::Stop()
 {
     return false;
 }
-
+int g_videoFrameIndex = 0;
 void MediaReader::FrameReader()
 {
     m_bFrameReaderRunning = true;
@@ -219,6 +220,7 @@ void MediaReader::FrameReader()
             if (ret == AVERROR_EOF)
             {
                 isStreamOver = true;
+                qDebug() << "FrameReader stream over";
             }
             else if (ret == AVERROR(EAGAIN))
             {//重试
@@ -235,7 +237,7 @@ void MediaReader::FrameReader()
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
-            AudioDecode(packet);
+            //AudioDecode(packet);
         }
 
     }
@@ -244,12 +246,23 @@ void MediaReader::FrameReader()
     //av_frame_free(&frame);
     //av_frame_free(&frameRGB);
     //av_freep(&buffer);
+    qDebug() << "FrameReader end";
 }
 
 void MediaReader::VideoDecode(AVPacket* packet)
 {
     if (packet->stream_index != m_videoStreamIndex)
         return;
+
+    {
+        std::unique_lock<std::mutex> lock(m_videoFrameQueueMutex);
+        m_videoFrameQueueNotFullCV.wait(lock, [this]() {
+            return m_videoFrameQueue.size() < kMaxVideoFrameQueueSize || !m_bVideoProcessRunning.load();
+            });
+        lock.unlock();
+        if (!m_bVideoProcessRunning.load())
+            return;
+    }
     //bool isKeyPacket = packet->flags & AV_PKT_FLAG_KEY;//关键帧
     int ret = avcodec_send_packet(m_videoCodecContext, packet);
     if (ret < 0)
@@ -269,10 +282,16 @@ void MediaReader::VideoDecode(AVPacket* packet)
         if (frame->key_frame == 1)
         {//关键帧
         }
-        
+        qDebug() << "video frame index:" << g_videoFrameIndex;
+        g_videoFrameIndex++;
+        //av_frame_unref(frame);
+        //av_frame_free(&frame);
         std::lock_guard<std::mutex> lock(m_videoFrameQueueMutex);
-        m_videoFrameQueue.push(frame);
-        m_videoFrameQueueCV.notify_all();
+        if (m_videoFrameQueue.size() < 10)
+        {
+            m_videoFrameQueue.push(frame);
+        }
+        m_videoFrameQueueNotEmptyCV.notify_all();
         //av_frame_unref(frame);//不可解引用
     }
 }
@@ -321,11 +340,13 @@ void MediaReader::VideoProcess()
                 frameRGB->data, frameRGB->linesize, buffer, AV_PIX_FMT_BGR24, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE
                 );
 
+    AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
+
     int frameIndex = 0;
     while (m_bVideoProcessRunning.load())
     {
         std::unique_lock<std::mutex> lock(m_videoFrameQueueMutex);
-        m_videoFrameQueueCV.wait(lock,[this](){
+        m_videoFrameQueueNotEmptyCV.wait(lock,[this](){
             return !m_videoFrameQueue.empty() || !m_bVideoProcessRunning.load();
         });
         if(!m_bVideoProcessRunning.load())
@@ -348,7 +369,11 @@ void MediaReader::VideoProcess()
 
             VideoFrame vframe;
             vframe.videoData = mat.clone();
+			double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(videoStream->time_base) * 1000000;
+            av_usleep(frameDelay);
             m_param.videoCallback(vframe);
+            m_lastVideoFramePts = frame->pts;
+            m_videoFrameQueueNotFullCV.notify_all();
         }
         av_frame_unref(frame);
         av_frame_free(&frame);

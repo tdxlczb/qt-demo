@@ -108,6 +108,16 @@ void AudioRender::Stop()
     }
 }
 
+void AudioRender::SetVolume(float volume)
+{
+    m_audioVolume = volume;
+}
+
+float AudioRender::GetVolume()
+{
+    return m_audioVolume;
+}
+
 void AudioRender::Write(const AudioFrame&frame)
 {
     if(!m_audioBuffer || !m_audioBuffer->IsInit())

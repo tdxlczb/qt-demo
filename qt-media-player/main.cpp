@@ -2,7 +2,7 @@
 
 #include <QApplication>
 
-int main1(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     MainWindow w;
@@ -14,7 +14,7 @@ int main1(int argc, char *argv[])
 #include <fstream>
 #include "media_player/audio_render.h"
 
-int main(int argc, char *argv[])
+int main2(int argc, char *argv[])
 {
 
     AudioRender* player = new AudioRender();
@@ -50,3 +50,19 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+#include "media/media_reader.h"
+
+int main3(int argc, char* argv[])
+{
+    auto reader = new MediaReader();
+    MediaParameter param;
+    param.sUri = "E:/code/media/BaiduSyncdisk.mp4";
+    reader->Init(param);
+    reader->Start();
+    while (true)
+    {
+        _sleep(100);
+    };
+
+    return 0;
+}

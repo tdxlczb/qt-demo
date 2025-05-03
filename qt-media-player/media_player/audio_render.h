@@ -18,6 +18,7 @@ public:
     void Stop();
     void Write(const AudioFrame&frame);
     void SetVolume(float volume);// 0.0~1.0
+    float GetVolume();
     int AudioOutputCallback(void *outputBuffer, unsigned int nFrames);
 signals:
 private:
@@ -29,6 +30,7 @@ private:
     int16_t m_bitPerSample = 0;
     int16_t m_channelCount = 0;
     int16_t m_renderFrameCount = 0;
+    float m_audioVolume = 1.0;
 };
 
 #endif // AUDIORENDER_H

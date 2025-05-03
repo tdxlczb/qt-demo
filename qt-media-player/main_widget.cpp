@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QDebug>
+#include "media_player/player_widget.h"
 
 
 MainWidget::MainWidget(QWidget *parent) :
@@ -20,11 +21,16 @@ MainWidget::MainWidget(QWidget *parent) :
 
     vBoxLayout->addWidget(button01);
     vBoxLayout->addWidget(button02);
-    connect(button01,&QPushButton::clicked,[this](){
+
+    PlayerWidget* pPlayerWidget = new PlayerWidget(nullptr);
+    pPlayerWidget->show();
+
+    connect(button01,&QPushButton::clicked,[this, pPlayerWidget](){
         qDebug() << "button01 clicked";
+        pPlayerWidget->StartPlay("E:/code/media/BaiduSyncdisk.mp4");
     });
 
-    connect(button02,&QPushButton::clicked,[this](){
+    connect(button02,&QPushButton::clicked,[this, pPlayerWidget](){
         qDebug() << "button02 clicked";
     });
 
