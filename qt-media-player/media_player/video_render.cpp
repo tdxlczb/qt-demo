@@ -30,7 +30,7 @@ void VideoRender::paintEvent(QPaintEvent *event)
         return;
     }
     m_matDataMutex.lock();
-    //¼ÆËã±£³Ö¿í¸ß±ÈµÄËõ·Å³ß´ç
+    //è®¡ç®—ä¿æŒå®½é«˜æ¯”çš„ç¼©æ”¾å°ºå¯¸
 	QImage scaledImage = QImage(m_matData.data, m_matData.cols, m_matData.rows, m_matData.step, QImage::Format_RGB888)
 		.scaled(this->rect().size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
     m_matDataMutex.unlock();

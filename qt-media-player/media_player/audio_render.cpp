@@ -22,7 +22,7 @@ AudioRender::~AudioRender()
 
 }
 
-int audioCallback(void *outputBuffer, void *inputBuffer, unsigned int nFrames, double streamTime, unsigned int status, void *userData)
+static int audioCallback(void *outputBuffer, void *inputBuffer, unsigned int nFrames, double streamTime, unsigned int status, void *userData)
 {
     AudioRender* render = (AudioRender*)userData;
     if (!render)
@@ -35,11 +35,11 @@ void AudioRender::Start(int16_t sampleRate, int16_t bitPerSample, int16_t channe
     if (!m_audioBuffer->IsInit())
     {
         if (bitPerSample == 8)
-            m_audioBuffer->Init<int8_t>(1024 * 1024);
+            m_audioBuffer->Init<int8_t>();
         else if (bitPerSample == 16)
-            m_audioBuffer->Init<int16_t>(1024 * 1024);
+            m_audioBuffer->Init<int16_t>();
         else if (bitPerSample == 32)
-            m_audioBuffer->Init<int32_t>(1024 * 1024);
+            m_audioBuffer->Init<int32_t>();
     }
 
     RtAudio::StreamParameters params;
@@ -85,6 +85,7 @@ int AudioRender::AudioOutputCallback(void* outputBuffer, unsigned int nFrames)
 
     int16_t* bufferShort = static_cast<int16_t*>(outputBuffer);
     auto readSize = m_audioBuffer->PopData(bufferShort, bufferSize);
+    m_audioBufferCV.notify_all();
     return readSize;
 }
 
@@ -122,6 +123,11 @@ void AudioRender::Write(const AudioFrame&frame)
 {
     if(!m_audioBuffer || !m_audioBuffer->IsInit())
         return;
+
+    std::unique_lock<std::mutex> lock(m_audioBufferMutex);
+    m_audioBufferCV.wait(lock, [this, &frame]() {
+        return m_audioBuffer->GetFreeSize() > frame.dataSize;
+        });
 
     if (frame.bitPerSample == 8)
     {

@@ -37,9 +37,13 @@ struct MediaParameter
 {
     std::string sUri;
 
+    int16_t outputSampleRate = 0;
+    int16_t outputBitPerSample = 0;
+    int16_t outputChannelCount = 0;
+
     MediaErrorCallback errCallback = nullptr;
     VideoCallback videoCallback = nullptr;
-    AudioCallback audioCallbacl = nullptr;
+    AudioCallback audioCallback = nullptr;
 };
 
 #endif // MEDIA_DEFINE_H

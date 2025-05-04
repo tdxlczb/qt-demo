@@ -5,6 +5,7 @@
 #include "media/media_define.h"
 
 class VideoRender;
+class AudioRender;
 class MediaReader;
 class PlayerWidget : public QWidget
 {
@@ -20,8 +21,10 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 private:
     void HandleVideoFrame(const VideoFrame& frame);
+    void HandleAudioFrame(const AudioFrame& frame);
 private:
     VideoRender* m_pVideoRender = nullptr;
+    AudioRender* m_pAudioRender = nullptr;
     MediaReader* m_pMediaReader = nullptr;
 };
 

@@ -6,15 +6,19 @@
 #include <stdexcept>
 #include <mutex>
 
+#define MAX_BUFFER_SIZE 1024 * 1024
+
 class BufferBase {
 public:
     virtual ~BufferBase() = default;
+    virtual size_t GetSize() = 0;
+    virtual size_t GetFreeSize() = 0;
 };
 
 template <typename T>
 class JitterBuffer : public BufferBase {
 public:
-    explicit JitterBuffer(size_t capacity) {
+    explicit JitterBuffer(size_t capacity = MAX_BUFFER_SIZE) {
         m_buffer = new T[capacity];
         std::memset(m_buffer, 0, capacity);
         m_capacity = capacity;
@@ -32,6 +36,7 @@ public:
             return 0;
         std::memcpy(m_buffer + m_bufferSize / sizeof(T), buffer, size);
         m_bufferSize += size;
+        return size;
     }
 
     size_t PopData(T* buffer, size_t size) {
@@ -45,9 +50,14 @@ public:
         return popSize;
     }
 
-    size_t Size() {
+    size_t GetSize() {
         std::lock_guard<std::mutex> lock(m_bufferMutex);
         return m_bufferSize;
+    }
+
+    size_t GetFreeSize() {
+        std::lock_guard<std::mutex> lock(m_bufferMutex);
+        return m_capacity - m_bufferSize;
     }
 
 private:
@@ -62,7 +72,7 @@ class DynamicJitterBuffer
 public:
     // 动态初始化 Buffer（在 new 时决定类型）
     template <typename T>
-    void Init(size_t capacity) {
+    void Init(size_t capacity = MAX_BUFFER_SIZE) {
         m_isInit.store(true);
         m_jitterBuffer = new JitterBuffer<T>(capacity);
     }
@@ -97,15 +107,14 @@ public:
         return 0;
     }
 
-    template <typename T>
-    size_t Size()
+    size_t GetSize()
     {
-        if (auto derived = dynamic_cast<JitterBuffer<T>*>(m_jitterBuffer)) {
-            return derived->Size();
-        } else {
-            throw std::runtime_error("type mismatch");
-        }
-        return 0;
+        return m_jitterBuffer->GetSize();
+    }
+
+    size_t GetFreeSize()
+    {
+        return m_jitterBuffer->GetFreeSize();
     }
 
 private:

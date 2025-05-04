@@ -9,12 +9,16 @@ extern "C"
 #include <libavutil/frame.h>
 #include <libavutil/time.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 }
 
 #ifdef DEBUG_VIDEO_FRAME_WRITE
 
 #endif // DEBUG_VIDEO_FRAME_WRITE
 
+#ifdef DEBUG_AUDIO_RESAMPLE_WRITE
+
+#endif // DEBUG_AUDIO_RESAMPLE_WRITE
 
 MediaReader::MediaReader()
 {
@@ -62,7 +66,7 @@ bool MediaReader::Init(const MediaParameter& pParam)
         }
     }
 
-    if(m_videoStreamIndex < 0 && m_audioStreamIndex < 0)
+    if (m_videoStreamIndex < 0 && m_audioStreamIndex < 0)
     {
         qDebug() << "find video stream and audio stream failed";
         avformat_close_input(&m_formatContext);
@@ -70,7 +74,7 @@ bool MediaReader::Init(const MediaParameter& pParam)
         return false;
     }
 
-    if(m_videoStreamIndex >=0)
+    if (m_videoStreamIndex >= 0)
     {
         // 获取视频流解码器参数
         AVCodecParameters* videoCodecParameters = m_formatContext->streams[m_videoStreamIndex]->codecpar;
@@ -88,7 +92,7 @@ bool MediaReader::Init(const MediaParameter& pParam)
         }
         if (avcodec_open2(m_videoCodecContext, videoCodec, nullptr) != 0)
         {
-            qDebug() << "avcodec_open2 failed" ;
+            qDebug() << "avcodec_open2 failed";
             avcodec_free_context(&m_videoCodecContext);
             avformat_close_input(&m_formatContext);
             avformat_network_deinit();
@@ -97,14 +101,14 @@ bool MediaReader::Init(const MediaParameter& pParam)
 
         if (m_videoCodecContext->width <= 0 || m_videoCodecContext->height <= 0 || m_videoCodecContext->pix_fmt == AV_PIX_FMT_NONE)
         {
-            qDebug() << "codecContext data error" ;
+            qDebug() << "codecContext data error";
             avcodec_free_context(&m_videoCodecContext);
             avformat_close_input(&m_formatContext);
             avformat_network_deinit();
             return false;
         }
     }
-    if(m_audioStreamIndex >=0)
+    if (m_audioStreamIndex >= 0)
     {
         // 获取音频流解码器参数
         AVCodecParameters* audiooCodecParameters = m_formatContext->streams[m_audioStreamIndex]->codecpar;
@@ -139,10 +143,10 @@ void MediaReader::UnInit()
         sws_freeContext(m_videoSwsContext);
         m_videoSwsContext = nullptr;
     }
-    if (m_audioSwsContext)
+    if (m_audioSwrContext)
     {
-        sws_freeContext(m_audioSwsContext);
-        m_audioSwsContext = nullptr;
+        swr_free(&m_audioSwrContext);
+        m_audioSwrContext = nullptr;
     }
     if (m_videoCodecContext)
     {
@@ -188,30 +192,14 @@ bool MediaReader::Stop()
 {
     return false;
 }
+
 int g_videoFrameIndex = 0;
+int g_audioFrameIndex = 0;
 void MediaReader::FrameReader()
 {
     m_bFrameReaderRunning = true;
-    AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
-    auto      timeBase = videoStream->time_base;
-    double    fps = av_q2d(videoStream->avg_frame_rate);
-    auto      frameCount = videoStream->nb_frames;
-    int       gopSize = m_videoCodecContext->gop_size;
-
-    const int      in_sample_rate = m_audioCodecContext->sample_rate;
-    AVSampleFormat in_sfmt = m_audioCodecContext->sample_fmt;
-    uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
-    int            in_channels = m_audioCodecContext->channels;
-    const int      out_sample_rate = 16000;
-    AVSampleFormat out_sfmt = AV_SAMPLE_FMT_S16;
-    uint64_t       out_channel_layout = AV_CH_LAYOUT_MONO;
-    int            out_channels = av_get_channel_layout_nb_channels(out_channel_layout);
-    int            out_spb = av_get_bytes_per_sample(out_sfmt);
-
-
     AVPacket* packet = av_packet_alloc();
-    bool isStreamOver = false;
-    while (m_bFrameReaderRunning.load() && !isStreamOver)
+    while (m_bFrameReaderRunning.load() && !m_bStreamOver.load())
     {
         av_packet_unref(packet);
         int ret = av_read_frame(m_formatContext, packet);
@@ -219,7 +207,7 @@ void MediaReader::FrameReader()
         {
             if (ret == AVERROR_EOF)
             {
-                isStreamOver = true;
+                m_bStreamOver = true;
                 qDebug() << "FrameReader stream over";
             }
             else if (ret == AVERROR(EAGAIN))
@@ -237,7 +225,7 @@ void MediaReader::FrameReader()
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
-            //AudioDecode(packet);
+            AudioDecode(packet);
         }
 
     }
@@ -282,15 +270,12 @@ void MediaReader::VideoDecode(AVPacket* packet)
         if (frame->key_frame == 1)
         {//关键帧
         }
-        qDebug() << "video frame index:" << g_videoFrameIndex;
+        qDebug() << "decode video frame index:" << g_videoFrameIndex;
         g_videoFrameIndex++;
         //av_frame_unref(frame);
         //av_frame_free(&frame);
         std::lock_guard<std::mutex> lock(m_videoFrameQueueMutex);
-        if (m_videoFrameQueue.size() < 10)
-        {
-            m_videoFrameQueue.push(frame);
-        }
+        m_videoFrameQueue.push(frame);
         m_videoFrameQueueNotEmptyCV.notify_all();
         //av_frame_unref(frame);//不可解引用
     }
@@ -301,7 +286,17 @@ void MediaReader::AudioDecode(AVPacket* packet)
     if (packet->stream_index != m_audioStreamIndex)
         return;
 
-    bool ret = avcodec_send_packet(m_audioCodecContext, packet);
+    {
+        std::unique_lock<std::mutex> lock(m_audioFrameQueueMutex);
+        m_audioFrameQueueNotFullCV.wait(lock, [this]() {
+            return m_audioFrameQueue.size() < kMaxAudioFrameQueueSize || !m_bAudioProcessRunning.load();
+            });
+        lock.unlock();
+        if (!m_bAudioProcessRunning.load())
+            return;
+    }
+
+    int ret = avcodec_send_packet(m_audioCodecContext, packet);
     if (ret < 0)
     {//错误处理
         return;
@@ -316,40 +311,47 @@ void MediaReader::AudioDecode(AVPacket* packet)
             av_frame_free(&frame);
             break;
         }
+        qDebug() << "decode audio frame index:" << g_audioFrameIndex;
+        g_audioFrameIndex++;
         std::lock_guard<std::mutex> lock(m_audioFrameQueueMutex);
         m_audioFrameQueue.push(frame);
-        av_frame_unref(frame);
+        m_audioFrameQueueNotEmptyCV.notify_all();
+        //av_frame_unref(frame);
     }
 }
 
 void MediaReader::VideoProcess()
 {
+    AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
+    auto      timeBase = videoStream->time_base;
+    double    fps = av_q2d(videoStream->avg_frame_rate);
+    auto      frameCount = videoStream->nb_frames;
+    int       gopSize = m_videoCodecContext->gop_size;
+
     m_bVideoProcessRunning.store(true);
-    if(!m_videoSwsContext)
+    if (!m_videoSwsContext)
     {
         m_videoSwsContext = sws_getCachedContext(NULL,
-                                                 m_videoCodecContext->width, m_videoCodecContext->height, m_videoCodecContext->pix_fmt,
-                                                 m_videoCodecContext->width, m_videoCodecContext->height, AV_PIX_FMT_BGR24,
-                                                 SWS_BILINEAR, NULL, NULL, NULL);
+            m_videoCodecContext->width, m_videoCodecContext->height, m_videoCodecContext->pix_fmt,
+            m_videoCodecContext->width, m_videoCodecContext->height, AV_PIX_FMT_BGR24,
+            SWS_BILINEAR, NULL, NULL, NULL);
     }
     // 创建RGB视频帧
     AVFrame* frameRGB = av_frame_alloc();
     int      numBytes = av_image_get_buffer_size(AV_PIX_FMT_BGR24, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE);
     uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
     av_image_fill_arrays(
-                frameRGB->data, frameRGB->linesize, buffer, AV_PIX_FMT_BGR24, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE
-                );
-
-    AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
+        frameRGB->data, frameRGB->linesize, buffer, AV_PIX_FMT_BGR24, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE
+    );
 
     int frameIndex = 0;
     while (m_bVideoProcessRunning.load())
     {
         std::unique_lock<std::mutex> lock(m_videoFrameQueueMutex);
-        m_videoFrameQueueNotEmptyCV.wait(lock,[this](){
+        m_videoFrameQueueNotEmptyCV.wait(lock, [this]() {
             return !m_videoFrameQueue.empty() || !m_bVideoProcessRunning.load();
-        });
-        if(!m_bVideoProcessRunning.load())
+            });
+        if (!m_bVideoProcessRunning.load())
             break;
 
         AVFrame* frame = m_videoFrameQueue.front();
@@ -358,7 +360,7 @@ void MediaReader::VideoProcess()
 
         frameIndex++;
         int ret = sws_scale(m_videoSwsContext, frame->data, frame->linesize, 0, frame->height, frameRGB->data, frameRGB->linesize);
-        if(m_param.videoCallback)
+        if (m_param.videoCallback)
         {
             cv::Mat mat = cv::Mat(frame->height, frame->width, CV_8UC3, frameRGB->data[0], frameRGB->linesize[0]);
 #ifdef DEBUG_VIDEO_FRAME_WRITE
@@ -369,7 +371,7 @@ void MediaReader::VideoProcess()
 
             VideoFrame vframe;
             vframe.videoData = mat.clone();
-			double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(videoStream->time_base) * 1000000;
+            double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(videoStream->time_base) * 1000000;
             av_usleep(frameDelay);
             m_param.videoCallback(vframe);
             m_lastVideoFramePts = frame->pts;
@@ -384,5 +386,135 @@ void MediaReader::VideoProcess()
 
 void MediaReader::AudioProcess()
 {
+    const int      in_sample_rate = m_audioCodecContext->sample_rate;
+    AVSampleFormat in_sfmt = m_audioCodecContext->sample_fmt;
+    int            int_spb = av_get_bytes_per_sample(in_sfmt);
+    uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
+    int            in_channels = m_audioCodecContext->channels;
 
+    const int      out_sample_rate = m_param.outputSampleRate;// 16000;
+    AVSampleFormat out_sfmt = AV_SAMPLE_FMT_NONE;
+    if (m_param.outputBitPerSample == 8)
+        out_sfmt = AV_SAMPLE_FMT_U8;
+    else if (m_param.outputBitPerSample == 16)
+        out_sfmt = AV_SAMPLE_FMT_S16;
+    else if (m_param.outputBitPerSample == 32)
+        out_sfmt = AV_SAMPLE_FMT_S32;
+
+    int            out_spb = av_get_bytes_per_sample(out_sfmt);
+    uint64_t       out_channel_layout = AV_CH_LAYOUT_MONO;
+    if (m_param.outputChannelCount == 1)
+        out_channel_layout = AV_CH_LAYOUT_MONO;
+    else if (m_param.outputChannelCount == 2)
+        out_channel_layout = AV_CH_LAYOUT_STEREO;
+    int            out_channels = av_get_channel_layout_nb_channels(out_channel_layout);
+
+    m_bAudioProcessRunning.store(true);
+    bool bNeedResample = false;
+    if ((in_sample_rate != out_sample_rate) || (in_sfmt != out_sfmt) || (in_channels != out_channels))
+        bNeedResample = true;
+
+    // 创建重采样上下文
+    if (bNeedResample)
+    {
+        m_audioSwrContext = swr_alloc_set_opts(nullptr, out_channel_layout, out_sfmt, out_sample_rate, in_channel_layout, in_sfmt, in_sample_rate, 0, NULL);
+        if (!m_audioSwrContext)
+        {
+            // 处理重采样上下文创建失败的情况
+            qDebug() << "swr_alloc_set_opts failed";
+            return;
+        }
+        if (swr_init(m_audioSwrContext) != 0)
+        {
+            qDebug() << "swr_alloc_set_opts failed";
+            return;
+        }
+    }
+
+    int frameIndex = 0;
+    while (m_bAudioProcessRunning.load())
+    {
+        std::unique_lock<std::mutex> lock(m_audioFrameQueueMutex);
+        m_audioFrameQueueNotEmptyCV.wait(lock, [this]() {
+            return !m_audioFrameQueue.empty() || !m_bAudioProcessRunning.load();
+            });
+        if (!m_bAudioProcessRunning.load())
+            break;
+
+        AVFrame* frame = m_audioFrameQueue.front();
+        m_audioFrameQueue.pop();
+        lock.unlock();//数据取出，提前解锁
+
+        frameIndex++;
+        if (bNeedResample && m_audioSwrContext)
+        {
+            // 计算重采样输出采样点数
+            int max_out_nb_samples = av_rescale_rnd(
+                swr_get_delay(m_audioSwrContext, frame->sample_rate) + frame->nb_samples, out_sample_rate, frame->sample_rate, AV_ROUND_UP
+            );
+            AVFrame* frameResample = av_frame_alloc();
+            //使用av_samples_alloc时,结束后需要调用av_freep(&audio_data[0])释放内存,否则会内存泄漏
+            av_samples_alloc(frameResample->data, frameResample->linesize, out_channels, max_out_nb_samples, out_sfmt, 1);
+
+            int out_nb_samples = swr_convert(m_audioSwrContext, frameResample->data, max_out_nb_samples, (const uint8_t**)frame->data, frame->nb_samples);
+            qDebug() << "succeed to convert frame " << frameIndex++ << " samples[" << frame->nb_samples << "]->[" << out_nb_samples << "]";
+
+            if (m_param.audioCallback)
+            {
+                AudioFrame aframe;
+                aframe.audioData = frameResample->data[0];
+                aframe.dataSize = out_spb * out_channels * out_nb_samples;
+                aframe.sampleRate = m_param.outputSampleRate;
+                aframe.bitPerSample = m_param.outputBitPerSample;
+                aframe.channelCount = m_param.outputChannelCount;
+                m_param.audioCallback(aframe);
+                m_audioFrameQueueNotFullCV.notify_all();
+            }
+            av_freep(&frameResample->data[0]);
+            av_frame_unref(frameResample);
+            av_frame_free(&frameResample);
+        }
+        else
+        {
+            if (m_param.audioCallback)
+            {
+                AudioFrame aframe;
+                aframe.audioData = frame->data[0];
+                aframe.dataSize = frame->linesize[0];
+                aframe.sampleRate = m_param.outputSampleRate;
+                aframe.bitPerSample = m_param.outputBitPerSample;
+                aframe.channelCount = m_param.outputChannelCount;
+                m_param.audioCallback(aframe);
+                m_audioFrameQueueNotFullCV.notify_all();
+            }
+        }
+        av_frame_unref(frame);
+        av_frame_free(&frame);
+    }
+
+    if (bNeedResample && m_audioSwrContext)
+    {
+        int      max_cache_out_nb_samples = 2048;
+        AVFrame* frameResample = av_frame_alloc();
+        //使用av_samples_alloc时,结束后需要调用av_freep(&audio_data[0])释放内存,否则会内存泄漏
+        av_samples_alloc(frameResample->data, frameResample->linesize, out_channels, max_cache_out_nb_samples, out_sfmt, 1);
+
+        int out_cache_nb_samples = swr_convert(m_audioSwrContext, frameResample->data, max_cache_out_nb_samples, nullptr, 0);
+        qDebug() << "get cache convert samples " << out_cache_nb_samples;
+
+        if (m_param.audioCallback)
+        {
+            AudioFrame aframe;
+            aframe.audioData = frameResample->data[0];
+            aframe.dataSize = out_spb * out_channels * out_cache_nb_samples;
+            aframe.sampleRate = m_param.outputSampleRate;
+            aframe.bitPerSample = m_param.outputBitPerSample;
+            aframe.channelCount = m_param.outputChannelCount;
+            m_param.audioCallback(aframe);
+            m_audioFrameQueueNotFullCV.notify_all();
+        }
+        av_freep(&frameResample->data[0]);
+        av_frame_unref(frameResample);
+        av_frame_free(&frameResample);
+    }
 }
