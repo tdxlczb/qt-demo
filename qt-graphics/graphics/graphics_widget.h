@@ -2,6 +2,7 @@
 #define GRAPHICSWIDGET_H
 
 #include <QWidget>
+#include <QGraphicsWidget>
 
 class GraphicsWidget : public QWidget
 {
