@@ -7,6 +7,7 @@
 
 void AudioOutputTest()
 {
+#if QT_VERSION_MAJOR == 5
     QAudioFormat fmt; //通过fmt设定音频数据格式。只有明确知道音频数据的声道数、采样率、采样位数，才可以正常地播放
     fmt.setSampleRate(16000);  //设定播放采样频率为44100Hz的音频文件
     fmt.setSampleSize(16);     //设定播放采样格式（采样位数）为16位(bit)的音频文件。QAudioFormat支持的有8/16bit，即将声音振幅化为256/64k个等级
@@ -55,6 +56,7 @@ void AudioOutputTest()
         delete out;
         out = NULL;
     }
+#endif
 }
 
 #include <iostream>
