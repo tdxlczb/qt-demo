@@ -36,8 +36,21 @@ bool MediaReader::Init(const MediaParameter& pParam)
     m_param = pParam;
 
     avformat_network_init();
+
+    //配置该流的ffmpeg设置
+    AVDictionary* pOptDict = NULL;
+    av_dict_set(&pOptDict, "stimeout", "5000000", 0);//适应延迟网络，设置5s的等待链接时间，可能不生效
+    av_dict_set(&pOptDict, "timeout", "5000000", 0);//适应延迟网络，设置5s的等待链接时间
+    av_dict_set(&pOptDict, "buffer_size", "8192000", 0);//控制解码器或编码器的内部缓冲区大小,配置8M缓冲以适应高分辨率视频
+    av_dict_set(&pOptDict, "recv_buffer_size", "4096000", 0);     // 防止花屏, max 4M.:用于控制网络接收缓冲区大小，适用于高带宽或高延迟的网络环境
+    av_dict_set(&pOptDict, "tune", "stillimage,fastdecode,zerolatency", 0);//优化静态图像编码,快速解码和低延时传输
+    av_dict_set(&pOptDict, "rtsp_transport", "tcp", 0);//tcp拉流，尽量保证不丢包
+    int ret = avformat_open_input(&m_formatContext, pParam.sUri.c_str(), nullptr, &pOptDict);
+    av_dict_free(&pOptDict);
+    pOptDict = nullptr;
+
     // 打开流
-    if (avformat_open_input(&m_formatContext, pParam.sUri.c_str(), nullptr, nullptr) != 0)
+    if (ret != 0)
     {
         qDebug() << "avformat_open_input failed";
         avformat_network_deinit();
@@ -90,6 +103,7 @@ bool MediaReader::Init(const MediaParameter& pParam)
             avformat_network_deinit();
             return false;
         }
+        m_videoCodecContext->err_recognition |= AV_EF_EXPLODE;//设置解码器的错误恢复标志，可以跳过错误的帧，从而减少花屏现象
         if (avcodec_open2(m_videoCodecContext, videoCodec, nullptr) != 0)
         {
             qDebug() << "avcodec_open2 failed";
@@ -205,6 +219,7 @@ void MediaReader::FrameReader()
         int ret = av_read_frame(m_formatContext, packet);
         if (ret < 0)
         {
+            qDebug() << "av_read_frame err:" << ret;
             if (ret == AVERROR_EOF)
             {
                 m_bStreamOver = true;
@@ -255,6 +270,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
     int ret = avcodec_send_packet(m_videoCodecContext, packet);
     if (ret < 0)
     {//错误处理
+        qDebug() << "avcodec_send_packet err:" << ret;
         return;
     }
     while (true)
@@ -263,6 +279,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
         ret = avcodec_receive_frame(m_videoCodecContext, frame);
         if (ret < 0)
         {//错误处理
+            qDebug() << "avcodec_receive_frame err:" << ret;
             av_frame_unref(frame);
             av_frame_free(&frame);
             break;
@@ -299,6 +316,7 @@ void MediaReader::AudioDecode(AVPacket* packet)
     int ret = avcodec_send_packet(m_audioCodecContext, packet);
     if (ret < 0)
     {//错误处理
+        qDebug() << "avcodec_send_packet err:" << ret;
         return;
     }
     while (true)
@@ -307,6 +325,7 @@ void MediaReader::AudioDecode(AVPacket* packet)
         ret = avcodec_receive_frame(m_audioCodecContext, frame);
         if (ret < 0)
         {//错误处理
+            qDebug() << "avcodec_receive_frame err:" << ret;
             av_frame_unref(frame);
             av_frame_free(&frame);
             break;
@@ -327,21 +346,22 @@ void MediaReader::VideoProcess()
     double    fps = av_q2d(videoStream->avg_frame_rate);
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;
+    AVPixelFormat dstFormat = AV_PIX_FMT_RGB24;
 
     m_bVideoProcessRunning.store(true);
     if (!m_videoSwsContext)
     {
         m_videoSwsContext = sws_getCachedContext(NULL,
             m_videoCodecContext->width, m_videoCodecContext->height, m_videoCodecContext->pix_fmt,
-            m_videoCodecContext->width, m_videoCodecContext->height, AV_PIX_FMT_BGR24,
+            m_videoCodecContext->width, m_videoCodecContext->height, dstFormat,
             SWS_BILINEAR, NULL, NULL, NULL);
     }
     // 创建RGB视频帧
     AVFrame* frameRGB = av_frame_alloc();
-    int      numBytes = av_image_get_buffer_size(AV_PIX_FMT_BGR24, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE);
+    int      numBytes = av_image_get_buffer_size(dstFormat, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE);
     uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
     av_image_fill_arrays(
-        frameRGB->data, frameRGB->linesize, buffer, AV_PIX_FMT_BGR24, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE
+        frameRGB->data, frameRGB->linesize, buffer, dstFormat, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE
     );
 
     int frameIndex = 0;
@@ -363,15 +383,37 @@ void MediaReader::VideoProcess()
         if (m_param.videoCallback)
         {
             cv::Mat mat = cv::Mat(frame->height, frame->width, CV_8UC3, frameRGB->data[0], frameRGB->linesize[0]);
+
+            bool isTooGray = false;
+            {
+                // 将帧转换为灰度图像
+                cv::Mat grayFrame;
+                //检查灰度可以压缩图像大小，以加速检查
+                cv::resize(mat, grayFrame, cv::Size(100, 100));
+                cv::cvtColor(grayFrame, grayFrame, cv::COLOR_RGB2GRAY);
+                // 计算灰度图像的方差
+                cv::Scalar mean, stddev;
+                cv::meanStdDev(grayFrame, mean, stddev);
+                double dGrayScaleDegree = stddev[0] * stddev[0];
+                if (dGrayScaleDegree < 100.0) {
+                    isTooGray = true;
+                    // cv::imshow("gray",matRgb);
+                    // cv::waitKey(1);
+                }
+            }
+            if (isTooGray)
+                continue;
 #ifdef DEBUG_VIDEO_FRAME_WRITE
+            //opencv默认使用的是BGR格式，需要进行转换
+            cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
             char filename[100];
             sprintf(filename, "%d.jpg", frameIndex);
             cv::imwrite(filename, mat);
 #endif // DEBUG_VIDEO_FRAME_WRITE
-
             VideoFrame vframe;
             vframe.videoData = mat.clone();
             double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(videoStream->time_base) * 1000000;
+            qDebug() << "frameDelay:" << frameDelay;
             av_usleep(frameDelay);
             m_param.videoCallback(vframe);
             m_lastVideoFramePts = frame->pts;
