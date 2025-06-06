@@ -9,7 +9,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     m_pMainWidget = new MainWidget(nullptr);
-    m_pMainWidget->hide();
+    m_pMainWidget->show();
 }
 
 MainWindow::~MainWindow()

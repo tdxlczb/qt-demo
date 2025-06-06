@@ -15,6 +15,9 @@ public:
     explicit MainWidget(QWidget *parent = nullptr);
     ~MainWidget();
 
+protected:
+    void mouseReleaseEvent(QMouseEvent* event);
+
 private:
     Ui::MainWidget *ui;
 };
