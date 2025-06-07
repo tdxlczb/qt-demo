@@ -37,10 +37,7 @@ class CustomBorderMenu : public QMenu
 public:
     explicit CustomBorderMenu(QWidget* parent = nullptr);
 
-    // 设置小三角起始位置;
-    void setStartPos(int startX);
-    // 设置小三角宽和高;
-    void setTriangleInfo(int width, int height);
+    void setCursorPos(const QPoint& pt);
 
 protected:
     void paintEvent(QPaintEvent* event);
@@ -52,6 +49,7 @@ private:
     int m_triangleWidth;
     // 小三角高度;
     int m_triangleHeight;
+    QPoint m_cursorPos{ 0,0 };
 };
 
 

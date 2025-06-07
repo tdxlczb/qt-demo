@@ -70,12 +70,13 @@ void MainWidget::mouseReleaseEvent(QMouseEvent* event)
         //borderWidget->setCenterWidget(textLabel);
         //borderWidget->move(QCursor::pos());
         //borderWidget->show();
-
+        QPoint cursorPos = QCursor::pos();
         CustomBorderMenu borderMenu;
         borderMenu.addAction("action01");
         borderMenu.addAction("action01");
         borderMenu.addAction("action01");
-        borderMenu.move(QCursor::pos());
+        borderMenu.move(QPoint(cursorPos.x(), cursorPos.y() - 30));
+        borderMenu.setCursorPos(cursorPos);
         borderMenu.exec();
     }
 }

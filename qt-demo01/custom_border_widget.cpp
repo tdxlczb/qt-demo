@@ -4,8 +4,8 @@
 #include <QPainterPath>
 #include <QGraphicsDropShadowEffect>
 
-#define SHADOW_WIDTH 15 // 窗口阴影宽度;
-#define TRIANGLE_WIDTH 15 // 小三角的宽度;
+#define SHADOW_WIDTH 10 // 窗口阴影宽度;
+#define TRIANGLE_WIDTH 20 // 小三角的宽度;
 #define TRIANGLE_HEIGHT 10 // 小三角的高度;
 #define BORDER_RADIUS 5 // 窗口边角的弧度;
 
@@ -77,8 +77,6 @@ void CustomBorderWidget::paintEvent(QPaintEvent* event)
     //painter.drawText(rect(), Qt::AlignCenter, "透明Popup窗口");
 }
 
-
-
 CustomBorderMenu::CustomBorderMenu(QWidget* parent)
     : QMenu(parent)
     , m_startX(50)
@@ -93,20 +91,15 @@ CustomBorderMenu::CustomBorderMenu(QWidget* parent)
     shadowEffect->setColor(QColor(255, 0, 0));
     shadowEffect->setBlurRadius(SHADOW_WIDTH);
     this->setGraphicsEffect(shadowEffect);
-    this->setStyleSheet("QMenu {background: #10f0f8; padding-top:20px; margin-left:20px; margin-top:30px; margin-right:20px; margin-bottom:20px; }");
+    // margin 设置为SHADOW_WIDTH + BORDER_RADIUS，左边再加 TRIANGLE_HEIGHT(三角形显示在左右两侧时，可以认为TRIANGLE_HEIGHT为宽，TRIANGLE_WIDTH为高)
+    this->setStyleSheet("QMenu {background: #10f0f8;  margin-left:25px; margin-top:15px; margin-right:15px; margin-bottom:15px; }");
+    //this->setStyleSheet("QMenu {background: #10f0f8; padding-top:20px; margin-left:20px; margin-top:30px; margin-right:20px; margin-bottom:20px; }");
     setFixedSize(200, 200);
 }
 
-// 设置小三角显示的起始位置;
-void CustomBorderMenu::setStartPos(int startX)
+void CustomBorderMenu::setCursorPos(const QPoint& pt)
 {
-    m_startX = startX;
-}
-
-void CustomBorderMenu::setTriangleInfo(int width, int height)
-{
-    m_triangleWidth = width;
-    m_triangleHeight = height;
+    m_cursorPos = pt;
 }
 
 void CustomBorderMenu::paintEvent(QPaintEvent* event)
@@ -115,19 +108,33 @@ void CustomBorderMenu::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(255, 255, 255));
+
+    QPoint menuPos = pos();
+    int posY =  m_cursorPos.y() - menuPos.y() + SHADOW_WIDTH;
+
     // 小三角区域;
     QPolygon trianglePolygon;
-    trianglePolygon << QPoint(m_startX, m_triangleHeight + SHADOW_WIDTH);
-    trianglePolygon << QPoint(m_startX + m_triangleWidth / 2, SHADOW_WIDTH);
-    trianglePolygon << QPoint(m_startX + m_triangleWidth, m_triangleHeight + SHADOW_WIDTH);
+    trianglePolygon << QPoint(SHADOW_WIDTH, posY);
+    trianglePolygon << QPoint(m_triangleHeight + SHADOW_WIDTH, posY + m_triangleWidth / 2);
+    trianglePolygon << QPoint(m_triangleHeight + SHADOW_WIDTH, posY - m_triangleWidth / 2);
     QPainterPath drawPath;
-    drawPath.addRoundedRect(QRect(SHADOW_WIDTH, m_triangleHeight + SHADOW_WIDTH, \
-        width() - SHADOW_WIDTH * 2, height() - SHADOW_WIDTH * 2 - m_triangleHeight), \
+    drawPath.addRoundedRect(QRect(m_triangleHeight + SHADOW_WIDTH, SHADOW_WIDTH, \
+        width() - SHADOW_WIDTH * 2 - m_triangleHeight, height() - SHADOW_WIDTH * 2), \
         BORDER_RADIUS, BORDER_RADIUS);
+
+    //QPolygon trianglePolygon;
+    //trianglePolygon << QPoint(m_startX, m_triangleHeight + SHADOW_WIDTH);
+    //trianglePolygon << QPoint(m_startX + m_triangleWidth / 2, SHADOW_WIDTH);
+    //trianglePolygon << QPoint(m_startX + m_triangleWidth, m_triangleHeight + SHADOW_WIDTH);
+    //QPainterPath drawPath;
+    //drawPath.addRoundedRect(QRect(SHADOW_WIDTH, m_triangleHeight + SHADOW_WIDTH, \
+    //    width() - SHADOW_WIDTH * 2, height() - SHADOW_WIDTH * 2 - m_triangleHeight), \
+    //    BORDER_RADIUS, BORDER_RADIUS);
     // Rect + Triangle;
     drawPath.addPolygon(trianglePolygon);
     painter.drawPath(drawPath);
 
+    //先绘制边框，然后绘制中间内容，使用margin设置边框大小
     QMenu::paintEvent(event);
 
 }
