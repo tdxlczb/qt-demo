@@ -72,9 +72,9 @@ void MainWidget::mouseReleaseEvent(QMouseEvent* event)
         //borderWidget->show();
         QPoint cursorPos = QCursor::pos();
         CustomBorderMenu borderMenu;
-        borderMenu.addAction("action01");
-        borderMenu.addAction("action01");
-        borderMenu.addAction("action01");
+        borderMenu.addAction(QIcon(":res/icon/Down.png"), "action01");
+        borderMenu.addAction(QIcon(":res/icon/Down.png"), "action02");
+        borderMenu.addAction(QIcon(":res/icon/Down.png"), "action03");
         borderMenu.move(QPoint(cursorPos.x(), cursorPos.y() - 30));
         borderMenu.setCursorPos(cursorPos);
         borderMenu.exec();

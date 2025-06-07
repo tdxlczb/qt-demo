@@ -77,6 +77,62 @@ void CustomBorderWidget::paintEvent(QPaintEvent* event)
     //painter.drawText(rect(), Qt::AlignCenter, "透明Popup窗口");
 }
 
+
+QString GetMenuStyle()
+{
+    QString style = R"(
+QMenu {
+        border: 1px solid #CCCCCC;  /* 边框宽度为1px，颜色为#CCCCCC */
+        border-radius: 3px;         /* 边框圆角 */
+        background-color: #FAFAFC;  /* 背景颜色 */
+        font-size: 10pt;            /* 文本字体大小 */
+        padding: 3px 0px 3px 0px;   /* 菜单项距菜单顶部边界和底部边界分别有多少px */
+}
+
+QMenu::item { /* 菜单子控件item，为菜单项在default的状态 */
+    border: 0px solid transparent;
+    background-color: transparent;
+    color: #606266; /* 文本颜色 */
+    min-height: 35px; /* 菜单项的最小高度 */
+    margin: 0 2 0 2;
+    padding-left:30;
+}
+
+QMenu::icon{
+subcontrol-position: left; padding-left:20;
+}
+
+QMenu::item:selected { /* 为菜单项在selected的状态 */
+    /*background-color: #EDEDEF;*/
+    background-color: #F0F2F5;
+    color: #606266;
+}
+
+QMenu::item:disabled{ /* 为菜单项在disabled的状态 */
+    color: #CCCCCC;
+    background: none;
+}
+
+
+QMenu::separator { /* 菜单子控件separator，定义菜单项之间的分隔线 */
+    height: 1px;
+    background: #CCCCCC;
+    margin-left: 2px; /* 距离菜单左边界2px */
+    margin-right: 2px; /* 距离菜单右边界2px */
+}
+
+QMenu::right-arrow { /* 菜单子控件right-arrow，定义子菜单指示器 */
+    width: 16px;
+    height: 16px;
+    image: url(:/icon/resource/icon/Right.png);
+    padding-right:10;
+}
+
+)";
+    return style;
+}
+
+
 CustomBorderMenu::CustomBorderMenu(QWidget* parent)
     : QMenu(parent)
     , m_startX(50)
@@ -85,14 +141,20 @@ CustomBorderMenu::CustomBorderMenu(QWidget* parent)
 {
     setWindowFlags(Qt::Popup | Qt::NoDropShadowWindowHint | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
+    setStyleSheet(GetMenuStyle());
+    
+    auto style = styleSheet();
+    setStyleSheet(style.append("QMenu {background: #FAFA00; border: 0px; border-radius: 0px; margin: 15px 15px 15px 25px;}"));
     // 设置阴影边框;
     auto shadowEffect = new QGraphicsDropShadowEffect(this);
     shadowEffect->setOffset(0, 0);
     shadowEffect->setColor(QColor(255, 0, 0));
     shadowEffect->setBlurRadius(SHADOW_WIDTH);
     this->setGraphicsEffect(shadowEffect);
+    //this->setContentsMargins(25,15,15,15);
+
     // margin 设置为SHADOW_WIDTH + BORDER_RADIUS，左边再加 TRIANGLE_HEIGHT(三角形显示在左右两侧时，可以认为TRIANGLE_HEIGHT为宽，TRIANGLE_WIDTH为高)
-    this->setStyleSheet("QMenu {background: #10f0f8;  margin-left:25px; margin-top:15px; margin-right:15px; margin-bottom:15px; }");
+    //this->setStyleSheet("QMenu {background: #10f0f8;  margin-left:25px; margin-top:15px; margin-right:15px; margin-bottom:15px; }");
     //this->setStyleSheet("QMenu {background: #10f0f8; padding-top:20px; margin-left:20px; margin-top:30px; margin-right:20px; margin-bottom:20px; }");
     setFixedSize(200, 200);
 }
@@ -107,7 +169,7 @@ void CustomBorderMenu::paintEvent(QPaintEvent* event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(255, 255, 255));
+    painter.setBrush(QColor(250, 250, 252));
 
     QPoint menuPos = pos();
     int posY =  m_cursorPos.y() - menuPos.y() + SHADOW_WIDTH;
