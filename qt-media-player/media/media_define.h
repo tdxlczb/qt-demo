@@ -35,7 +35,7 @@ using AudioCallback = std::function<void(const AudioFrame&)>;
 
 struct MediaParameter
 {
-    std::string sUri;
+    std::string url;
 
     int16_t outputSampleRate = 0;
     int16_t outputBitPerSample = 0;

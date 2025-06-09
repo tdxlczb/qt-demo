@@ -45,7 +45,7 @@ bool MediaReader::Init(const MediaParameter& pParam)
     av_dict_set(&pOptDict, "recv_buffer_size", "4096000", 0);     // 防止花屏, max 4M.:用于控制网络接收缓冲区大小，适用于高带宽或高延迟的网络环境
     av_dict_set(&pOptDict, "tune", "stillimage,fastdecode,zerolatency", 0);//优化静态图像编码,快速解码和低延时传输
     av_dict_set(&pOptDict, "rtsp_transport", "tcp", 0);//tcp拉流，尽量保证不丢包
-    int ret = avformat_open_input(&m_formatContext, pParam.sUri.c_str(), nullptr, &pOptDict);
+    int ret = avformat_open_input(&m_formatContext, pParam.url.c_str(), nullptr, &pOptDict);
     av_dict_free(&pOptDict);
     pOptDict = nullptr;
 
@@ -104,6 +104,9 @@ bool MediaReader::Init(const MediaParameter& pParam)
             return false;
         }
         m_videoCodecContext->err_recognition |= AV_EF_EXPLODE;//设置解码器的错误恢复标志，可以跳过错误的帧，从而减少花屏现象
+        m_videoCodecContext->opaque = this; //用于回调里获取的指针
+        m_videoCodecContext->thread_count = 3;
+
         if (avcodec_open2(m_videoCodecContext, videoCodec, nullptr) != 0)
         {
             qDebug() << "avcodec_open2 failed";
@@ -240,7 +243,7 @@ void MediaReader::FrameReader()
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
-            AudioDecode(packet);
+            //AudioDecode(packet);
         }
 
     }
@@ -266,7 +269,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
         if (!m_bVideoProcessRunning.load())
             return;
     }
-    //bool isKeyPacket = packet->flags & AV_PKT_FLAG_KEY;//关键帧
+    bool isKeyPacket = packet->flags & AV_PKT_FLAG_KEY;//关键帧
     int ret = avcodec_send_packet(m_videoCodecContext, packet);
     if (ret < 0)
     {//错误处理
@@ -341,6 +344,9 @@ void MediaReader::AudioDecode(AVPacket* packet)
 
 void MediaReader::VideoProcess()
 {
+    if (!m_formatContext || !m_videoCodecContext)
+        return;
+
     AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
     auto      timeBase = videoStream->time_base;
     double    fps = av_q2d(videoStream->avg_frame_rate);
@@ -428,6 +434,9 @@ void MediaReader::VideoProcess()
 
 void MediaReader::AudioProcess()
 {
+    if (!m_formatContext || !m_videoCodecContext)
+        return;
+
     const int      in_sample_rate = m_audioCodecContext->sample_rate;
     AVSampleFormat in_sfmt = m_audioCodecContext->sample_fmt;
     int            int_spb = av_get_bytes_per_sample(in_sfmt);

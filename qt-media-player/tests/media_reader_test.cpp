@@ -10,7 +10,7 @@ void MediaReaderTest()
 {
     auto reader = new MediaReader();
     MediaParameter param;
-    param.sUri = "E:/code/media/BaiduSyncdisk.mp4";
+    param.url = "E:/code/media/BaiduSyncdisk.mp4";
     reader->Init(param);
     reader->Start();
     while (true)

@@ -27,7 +27,6 @@ MainWidget::MainWidget(QWidget *parent) :
 
     connect(button01,&QPushButton::clicked,[this, pPlayerWidget](){
         qDebug() << "button01 clicked";
-        pPlayerWidget->StartPlay("E:/code/media/BaiduSyncdisk.mp4");
     });
 
     connect(button02,&QPushButton::clicked,[this, pPlayerWidget](){
