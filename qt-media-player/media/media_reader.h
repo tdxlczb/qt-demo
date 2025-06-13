@@ -6,12 +6,17 @@
 #include <condition_variable>
 #include "media_define.h"
 
-struct AVFormatContext;
-struct AVCodecContext;
-struct AVFrame;
-struct AVPacket;
-struct SwsContext;
-struct SwrContext;
+extern "C"
+{
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/error.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/frame.h>
+#include <libavutil/time.h>
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+}
 
 class MediaReader
 {
@@ -25,6 +30,10 @@ public:
     bool Start();
     bool Stop();
 
+    //获取当前硬解码的图像格式(仅硬解码时有效)
+    const AVPixelFormat& GetHwPixFmt() const;
+    //退出硬解码（在非本类代码内执行时可用）
+    void QuitHwDecode();
 private:
     void FrameReader();
     void VideoDecode(AVPacket* packet);
@@ -33,6 +42,7 @@ private:
     void VideoProcess();
     void AudioProcess();
 
+    void FrameReaderSync();
 private:
     bool m_isInit = false;
     MediaParameter m_param;
@@ -49,6 +59,8 @@ private:
     int m_audioStreamIndex = -1;
     AVCodecContext* m_videoCodecContext = nullptr;
     AVCodecContext* m_audioCodecContext = nullptr;
+    enum AVHWDeviceType m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;//硬解码类型
+    enum AVPixelFormat m_hwPixFmt = AV_PIX_FMT_NONE;//硬解码的格式
     SwsContext* m_videoSwsContext = nullptr;//视频重采样
     bool m_videoNeedConvert = false;
     SwrContext* m_audioSwrContext = nullptr;//音频重采样

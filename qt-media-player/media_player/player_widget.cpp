@@ -63,6 +63,7 @@ void PlayerWidget::StartPlay(const QString& url)
     m_pTextEditUrl->setText(url);
     MediaParameter param;
     param.url = url.toStdString();
+    param.hwDeviceName = "dxva2";
     param.outputSampleRate = 16000;
     param.outputBitPerSample = 16;
     param.outputChannelCount = 2;
@@ -95,9 +96,6 @@ void PlayerWidget::on_pbOpenFileButton_clicked()
         tr("所有文件 (*);;视频文件 (*.mp4);;音频文件 (*.mp3 *.wav)") // 文件过滤器
     );
 
-    fileName = "E:/code/media/BaiduSyncdisk.mp4";
-    //fileName = "rtsp://172.16.45.151:554/rtp/34020000001180000002_34020000002000000002_1?token=Uw4fJbAgImgvvxSm";
-
     if (fileName.isEmpty()) {
         qDebug() << "未选择文件";
         return;
@@ -109,6 +107,14 @@ void PlayerWidget::on_pbOpenFileButton_clicked()
 void PlayerWidget::on_pbPlayButton_clicked()
 {
     QString playUrl = m_pTextEditUrl->toPlainText();
+    if (playUrl.isEmpty())
+    {
+        playUrl = "E:/code/media/BaiduSyncdisk.mp4";
+        //playUrl = "rtsp://172.16.45.151:554/rtp/34020000001180000002_34020000002000000002_1?token=Uw4fJbAgImgvvxSm";
+        //playUrl = "rtsp://127.0.0.1/live/test";
+        //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
+        //playUrl = "rtsp://172.16.19.44:554/proxy/44_160_0?token=uYeCn9fSppapqAbK";
+    }
     StartPlay(playUrl);
 }
 

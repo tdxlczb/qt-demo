@@ -41,6 +41,8 @@ struct MediaParameter
     int16_t outputBitPerSample = 0;
     int16_t outputChannelCount = 0;
 
+    std::string hwDeviceName;
+
     MediaErrorCallback errCallback = nullptr;
     VideoCallback videoCallback = nullptr;
     AudioCallback audioCallback = nullptr;
