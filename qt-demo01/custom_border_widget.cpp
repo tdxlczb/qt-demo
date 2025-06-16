@@ -151,7 +151,7 @@ CustomBorderMenu::CustomBorderMenu(QWidget* parent)
     shadowEffect->setColor(QColor(255, 0, 0));
     shadowEffect->setBlurRadius(SHADOW_WIDTH);
     this->setGraphicsEffect(shadowEffect);
-    //this->setContentsMargins(25,15,15,15);
+    this->setContentsMargins(0, -10, 0, 0);//设置该项可以让第一个item距离top更近，styleSheet里设置不管用
 
     // margin 设置为SHADOW_WIDTH + BORDER_RADIUS，左边再加 TRIANGLE_HEIGHT(三角形显示在左右两侧时，可以认为TRIANGLE_HEIGHT为宽，TRIANGLE_WIDTH为高)
     //this->setStyleSheet("QMenu {background: #10f0f8;  margin-left:25px; margin-top:15px; margin-right:15px; margin-bottom:15px; }");
@@ -166,6 +166,8 @@ void CustomBorderMenu::setCursorPos(const QPoint& pt)
 
 void CustomBorderMenu::paintEvent(QPaintEvent* event)
 {
+    //QMenu::paintEvent(event);
+    //return;
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
