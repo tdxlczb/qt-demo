@@ -83,6 +83,8 @@ message('win32-g++')
 #检查是否是MSVC编译器
 win32-msvc {
 message('win32-msvc')
+#设置使用utf-8
+QMAKE_CXXFLAGS += /utf-8
 }
 
 # 判断是debug还是release

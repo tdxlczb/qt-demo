@@ -20,14 +20,20 @@ MainWidget::MainWidget(QWidget *parent)
     this->resize(800,600);
     this->setWindowTitle("MainWidget");
 
+    this->setAutoFillBackground(true);//启用背景填充
+    QPalette palette = this->palette();
+    //通常指窗口部件的背景色
+    palette.setColor(QPalette::Window, QColor(255, 255, 255));
+    this->setPalette(palette);
+
     //CustomToolBar * pToolBar = new CustomToolBar();
     //pToolBar->show();
 
     Test01Widget * pWidget = new Test01Widget();
-    pWidget->hide();
+    pWidget->show();
 
-//    CustomChildWidget * pChild = new CustomChildWidget(pWidget);
-//    pChild->show();
+    CustomTransparentChildWidget* pChild = new CustomTransparentChildWidget(pWidget);
+    pChild->show();
 
     QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
     setLayout(vBoxLayout);
@@ -78,5 +84,13 @@ void MainWidget::mouseReleaseEvent(QMouseEvent* event)
         borderMenu.move(QPoint(cursorPos.x(), cursorPos.y() - 30));
         borderMenu.setCursorPos(cursorPos);
         borderMenu.exec();
+
+        //QMenu menu;
+        //menu.addAction(QIcon(":res/icon/Down.png"), "action01");
+        //menu.addAction(QIcon(":res/icon/Down.png"), "action02");
+        //menu.addAction(QIcon(":res/icon/Down.png"), "action03");
+        //menu.setFixedSize(200, 200);
+        //menu.move(cursorPos);
+        //menu.exec();
     }
 }

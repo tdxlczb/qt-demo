@@ -13,4 +13,16 @@ signals:
 
 };
 
+class CustomTransparentChildWidget : public QWidget
+{
+    Q_OBJECT
+public:
+    explicit CustomTransparentChildWidget(QWidget* parent = nullptr);
+
+signals:
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+};
+
 #endif // CUSTOMCHILDWIDGET_H

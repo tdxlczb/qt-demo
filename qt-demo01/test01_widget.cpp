@@ -1,6 +1,8 @@
 #include "test01_widget.h"
 #include "ui_test01_widget.h"
 #include <QLabel>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include "mask_widget.h"
 #include "custom_child_widget.h"
 
@@ -10,18 +12,23 @@ Test01Widget::Test01Widget(QWidget *parent)
 {
     ui->setupUi(this);
     this->resize(960,540);
-    // QPalette palette;
-    // palette.setColor(QPalette::Window,QColor(50, 50, 150));
-    //    // palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
-    // this->setPalette(palette);
-    QLabel * bgLabel = new QLabel(this);
-    bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
-    bgLabel->setScaledContents(true);
-    bgLabel->show();
+    this->setWindowTitle("Test01Widget");
 
-    CustomChildWidget * pChild = new CustomChildWidget(this);
-    pChild->move(200,200);
-    pChild->show();
+    //QLabel * bgLabel = new QLabel(this);
+    //bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
+    //bgLabel->setScaledContents(true);
+    //bgLabel->show();
+
+    setAttribute(Qt::WA_StyledBackground, true);//启用样式表背景
+    m_pTimer = new QTimer(this);
+    connect(m_pTimer, &QTimer::timeout, this, &Test01Widget::SwitchBackground);
+    m_pTimer->start(2000);
+
+    //QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
+    //CustomChildWidget * pChild = new CustomChildWidget(this);
+    //pChild->move(200,200);
+    //pChild->show();
+    //vBoxLayout->addWidget(pChild);
 }
 
 Test01Widget::~Test01Widget()
@@ -41,6 +48,31 @@ void Test01Widget::ShowMask(bool isShow)
 
     if(m_pMaskWidget && !isShow)
         m_pMaskWidget->hide();
+}
+
+void Test01Widget::SwitchBackground()
+{
+    //setAttribute(Qt::WA_StyledBackground, true);//使用样式前需要启用样式表背景
+    static QStringList imagePaths = {
+        ":/res/bg01.jpg",  // Qt资源文件路径
+        ":/res/bg02.jpg",
+        ":/res/bg03.jpg",
+        ":/res/bg04.jpg"
+    };
+    // 循环切换图片
+    m_iCurrentIndex = (m_iCurrentIndex + 1) % imagePaths.size();
+    QString path = imagePaths[m_iCurrentIndex];
+
+    // 设置样式表（关键：background-size: cover 撑满窗口）
+    this->setStyleSheet(
+        QString("QWidget {"
+            "background-image: url(%1);"
+            "background-position: center;"
+            "background-repeat: no-repeat;"
+            "background-attachment: fixed;"
+            "background-size: cover;"  // 填充整个窗口
+            "}").arg(path)
+    );
 }
 
 void Test01Widget::moveEvent(QMoveEvent *event)

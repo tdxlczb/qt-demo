@@ -2,6 +2,7 @@
 #define TEST_1_WIDGET_H
 
 #include <QWidget>
+#include <QTimer>
 
 namespace Ui {
 class Test01Widget;
@@ -17,6 +18,9 @@ public:
     ~Test01Widget();
 
     void ShowMask(bool isShow);
+
+private:
+    void SwitchBackground();
 protected:
     // void mousePressEvent(QMouseEvent *event);
     // void mouseReleaseEvent(QMouseEvent *event);
@@ -49,6 +53,8 @@ private:
     Ui::Test01Widget *ui;
     MaskWidget * m_pMaskWidget = nullptr;
     bool m_isShowMask = false;
+    QTimer* m_pTimer = nullptr;
+    int m_iCurrentIndex = 0;
 };
 
 #endif // TEST_1_WIDGET_H
