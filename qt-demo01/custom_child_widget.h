@@ -8,7 +8,7 @@ class CustomChildWidget : public QWidget
     Q_OBJECT
 public:
     explicit CustomChildWidget(QWidget *parent = nullptr);
-
+    ~CustomChildWidget();
 signals:
 
 };
@@ -18,7 +18,7 @@ class CustomTransparentChildWidget : public QWidget
     Q_OBJECT
 public:
     explicit CustomTransparentChildWidget(QWidget* parent = nullptr);
-
+    ~CustomTransparentChildWidget();
 signals:
 
 protected:

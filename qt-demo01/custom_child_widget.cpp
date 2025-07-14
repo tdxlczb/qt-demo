@@ -1,5 +1,6 @@
 #include "custom_child_widget.h"
 #include <QPainter>
+#include <QDebug>
 
 CustomChildWidget::CustomChildWidget(QWidget *parent) : QWidget(parent)
 {
@@ -16,6 +17,11 @@ CustomChildWidget::CustomChildWidget(QWidget *parent) : QWidget(parent)
     this->setPalette(palette);
 }
 
+CustomChildWidget::~CustomChildWidget()
+{
+    qDebug() << "delete CustomChildWidget";
+}
+
 CustomTransparentChildWidget::CustomTransparentChildWidget(QWidget* parent)
     : QWidget(parent)
 {
@@ -26,6 +32,11 @@ CustomTransparentChildWidget::CustomTransparentChildWidget(QWidget* parent)
     this->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);//独立窗口、无边框
     this->setAttribute(Qt::WA_TranslucentBackground, true);//透明背景
 
+}
+
+CustomTransparentChildWidget::~CustomTransparentChildWidget()
+{
+    qDebug() << "delete CustomTransparentChildWidget";
 }
 
 void CustomTransparentChildWidget::paintEvent(QPaintEvent* event)

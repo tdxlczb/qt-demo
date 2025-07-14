@@ -14,15 +14,15 @@ Test01Widget::Test01Widget(QWidget *parent)
     this->resize(960,540);
     this->setWindowTitle("Test01Widget");
 
-    //QLabel * bgLabel = new QLabel(this);
-    //bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
-    //bgLabel->setScaledContents(true);
-    //bgLabel->show();
+    QLabel * bgLabel = new QLabel(this);
+    bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
+    bgLabel->setScaledContents(true);
+    bgLabel->show();
 
     setAttribute(Qt::WA_StyledBackground, true);//启用样式表背景
     m_pTimer = new QTimer(this);
-    connect(m_pTimer, &QTimer::timeout, this, &Test01Widget::SwitchBackground);
-    m_pTimer->start(2000);
+    //connect(m_pTimer, &QTimer::timeout, this, &Test01Widget::SwitchBackground);
+    //m_pTimer->start(2000);
 
     //QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
     //CustomChildWidget * pChild = new CustomChildWidget(this);

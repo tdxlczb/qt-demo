@@ -1,5 +1,6 @@
 #include "main_widget.h"
 #include "ui_main_widget.h"
+#include <Windows.h>
 #include <QDebug>
 #include <QVBoxLayout>
 #include <QPushButton>
@@ -29,10 +30,31 @@ MainWidget::MainWidget(QWidget *parent)
     //CustomToolBar * pToolBar = new CustomToolBar();
     //pToolBar->show();
 
-    Test01Widget * pWidget = new Test01Widget();
+    Test01Widget* pWidget = new Test01Widget();
+    //{
+    //    HWND hwnd = (HWND)pWidget->winId();
+    //    HWND parentHwnd = (HWND)(394884);
+    //    if (!SetParent(hwnd, parentHwnd)) {
+    //        qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
+    //        return;
+    //    }
+    //}
+    pWidget->move(200, 200);
     pWidget->show();
 
     CustomTransparentChildWidget* pChild = new CustomTransparentChildWidget(pWidget);
+    //CustomChildWidget* pChild = new CustomChildWidget(pWidget);
+    {
+        HWND hwnd = (HWND)pChild->winId();
+        HWND parentHwnd = (HWND)pWidget->winId();
+        if (!SetParent(hwnd, parentHwnd)) {
+            qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
+            return;
+        }
+    }
+    //pChild->move(100, 100);
+    SetWindowPos((HWND)pChild->winId(), HWND_TOP, 100,200,0,0,  SWP_NOSIZE | SWP_NOACTIVATE);
+    //SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     pChild->show();
 
     QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
