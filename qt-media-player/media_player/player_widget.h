@@ -33,8 +33,8 @@ private:
     MediaReader* m_pMediaReader = nullptr;
 
     QString m_playUrl;
-    std::atomic_bool m_isVideoPlaying = false;
-    std::atomic_bool m_isAudioPlaying = false;
+    std::atomic_bool m_isVideoPlaying = {false};
+    std::atomic_bool m_isAudioPlaying = {false};
 
     QTextEdit* m_pTextEditUrl = nullptr;
 };

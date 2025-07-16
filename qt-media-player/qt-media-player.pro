@@ -7,8 +7,7 @@ CONFIG += c++11
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
-
-QMAKE_CXXFLAGS += /utf-8
+DEFINES += QT_MESSAGELOGCONTEXT
 
 include(media/media.pri)
 include(media_player/media_player.pri)
@@ -16,11 +15,13 @@ include(tests/tests.pri)
 include(utils/utils.pri)
 
 SOURCES += \
+    log.cpp \
     main.cpp \
     main_widget.cpp \
     main_window.cpp
 
 HEADERS += \
+    log.h \
     main_widget.h \
     main_window.h
 
@@ -55,6 +56,13 @@ THIRDPARTY_DIR =$$PWD/../3rd
 
 #检查是否是MSVC编译器
 win32-msvc {
+message('win32-msvc')
+#设置使用utf-8
+QMAKE_CXXFLAGS += /utf-8
+
+QMAKE_CXXFLAGS_RELEASE += /Zi    #使用程序数据库/Zi
+QMAKE_CXXFLAGS_RELEASE += /Od    #禁用优化/Od
+QMAKE_LFLAGS_RELEASE += /DEBUG   #生成调试信息
 
 contains(QT_ARCH, i386) {
 } else {

@@ -9,9 +9,8 @@ std::ofstream g_pcmOutput;
 std::ofstream g_pcmInput;
 #endif
 
-AudioRender::AudioRender(QObject *parent) 
-    : QObject(parent)
-    , m_audioBuffer(new DynamicJitterBuffer())
+AudioRender::AudioRender() 
+    : m_audioBuffer(new DynamicJitterBuffer())
     , m_rtAudio(new RtAudio())
 {
 
@@ -80,11 +79,34 @@ void AudioRender::Start(int16_t sampleRate, int16_t bitPerSample, int16_t channe
 // 回调函数：实时填充音频数据
 int AudioRender::AudioOutputCallback(void* outputBuffer, unsigned int nFrames)
 {
-    size_t bufferSize = nFrames * m_channelCount * m_bitPerSample / 8;
+    size_t sampleCount = nFrames * m_channelCount;
+    size_t bufferSize = sampleCount * m_bitPerSample / 8;
     memset(outputBuffer, 0, bufferSize);
 
-    int16_t* bufferShort = static_cast<int16_t*>(outputBuffer);
-    auto readSize = m_audioBuffer->PopData(bufferShort, bufferSize);
+    int16_t* outputShort = static_cast<int16_t*>(outputBuffer);
+    float volume = GetVolume();
+    if (volume == 1.0f) {
+        auto readSize = m_audioBuffer->PopData(outputShort, bufferSize);
+        m_audioBufferCV.notify_all();
+        return readSize;
+    }
+
+    int16_t* inputShort = new int16_t[bufferSize / sizeof(int16_t)];
+    memset(inputShort, 0, bufferSize);
+    auto readSize = m_audioBuffer->PopData(inputShort, bufferSize);
+    for (size_t i = 0; i < sampleCount; i++)
+    {
+        int32_t temp = static_cast<int32_t>(inputShort[i]) * volume;
+        // 饱和处理防止溢出
+        if (temp > 32767)//INT16_MAX等于32767
+            temp = 32767;
+        else if (temp < -32768)//INT16_MIN等于-32768
+            temp = -32768;
+        outputShort[i] = static_cast<int16_t>(temp);
+    }
+    delete[] inputShort;
+    inputShort = nullptr;
+
     m_audioBufferCV.notify_all();
     return readSize;
 }

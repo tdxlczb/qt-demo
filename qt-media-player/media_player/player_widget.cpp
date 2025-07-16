@@ -13,7 +13,7 @@
 PlayerWidget::PlayerWidget(QWidget* parent)
     : QWidget(parent)
     , m_pVideoRender(new VideoRender(this))
-    , m_pAudioRender(new AudioRender(this))
+    , m_pAudioRender(new AudioRender())
 {
     this->setWindowTitle("PlayerWidget");
     this->resize(850, 650);
@@ -63,14 +63,14 @@ void PlayerWidget::StartPlay(const QString& url)
     m_pTextEditUrl->setText(url);
     MediaParameter param;
     param.url = url.toStdString();
-    param.hwDeviceName = "dxva2";
+    //param.hwDeviceName = "dxva2";
     param.outputSampleRate = 16000;
     param.outputBitPerSample = 16;
     param.outputChannelCount = 2;
     param.videoCallback = std::bind(&PlayerWidget::HandleVideoFrame, this, std::placeholders::_1);
     param.audioCallback = std::bind(&PlayerWidget::HandleAudioFrame, this, std::placeholders::_1);
 
-    //m_pAudioRender->Start(param.outputSampleRate, param.outputBitPerSample, param.outputChannelCount, 1024);
+    m_pAudioRender->Start(param.outputSampleRate, param.outputBitPerSample, param.outputChannelCount, 1024);
 
     if (!m_pMediaReader)
         m_pMediaReader = new MediaReader();

@@ -64,6 +64,7 @@ void AudioOutputTest()
 #include <thread>
 #include <chrono>
 #include "media_player/audio_render.h"
+#include "../media/sonic/sonic.h"
 
 void AudioRenderTest()
 {
@@ -82,20 +83,51 @@ void AudioRenderTest()
     char* pcmData = new char[bufSize];
 
     player->Start(kSampleRate, kBitPerSample, kChannels, renderFrames);
+
     AudioFrame frame;
     frame.audioData = pcmData;
     frame.dataSize = bufSize;
     frame.sampleRate = kSampleRate;
     frame.bitPerSample = kBitPerSample;
     frame.channelCount = kChannels;
-    int readSize = 0;
-    do {
-        memset(pcmData, 0, bufSize);
-        file.read(reinterpret_cast<char*>(pcmData), bufSize);
-        player->Write(frame);
-        readSize = file.gcount();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    } while (readSize > 0);
 
+    float speed = 1.5f;
+    if (speed != 1.0f) {
+        char* speedPcmData = new char[bufSize];
+        sonicStream ss = sonicCreateStream(kSampleRate, kChannels);
+        sonicSetSpeed(ss, speed);
+        AudioFrame speedFrame;
+        speedFrame.sampleRate = kSampleRate;
+        speedFrame.bitPerSample = kBitPerSample;
+        speedFrame.channelCount = kChannels;
+        int readSize = 0;
+        do {
+            memset(pcmData, 0, bufSize);
+            file.read(reinterpret_cast<char*>(pcmData), bufSize);
+
+            int ret = sonicWriteShortToStream(ss, reinterpret_cast<short*>(pcmData), renderFrames);
+            int samples = sonicReadShortFromStream(ss, reinterpret_cast<short*>(speedPcmData), renderFrames);
+            speedFrame.audioData = speedPcmData;
+            speedFrame.dataSize = samples * kChannels * kBitPerSample / 8;
+
+            player->Write(speedFrame);
+            readSize = file.gcount();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        } while (readSize > 0);
+        delete[] speedPcmData;
+    }
+    else
+    {
+        int readSize = 0;
+        do {
+            memset(pcmData, 0, bufSize);
+            file.read(reinterpret_cast<char*>(pcmData), bufSize);
+            player->Write(frame);
+            readSize = file.gcount();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        } while (readSize > 0);
+    }
+    delete[] pcmData;
     std::cout << "播放结束" << std::endl;
+
 }
