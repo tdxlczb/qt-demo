@@ -9,6 +9,7 @@
 #include <QMenu>
 
 #include "test01_widget.h"
+#include "test02_widget.h"
 #include "custom_child_widget.h"
 #include "custom_toolbar.h"
 #include "custom_border_widget.h"
@@ -29,6 +30,9 @@ MainWidget::MainWidget(QWidget *parent)
 
     //CustomToolBar * pToolBar = new CustomToolBar();
     //pToolBar->show();
+
+    Test02Widget* pWidget2 = new Test02Widget();
+    pWidget2->show();
 
     Test01Widget* pWidget = new Test01Widget();
     //{
