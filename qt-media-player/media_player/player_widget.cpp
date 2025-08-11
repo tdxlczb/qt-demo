@@ -5,6 +5,7 @@
 #include <QTextEdit>
 #include <QProgressBar>
 #include <QFileDialog>
+#include <QResizeEvent>
 #include <QDebug>
 #include "video_render.h"
 #include "audio_render.h"
@@ -12,7 +13,6 @@
 
 PlayerWidget::PlayerWidget(QWidget* parent)
     : QWidget(parent)
-    , m_pVideoRender(new VideoRender(this))
     , m_pAudioRender(new AudioRender())
 {
     this->setWindowTitle("PlayerWidget");
@@ -23,10 +23,15 @@ PlayerWidget::PlayerWidget(QWidget* parent)
     //    palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
     this->setPalette(palette);
 
+    //auto VideoRender = new VideoRGBRender(this);
+    auto VideoRender = new PlayGLWidget(this);
+    //auto VideoRender = new SDLRenderWidget(this);
+    m_pVideoRender = VideoRender;
+
     QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
     vBoxLayout->setSpacing(10);//设置间距
     vBoxLayout->setContentsMargins(10, 10, 10, 10);//设置边距
-    vBoxLayout->addWidget(m_pVideoRender);
+    vBoxLayout->addWidget(VideoRender);
     QProgressBar* progressBar = new QProgressBar(this);
     progressBar->setFixedHeight(20);
     vBoxLayout->addWidget(progressBar);
@@ -64,18 +69,20 @@ void PlayerWidget::StartPlay(const QString& url)
     MediaParameter param;
     param.url = url.toStdString();
     //param.hwDeviceName = "dxva2";
-    param.outputSampleRate = 16000;
-    param.outputBitPerSample = 16;
-    param.outputChannelCount = 2;
-    param.videoCallback = std::bind(&PlayerWidget::HandleVideoFrame, this, std::placeholders::_1);
-    param.audioCallback = std::bind(&PlayerWidget::HandleAudioFrame, this, std::placeholders::_1);
-
-    m_pAudioRender->Start(param.outputSampleRate, param.outputBitPerSample, param.outputChannelCount, 1024);
+    param.outputVideoSpec = { 0, 0, AV_PIX_FMT_YUV420P };
+    //param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
+    param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
 
     if (!m_pMediaReader)
         m_pMediaReader = new MediaReader();
-    if (m_pMediaReader->Init(param))
+
+    //m_pAudioRender->Start(param.outputAudioSpec, 1024);
+    //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
+
+    if (m_pMediaReader->Init(param)) {
+        m_pMediaReader->SetPlayEvent(this);
         m_pMediaReader->Start();
+    }
 }
 
 void PlayerWidget::StopPlay()
@@ -84,6 +91,17 @@ void PlayerWidget::StopPlay()
     {
         m_pMediaReader->Stop();
     }
+}
+
+void PlayerWidget::onVideoFrame(const VideoFrame& frame)
+{
+    m_isVideoPlaying = true;
+    m_pVideoRender->UpdateContent(frame);
+}
+
+void PlayerWidget::onClose(const PlayError& error)
+{
+
 }
 
 void PlayerWidget::on_pbOpenFileButton_clicked()
@@ -110,7 +128,7 @@ void PlayerWidget::on_pbPlayButton_clicked()
     if (playUrl.isEmpty())
     {
         playUrl = "E:/code/media/BaiduSyncdisk.mp4";
-        //playUrl = "rtsp://172.16.45.151:554/rtp/34020000001180000002_34020000002000000002_1?token=Uw4fJbAgImgvvxSm";
+        //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000002_34020000002000000002_20250724091720_20250724235959_1_100000_1753328209?token=YyC43CkbA5E8RUW7";
         //playUrl = "rtsp://127.0.0.1/live/test";
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
         //playUrl = "rtsp://172.16.19.44:554/proxy/44_160_0?token=uYeCn9fSppapqAbK";
@@ -135,16 +153,6 @@ void PlayerWidget::resizeEvent(QResizeEvent* event)
     //    m_pVideoRender->resize(rc.width() - 40, rc.height() - 150);
     //    m_pVideoRender->move(10, 10);
     //}
-}
-
-void PlayerWidget::HandleVideoFrame(const VideoFrame& frame)
-{
-    m_isVideoPlaying = true;
-    m_pVideoRender->UpdateContent(frame.videoData);
-}
-
-void PlayerWidget::HandleAudioFrame(const AudioFrame& frame)
-{
-    m_isAudioPlaying = true;
-    m_pAudioRender->Write(frame);
+    if (m_pMediaReader)
+        m_pMediaReader->UpdateDisplaySize(event->size().width(), event->size().height());
 }

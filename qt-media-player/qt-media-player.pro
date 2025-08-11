@@ -98,6 +98,12 @@ contains(QT_ARCH, i386) {
         LIBS += $$RTAUDIO_DIR/lib/x64/rtaudio.lib
     }
 
+    #sdl
+    SDL_DIR = $$THIRDPARTY_DIR/sdl/sdl_2.30
+    INCLUDEPATH += $$SDL_DIR/include
+    DEPENDPATH += $$SDL_DIR/include
+    LIBS += $$SDL_DIR/lib/SDL2.lib
+
 } # contains(QT_ARCH, i386)
 
 } # win32-msvc

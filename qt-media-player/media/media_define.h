@@ -3,49 +3,94 @@
 
 #include <string>
 #include <functional>
-#include <opencv2/opencv.hpp>
 
-enum class ReaderErrorType
+
+enum class PlayErrorCode
 {
-
+    kNoError = 0,
+    kCreateConverterFailed,  //视频/音频格式重采样器创建失败
+    kNoConverter,            //没有视频/音频格式重采样器
+    kConverteFailed,         //视频/音频格式重采样失败
+    kOutOfMemory             //内存不足
 };
 
-struct ReaderError
-{
-    ReaderErrorType errType;
-    std::string errMsg;
-};
-using MediaErrorCallback = std::function<void(const ReaderError&)>;
+//using PlayErrorCode = int;
 
+struct PlayError
+{
+    PlayErrorCode code = PlayErrorCode::kNoError;
+    std::string msg;
+};
+
+using VideoFormat = int;//对应ffmpeg中AVPixelFormat的值
+using AudioFormat = int;//对应ffmpeg中AVSampleFormat的值
+
+/*
+* 视频规格
+*/
+struct VideoSpec
+{
+    uint16_t width = 0; //宽
+    uint16_t height = 0;//高
+    VideoFormat format = -1;//对应ffmpeg中AVPixelFormat的值
+};
+
+
+/*
+* 音频规格
+*/
+struct AudioSpec
+{
+    uint16_t sampleRate = 0;  //采样率:8000,16000,44100等
+    uint16_t bitPerSample = 0;//位深:8,16,32等
+    uint16_t channels = 0;    //通道数:1,2等
+    AudioFormat format = -1;  //对应ffmpeg中AVSampleFormat的值
+};
+
+/*
+* 视频帧
+*/
 struct VideoFrame
 {
-    cv::Mat videoData;
+    uint8_t*  data = nullptr;
+    size_t    size = 0;
+    int64_t   pts = 0;
+    double    timebase = 0.0;
+    VideoSpec spec;
 };
-using VideoCallback = std::function<void(const VideoFrame&)>;
 
+/*
+* 音频帧
+*/
 struct AudioFrame
 {
-    void* audioData = nullptr;
-    size_t dataSize = 0;
-    int16_t sampleRate = 0;
-    int16_t bitPerSample = 0;
-    int16_t channelCount = 0;
+    uint8_t*  data = nullptr;
+    size_t    size = 0;
+    int64_t   pts = 0;
+    double    timebase = 0.0;
+    AudioSpec spec;
 };
-using AudioCallback = std::function<void(const AudioFrame&)>;
 
 struct MediaParameter
 {
     std::string url;
-
-    int16_t outputSampleRate = 0;
-    int16_t outputBitPerSample = 0;
-    int16_t outputChannelCount = 0;
-
     std::string hwDeviceName;
-
-    MediaErrorCallback errCallback = nullptr;
-    VideoCallback videoCallback = nullptr;
-    AudioCallback audioCallback = nullptr;
+    VideoSpec outputVideoSpec;
+    AudioSpec outputAudioSpec;
 };
+
+class PlayEvent
+{
+public:
+    virtual ~PlayEvent() {};
+    // 视频帧(渲染)回调
+    virtual void onVideoFrame(const VideoFrame& frame) = 0;
+    virtual void onClose(const PlayError& error) = 0;
+private:
+
+};
+
+using VideoCallback = std::function<void(const VideoFrame& frame)>;
+using AudioCallback = std::function<void(const AudioFrame& frame)>;
 
 #endif // MEDIA_DEFINE_H

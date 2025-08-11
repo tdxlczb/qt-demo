@@ -3,4 +3,6 @@
 
 void MediaReaderTest();
 
+void FindEncoders();
+
 #endif // MEDIA_READER_TEST_H

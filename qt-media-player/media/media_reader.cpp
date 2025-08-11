@@ -1,5 +1,7 @@
 #include "media_reader.h"
 #include <QDebug>
+#include "utils/jitter_buffer.h"
+#include "media/media_display.h"
 
 #ifdef DEBUG_VIDEO_FRAME_WRITE
 
@@ -8,6 +10,56 @@
 #ifdef DEBUG_AUDIO_RESAMPLE_WRITE
 
 #endif // DEBUG_AUDIO_RESAMPLE_WRITE
+
+//获取最大公约数
+static int GetGCD(int a, int b) {
+    while (b != 0) {
+        int temp = b;
+        b = a % b;
+        a = temp;
+    }
+    return a;
+}
+
+FrameQueue::FrameQueue(int16_t maxQueueSize)
+    : m_maxQueueSize(maxQueueSize)
+{
+}
+
+FrameQueue::~FrameQueue()
+{
+}
+
+void FrameQueue::Push(AVFrame* frame)
+{
+    std::unique_lock<std::mutex> lock(m_frameQueueMutex);
+    // 当队列满了，阻塞在这里
+    // 停止播放时，通过Clear清空队列可以解除阻塞
+    m_queueCV.wait(lock, [this]() {
+        return m_frameQueue.size() < m_maxQueueSize;
+        });
+    //lock.unlock();
+    m_frameQueue.push(frame);
+}
+
+AVFrame* FrameQueue::PopFront()
+{
+    std::lock_guard<std::mutex> lock(m_frameQueueMutex);
+    if (m_frameQueue.empty())
+        return nullptr;
+    AVFrame* frame = m_frameQueue.front();
+    m_frameQueue.pop();
+    m_queueCV.notify_all();
+    return frame;
+}
+
+void FrameQueue::Clear()
+{
+    std::lock_guard<std::mutex> lock(m_frameQueueMutex);
+    std::queue<AVFrame*> empty;
+    std::swap(empty, m_frameQueue);
+}
+
 
 std::string av_error_string(int errnum) {
     char buf[AV_ERROR_MAX_STRING_SIZE];
@@ -60,13 +112,13 @@ void MediaReader::QuitHwDecode()
     m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
 }
 
-bool MediaReader::Init(const MediaParameter& pParam)
+bool MediaReader::Init(const MediaParameter& param)
 {
-    m_param = pParam;
+    m_param = param;
 
     avformat_network_init();
 
-    qDebug() << "open url:" << pParam.url;
+    qDebug() << "open url:" << QString::fromStdString(param.url);
     //配置该流的ffmpeg设置
     AVDictionary* pOptDict = NULL;
     av_dict_set(&pOptDict, "stimeout", "5000000", 0);//适应延迟网络，设置5s的等待链接时间，可能不生效
@@ -75,7 +127,7 @@ bool MediaReader::Init(const MediaParameter& pParam)
     av_dict_set(&pOptDict, "recv_buffer_size", "4096000", 0);     // 防止花屏, max 4M.:用于控制网络接收缓冲区大小，适用于高带宽或高延迟的网络环境
     av_dict_set(&pOptDict, "tune", "stillimage,fastdecode,zerolatency", 0);//优化静态图像编码,快速解码和低延时传输
     av_dict_set(&pOptDict, "rtsp_transport", "tcp", 0);//tcp拉流，尽量保证不丢包
-    int ret = avformat_open_input(&m_formatContext, pParam.url.c_str(), nullptr, &pOptDict);
+    int ret = avformat_open_input(&m_formatContext, param.url.c_str(), nullptr, &pOptDict);
     av_dict_free(&pOptDict);
     pOptDict = nullptr;
 
@@ -138,10 +190,10 @@ bool MediaReader::Init(const MediaParameter& pParam)
         m_videoCodecContext->opaque = this; //用于回调里获取的指针
         m_videoCodecContext->thread_count = 3;
 
-        if (!pParam.hwDeviceName.empty()) {
-            m_hwDeviceType = av_hwdevice_find_type_by_name(pParam.hwDeviceName.c_str());
+        if (!param.hwDeviceName.empty()) {
+            m_hwDeviceType = av_hwdevice_find_type_by_name(param.hwDeviceName.c_str());
             if (m_hwDeviceType == AV_HWDEVICE_TYPE_NONE) {
-                qDebug() << "device type is not supported:" << pParam.hwDeviceName;
+                qDebug() << "device type is not supported:" << QString::fromStdString(param.hwDeviceName);
                 return false;
             }
             //查找硬解码器
@@ -216,20 +268,39 @@ bool MediaReader::Init(const MediaParameter& pParam)
             return false;
         }
     }
+
+    if (!m_pVideoDisplay) {
+        VideoSpec spec = param.outputVideoSpec;
+        m_pVideoDisplay = new VideoDisplay(1, spec);
+        m_pVideoDisplay->SetCallback(std::bind(&MediaReader::DisplayVideo, this, std::placeholders::_1));
+    }
+    if (!m_pAudioDisplay) {
+        AudioSpec spec = param.outputAudioSpec;
+        m_pAudioDisplay = new AudioDisplay(1, spec);
+    }
+    //if (!m_audioBuffer->IsInit())
+    //{
+    //    m_audioBuffer->Init<int8_t>();
+    //}
     return true;
 }
 
 void MediaReader::UnInit()
 {
-    if (m_videoSwsContext)
+    if (m_pVideoDisplay)
     {
-        sws_freeContext(m_videoSwsContext);
-        m_videoSwsContext = nullptr;
+        delete m_pVideoDisplay;
+        m_pVideoDisplay = nullptr;
     }
-    if (m_audioSwrContext)
+    if (m_pGrayFrameDisplay)
     {
-        swr_free(&m_audioSwrContext);
-        m_audioSwrContext = nullptr;
+        delete m_pGrayFrameDisplay;
+        m_pGrayFrameDisplay = nullptr;
+    }
+    if (m_pAudioDisplay)
+    {
+        delete m_pAudioDisplay;
+        m_pAudioDisplay = nullptr;
     }
     if (m_videoCodecContext)
     {
@@ -258,15 +329,15 @@ bool MediaReader::Start()
 {
     if (!m_thFrameReader.joinable())
     {
-        m_thFrameReader = std::thread(&MediaReader::FrameReader, this);
+        m_thFrameReader = std::thread(&MediaReader::ReadThread, this);
     }
     if (!m_thVideoProcess.joinable())
     {
-        m_thVideoProcess = std::thread(&MediaReader::VideoProcess, this);
+        m_thVideoProcess = std::thread(&MediaReader::VideoThread, this);
     }
     if (!m_thAudioProcess.joinable())
     {
-        m_thAudioProcess = std::thread(&MediaReader::AudioProcess, this);
+        m_thAudioProcess = std::thread(&MediaReader::AudioThread, this);
     }
     return true;
 }
@@ -276,12 +347,28 @@ bool MediaReader::Stop()
     return false;
 }
 
+void MediaReader::UpdateDisplaySize(int width, int height)
+{
+    if (m_pVideoDisplay)
+        m_pVideoDisplay->UpdateDisplaySize(width, height);
+}
+
+void MediaReader::SetPlayEvent(PlayEvent* playEvent)
+{
+    m_playEvent = playEvent;
+}
+
+size_t MediaReader::GetAudioFrame(uint8_t* buffer, size_t len)
+{
+    return size_t();
+}
+
 int g_videoFrameIndex = 0;
 int g_audioFrameIndex = 0;
-void MediaReader::FrameReader()
+void MediaReader::ReadThread()
 {
-    FrameReaderSync();
-    return;
+    //FrameReaderSync();
+    //return;
     m_bFrameReaderRunning = true;
     AVPacket* packet = av_packet_alloc();
     while (m_bFrameReaderRunning.load() && !m_bStreamOver.load())
@@ -311,7 +398,7 @@ void MediaReader::FrameReader()
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
-            //AudioDecode(packet);
+            AudioDecode(packet);
         }
 
     }
@@ -325,15 +412,6 @@ void MediaReader::VideoDecode(AVPacket* packet)
     if (packet->stream_index != m_videoStreamIndex)
         return;
 
-    {
-        std::unique_lock<std::mutex> lock(m_videoFrameQueueMutex);
-        m_videoFrameQueueNotFullCV.wait(lock, [this]() {
-            return m_videoFrameQueue.size() < kMaxVideoFrameQueueSize || !m_bVideoProcessRunning.load();
-            });
-        lock.unlock();
-        if (!m_bVideoProcessRunning.load())
-            return;
-    }
     bool isKeyPacket = packet->flags & AV_PKT_FLAG_KEY;//关键帧
     int ret = avcodec_send_packet(m_videoCodecContext, packet);
     if (ret < 0)
@@ -347,7 +425,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
         ret = avcodec_receive_frame(m_videoCodecContext, frame);
         if (ret < 0)
         {//错误处理
-            qDebug() << "avcodec_receive_frame err," << QString("%1:%2").arg(ret).arg(av_error_qstring(ret));
+            //qDebug() << "avcodec_receive_frame err," << QString("%1:%2").arg(ret).arg(av_error_qstring(ret));
             av_frame_unref(frame);
             av_frame_free(&frame);
             break;
@@ -355,7 +433,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
         if (frame->key_frame == 1)
         {//关键帧
         }
-        qDebug() << "decode video frame index:" << g_videoFrameIndex;
+        //qDebug() << "decode video frame index:" << g_videoFrameIndex;
 
         if (frame->format == m_hwPixFmt) {
             AVFrame* pHwFrame = av_frame_alloc();
@@ -375,9 +453,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
         g_videoFrameIndex++;
         //av_frame_unref(frame);
         //av_frame_free(&frame);
-        std::lock_guard<std::mutex> lock(m_videoFrameQueueMutex);
-        m_videoFrameQueue.push(frame);
-        m_videoFrameQueueNotEmptyCV.notify_all();
+        m_videoFrameQueue.Push(frame);
         //av_frame_unref(frame);//不可解引用
     }
 }
@@ -387,20 +463,10 @@ void MediaReader::AudioDecode(AVPacket* packet)
     if (packet->stream_index != m_audioStreamIndex)
         return;
 
-    {
-        std::unique_lock<std::mutex> lock(m_audioFrameQueueMutex);
-        m_audioFrameQueueNotFullCV.wait(lock, [this]() {
-            return m_audioFrameQueue.size() < kMaxAudioFrameQueueSize || !m_bAudioProcessRunning.load();
-            });
-        lock.unlock();
-        if (!m_bAudioProcessRunning.load())
-            return;
-    }
-
     int ret = avcodec_send_packet(m_audioCodecContext, packet);
     if (ret < 0)
     {//错误处理
-        qDebug() << "avcodec_send_packet err:" << ret;
+        qDebug() << "avcodec_send_packet err," << QString("%1:%2").arg(ret).arg(av_error_qstring(ret));
         return;
     }
     while (true)
@@ -409,21 +475,19 @@ void MediaReader::AudioDecode(AVPacket* packet)
         ret = avcodec_receive_frame(m_audioCodecContext, frame);
         if (ret < 0)
         {//错误处理
-            qDebug() << "avcodec_receive_frame err:" << ret;
+            //qDebug() << "avcodec_receive_frame err," << QString("%1:%2").arg(ret).arg(av_error_qstring(ret));
             av_frame_unref(frame);
             av_frame_free(&frame);
             break;
         }
-        qDebug() << "decode audio frame index:" << g_audioFrameIndex;
+        //qDebug() << "decode audio frame index:" << g_audioFrameIndex;
         g_audioFrameIndex++;
-        std::lock_guard<std::mutex> lock(m_audioFrameQueueMutex);
-        m_audioFrameQueue.push(frame);
-        m_audioFrameQueueNotEmptyCV.notify_all();
+        m_audioFrameQueue.Push(frame);
         //av_frame_unref(frame);
     }
 }
 
-void MediaReader::VideoProcess()
+void MediaReader::VideoThread()
 {
     if (!m_formatContext || !m_videoCodecContext)
         return;
@@ -433,258 +497,133 @@ void MediaReader::VideoProcess()
     double    fps = av_q2d(videoStream->avg_frame_rate);
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;
-    AVPixelFormat dstFormat = AV_PIX_FMT_RGB24;
 
     m_bVideoProcessRunning.store(true);
-    ////提前从AVCodecContext获取宽高可能会为0，从AVFrame获取的宽高最准确
-    //if (!m_videoSwsContext)
-    //{
-    //    m_videoSwsContext = sws_getCachedContext(NULL,
-    //        m_videoCodecContext->width, m_videoCodecContext->height, m_videoCodecContext->pix_fmt,
-    //        m_videoCodecContext->width, m_videoCodecContext->height, dstFormat,
-    //        SWS_BILINEAR, NULL, NULL, NULL);
-    //}
-    // 创建RGB视频帧
-    //AVFrame* frameRGB = av_frame_alloc();
-    //int      numBytes = av_image_get_buffer_size(dstFormat, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE);
-    //uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
-    //av_image_fill_arrays(
-    //    frameRGB->data, frameRGB->linesize, buffer, dstFormat, m_videoCodecContext->width, m_videoCodecContext->height, AV_INPUT_BUFFER_PADDING_SIZE
-    //);
-
     int frameIndex = 0;
     while (m_bVideoProcessRunning.load())
     {
-        std::unique_lock<std::mutex> lock(m_videoFrameQueueMutex);
-        m_videoFrameQueueNotEmptyCV.wait(lock, [this]() {
-            return !m_videoFrameQueue.empty() || !m_bVideoProcessRunning.load();
-            });
-        if (!m_bVideoProcessRunning.load())
-            break;
+        AVFrame* frame = m_videoFrameQueue.PopFront();
+        if (!frame) {
+            av_usleep(1000);
+            continue;
+        }
 
-        AVFrame* frame = m_videoFrameQueue.front();
-        m_videoFrameQueue.pop();
-        lock.unlock();//数据取出，提前解锁
-
-        if (frame->width == 0 || frame->height == 0) {//该帧不可用，舍弃
+        if (frame->width <= 0 || frame->height <= 0) {//该帧不可用，舍弃
             av_frame_unref(frame);
             av_frame_free(&frame);
             continue;
         }
-        if (!m_videoSwsContext)
-        {//提前从AVCodecContext获取宽高可能会为0，从AVFrame获取的宽高最准确
-            m_videoSwsContext = sws_getCachedContext(NULL,
-                frame->width, frame->height, (AVPixelFormat)frame->format,
-                frame->width, frame->height, dstFormat,
-                SWS_BILINEAR, NULL, NULL, NULL);
-        }
-        //创建RGB视频帧
-        AVFrame* frameRGB = av_frame_alloc();
-        int      numBytes = av_image_get_buffer_size(dstFormat, frame->width, frame->height, AV_INPUT_BUFFER_PADDING_SIZE);
-        uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
-        av_image_fill_arrays(frameRGB->data, frameRGB->linesize, buffer, dstFormat, frame->width, frame->height, AV_INPUT_BUFFER_PADDING_SIZE);
-        int ret = sws_scale(m_videoSwsContext, frame->data, frame->linesize, 0, frame->height, frameRGB->data, frameRGB->linesize);
-        if (ret < 0) {
-            qDebug() << "sws_scale err," << QString("%1:%2").arg(ret).arg(av_error_qstring(ret));
-            av_frame_unref(frame);
-            av_frame_free(&frame);
-            av_frame_free(&frameRGB);
-            av_freep(&buffer);
-            continue;
-        }
-        cv::Mat mat = cv::Mat(frame->height, frame->width, CV_8UC3, frameRGB->data[0], frameRGB->linesize[0]);
-        bool isTooGray = false;
-        {
-            // 将帧转换为灰度图像
-            cv::Mat grayFrame;
-            //检查灰度可以压缩图像大小，以加速检查
-            cv::resize(mat, grayFrame, cv::Size(100, 100));
-            cv::cvtColor(grayFrame, grayFrame, cv::COLOR_RGB2GRAY);
-            // 计算灰度图像的方差
-            cv::Scalar mean, stddev;
-            cv::meanStdDev(grayFrame, mean, stddev);
-            double dGrayScaleDegree = stddev[0] * stddev[0];
-            if (dGrayScaleDegree < 100.0) {
-                isTooGray = true;
-                // cv::imshow("gray",matRgb);
-                // cv::waitKey(1);
-            }
-        }
+        bool isTooGray = IsGrayFrame(frame);
         if (isTooGray) {
             av_frame_unref(frame);
             av_frame_free(&frame);
-            av_frame_free(&frameRGB);
-            av_freep(&buffer);
             continue;
         }
-#ifdef DEBUG_VIDEO_FRAME_WRITE
-        frameIndex++;
-        //opencv默认使用的是BGR格式，需要进行转换
-        cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
-        char filename[100];
-        sprintf(filename, "%d.jpg", frameIndex);
-        cv::imwrite(filename, mat);
-#endif // DEBUG_VIDEO_FRAME_WRITE
-        VideoFrame vframe;
-        vframe.videoData = mat.clone();
-        double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(videoStream->time_base) * 1000000;
-        qDebug() << "frameDelay:" << frameDelay;
-        //av_usleep(frameDelay);
-        if (m_param.videoCallback)
-            m_param.videoCallback(vframe);
-        m_lastVideoFramePts = frame->pts;
-        m_videoFrameQueueNotFullCV.notify_all();
-
-        av_frame_free(&frameRGB);
-        av_freep(&buffer);
+        if (m_pVideoDisplay) {
+            VideoFrame outFrame;
+            outFrame.pts = frame->pts;
+            outFrame.timebase = av_q2d(videoStream->time_base);
+            m_pVideoDisplay->DisplayInput(frame, outFrame);
+        }
         av_frame_unref(frame);
         av_frame_free(&frame);
     }
 }
 
-void MediaReader::AudioProcess()
+void MediaReader::AudioThread()
 {
-//    if (!m_formatContext || !m_videoCodecContext)
-//        return;
-//
-//    const int      in_sample_rate = m_audioCodecContext->sample_rate;
-//    AVSampleFormat in_sfmt = m_audioCodecContext->sample_fmt;
-//    int            int_spb = av_get_bytes_per_sample(in_sfmt);
-//    uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
-//    int            in_channels = m_audioCodecContext->channels;
-//
-//    const int      out_sample_rate = m_param.outputSampleRate;// 16000;
-//    AVSampleFormat out_sfmt = AV_SAMPLE_FMT_NONE;
-//    if (m_param.outputBitPerSample == 8)
-//        out_sfmt = AV_SAMPLE_FMT_U8;
-//    else if (m_param.outputBitPerSample == 16)
-//        out_sfmt = AV_SAMPLE_FMT_S16;
-//    else if (m_param.outputBitPerSample == 32)
-//        out_sfmt = AV_SAMPLE_FMT_S32;
-//
-//    int            out_spb = av_get_bytes_per_sample(out_sfmt);
-//    uint64_t       out_channel_layout = AV_CH_LAYOUT_MONO;
-//    if (m_param.outputChannelCount == 1)
-//        out_channel_layout = AV_CH_LAYOUT_MONO;
-//    else if (m_param.outputChannelCount == 2)
-//        out_channel_layout = AV_CH_LAYOUT_STEREO;
-//    int            out_channels = av_get_channel_layout_nb_channels(out_channel_layout);
-//
-//    m_bAudioProcessRunning.store(true);
-//    bool bNeedResample = false;
-//    if ((in_sample_rate != out_sample_rate) || (in_sfmt != out_sfmt) || (in_channels != out_channels))
-//        bNeedResample = true;
-//
-//    // 创建重采样上下文
-//    if (bNeedResample)
-//    {
-//        m_audioSwrContext = swr_alloc_set_opts(nullptr, out_channel_layout, out_sfmt, out_sample_rate, in_channel_layout, in_sfmt, in_sample_rate, 0, NULL);
-//        if (!m_audioSwrContext)
-//        {
-//            // 处理重采样上下文创建失败的情况
-//            qDebug() << "swr_alloc_set_opts failed";
-//            return;
-//        }
-//        if (swr_init(m_audioSwrContext) != 0)
-//        {
-//            qDebug() << "swr_alloc_set_opts failed";
-//            return;
-//        }
-//    }
-//
-//    int frameIndex = 0;
-//    while (m_bAudioProcessRunning.load())
-//    {
-//        std::unique_lock<std::mutex> lock(m_audioFrameQueueMutex);
-//        m_audioFrameQueueNotEmptyCV.wait(lock, [this]() {
-//            return !m_audioFrameQueue.empty() || !m_bAudioProcessRunning.load();
-//            });
-//        if (!m_bAudioProcessRunning.load())
-//            break;
-//
-//        AVFrame* frame = m_audioFrameQueue.front();
-//        m_audioFrameQueue.pop();
-//        lock.unlock();//数据取出，提前解锁
-//
-//        frameIndex++;
-//        if (bNeedResample && m_audioSwrContext)
-//        {
-//            // 计算重采样输出采样点数
-//            int max_out_nb_samples = av_rescale_rnd(
-//                swr_get_delay(m_audioSwrContext, frame->sample_rate) + frame->nb_samples, out_sample_rate, frame->sample_rate, AV_ROUND_UP
-//            );
-//            AVFrame* frameResample = av_frame_alloc();
-//            //使用av_samples_alloc时,结束后需要调用av_freep(&audio_data[0])释放内存,否则会内存泄漏
-//            av_samples_alloc(frameResample->data, frameResample->linesize, out_channels, max_out_nb_samples, out_sfmt, 1);
-//
-//            int out_nb_samples = swr_convert(m_audioSwrContext, frameResample->data, max_out_nb_samples, (const uint8_t**)frame->data, frame->nb_samples);
-//            qDebug() << "succeed to convert frame " << frameIndex++ << " samples[" << frame->nb_samples << "]->[" << out_nb_samples << "]";
-//
-//            if (m_param.audioCallback)
-//            {
-//                AudioFrame aframe;
-//                aframe.audioData = frameResample->data[0];
-//                aframe.dataSize = out_spb * out_channels * out_nb_samples;
-//                aframe.sampleRate = m_param.outputSampleRate;
-//                aframe.bitPerSample = m_param.outputBitPerSample;
-//                aframe.channelCount = m_param.outputChannelCount;
-//                m_param.audioCallback(aframe);
-//                m_audioFrameQueueNotFullCV.notify_all();
-//            }
-//            av_freep(&frameResample->data[0]);
-//            av_frame_unref(frameResample);
-//            av_frame_free(&frameResample);
-//        }
-//        else
-//        {
-//            if (m_param.audioCallback)
-//            {
-//                AudioFrame aframe;
-//                aframe.audioData = frame->data[0];
-//                aframe.dataSize = frame->linesize[0];
-//                aframe.sampleRate = m_param.outputSampleRate;
-//                aframe.bitPerSample = m_param.outputBitPerSample;
-//                aframe.channelCount = m_param.outputChannelCount;
-//                m_param.audioCallback(aframe);
-//                m_audioFrameQueueNotFullCV.notify_all();
-//            }
-//        }
-//        av_frame_unref(frame);
-//        av_frame_free(&frame);
-//    }
-//
-//    if (bNeedResample && m_audioSwrContext)
-//    {
-//        int      max_cache_out_nb_samples = 2048;
-//        AVFrame* frameResample = av_frame_alloc();
-//        //使用av_samples_alloc时,结束后需要调用av_freep(&audio_data[0])释放内存,否则会内存泄漏
-//        av_samples_alloc(frameResample->data, frameResample->linesize, out_channels, max_cache_out_nb_samples, out_sfmt, 1);
-//
-//        int out_cache_nb_samples = swr_convert(m_audioSwrContext, frameResample->data, max_cache_out_nb_samples, nullptr, 0);
-//        qDebug() << "get cache convert samples " << out_cache_nb_samples;
-//
-//        if (m_param.audioCallback)
-//        {
-//            AudioFrame aframe;
-//            aframe.audioData = frameResample->data[0];
-//            aframe.dataSize = out_spb * out_channels * out_cache_nb_samples;
-//            aframe.sampleRate = m_param.outputSampleRate;
-//            aframe.bitPerSample = m_param.outputBitPerSample;
-//            aframe.channelCount = m_param.outputChannelCount;
-//            m_param.audioCallback(aframe);
-//            m_audioFrameQueueNotFullCV.notify_all();
-//        }
-//        av_freep(&frameResample->data[0]);
-//        av_frame_unref(frameResample);
-//        av_frame_free(&frameResample);
-//    }
+    if (!m_formatContext || !m_videoCodecContext)
+        return;
+
+    AVStream*      audioStream = m_formatContext->streams[m_audioStreamIndex];
+    const int      in_sample_rate = m_audioCodecContext->sample_rate;
+    AVSampleFormat in_sfmt = m_audioCodecContext->sample_fmt;
+    int            int_spb = av_get_bytes_per_sample(in_sfmt);
+    uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
+    int            in_channels = m_audioCodecContext->channels;
+
+    m_bAudioProcessRunning.store(true);
+    int frameIndex = 0;
+    while (m_bAudioProcessRunning.load())
+    {
+        AVFrame* frame = m_audioFrameQueue.PopFront();
+        if (!frame) {
+            av_usleep(1000);
+            continue;
+        }
+
+        frameIndex++;
+        if (m_pAudioDisplay) {
+            AudioFrame outFrame;
+            m_pAudioDisplay->DisplayInput(frame, outFrame);
+            m_masterClock = frame->pts * av_q2d(audioStream->time_base);
+            if (m_playEvent)
+            {
+                //AudioFrame aframe;
+                //aframe.audioData = frameResample->data[0];
+                //aframe.dataSize = out_spb * out_channels * out_nb_samples;
+                //aframe.sampleRate = m_param.outputSampleRate;
+                //aframe.bitPerSample = m_param.outputBitPerSample;
+                //aframe.channelCount = m_param.outputChannelCount;
+                ////m_param.audioCallback(aframe);
+                //m_audioFrameQueueNotFullCV.notify_all();
+            }
+        }
+        av_frame_unref(frame);
+        av_frame_free(&frame);
+    }
+
+}
+
+void MediaReader::DisplayThread()
+{
+}
+
+void MediaReader::DisplayVideo(const VideoFrame& frame)
+{
+    double frameDelay = (frame.pts - m_lastVideoFramePts) * frame.timebase;
+    double curTime = av_gettime_relative() / 1000000.0;
+    double usedTime = m_lastFrameRenderTime == 0 ? 0.0 : curTime - m_lastFrameRenderTime;
+    double actualDelay = frameDelay - usedTime - m_lastDelayDelta;
+    if (m_lastFrameRenderTime != 0) {
+        //double pts = frame->pts * av_q2d(videoStream->time_base);
+        //// 计算与音频时钟的差值
+        //double diff = pts - m_masterClock;
+        //// 同步阈值（可根据需要调整）
+        //if (diff > m_syncThreshold) {
+        //    // 视频落后，加快播放（减少延迟）
+        //    delay = delay * 0.9;
+        //}
+        //else if (diff < -m_syncThreshold) {
+        //    // 视频超前，减慢播放（增加延迟）
+        //    delay = delay * 1.1;
+        //}
+        //// 确保延迟在合理范围内
+        //delay = FFMAX(0.01, FFMIN(delay, 0.1));
+        if (actualDelay > 0) {
+            av_usleep(actualDelay * 1000000.0);
+        }
+    }
+    auto displayTime = av_gettime_relative() / 1000000.0;
+    if (m_playEvent)
+        m_playEvent->onVideoFrame(frame);
+    double delayDelta = displayTime - curTime - actualDelay;
+    //qDebug() << "display time:" << (displayTime - m_lastFrameRenderTime) << ", delta:" << delayDelta << ", usedTime:" << usedTime << ", frameDelay:" << frameDelay << ", actualDelay:" << actualDelay;
+
+    m_lastFrameRenderTime = displayTime;
+    m_lastVideoFramePts = frame.pts;
+    m_lastDelayDelta = delayDelta;
 }
 
 void MediaReader::FrameReaderSync()
 {
-    m_bFrameReaderRunning = true;
+    AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
+    auto      timeBase = videoStream->time_base;
+    double    fps = av_q2d(videoStream->avg_frame_rate);
+    auto      frameCount = videoStream->nb_frames;
+    int       gopSize = m_videoCodecContext->gop_size;
 
-    AVPixelFormat dstFormat = AV_PIX_FMT_RGB24;
+    m_bFrameReaderRunning = true;
     AVPacket* packet = av_packet_alloc();
     while (m_bFrameReaderRunning.load() && !m_bStreamOver.load())
     {
@@ -731,82 +670,61 @@ void MediaReader::FrameReaderSync()
                         break;
                     }
                     frame = hwFrame;
+                    frame->pts = tempFrame->pts;
                 } else {
                     frame = tempFrame;
                 }
                 qDebug() << "decode video frame index:" << g_videoFrameIndex;
                 g_videoFrameIndex++;
-                if (frame->width == 0 || frame->height == 0) {//该帧不可用，舍弃
+                if (frame->width <= 0 || frame->height <= 0) {//该帧不可用，舍弃
                     av_frame_free(&hwFrame);
                     av_frame_free(&tempFrame);
                     continue;
                 }
-                if (!m_videoSwsContext)
-                {//提前从AVCodecContext获取宽高可能会为0，从AVFrame获取的宽高最准确
-                    m_videoSwsContext = sws_getCachedContext(NULL,
-                        frame->width, frame->height, (AVPixelFormat)frame->format,
-                        frame->width, frame->height, dstFormat,
-                        SWS_BILINEAR, NULL, NULL, NULL);
-                }
-                //创建RGB视频帧
-                AVFrame* frameRGB = av_frame_alloc();
-                int      numBytes = av_image_get_buffer_size(dstFormat, frame->width, frame->height, AV_INPUT_BUFFER_PADDING_SIZE);
-                uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
-                av_image_fill_arrays(frameRGB->data, frameRGB->linesize, buffer, dstFormat, frame->width, frame->height, AV_INPUT_BUFFER_PADDING_SIZE);
-
-                int ret = sws_scale(m_videoSwsContext, frame->data, frame->linesize, 0, frame->height, frameRGB->data, frameRGB->linesize);
-                if (ret < 0) {
-                    qDebug() << "sws_scale err," << QString("%1:%2").arg(ret).arg(av_error_qstring(ret));
-                    av_frame_free(&hwFrame);
-                    av_frame_free(&tempFrame);
-                    av_frame_free(&frameRGB);
-                    av_freep(&buffer);
-                    continue;
-                }
-                cv::Mat mat = cv::Mat(frame->height, frame->width, CV_8UC3, frameRGB->data[0], frameRGB->linesize[0]);
-                bool isTooGray = false;
-                {
-                    // 将帧转换为灰度图像
-                    cv::Mat grayFrame;
-                    //检查灰度可以压缩图像大小，以加速检查
-                    cv::resize(mat, grayFrame, cv::Size(100, 100));
-                    cv::cvtColor(grayFrame, grayFrame, cv::COLOR_RGB2GRAY);
-                    // 计算灰度图像的方差
-                    cv::Scalar mean, stddev;
-                    cv::meanStdDev(grayFrame, mean, stddev);
-                    double dGrayScaleDegree = stddev[0] * stddev[0];
-                    if (dGrayScaleDegree < 100.0) {
-                        isTooGray = true;
-                    }
-                }
+                bool isTooGray = IsGrayFrame(frame);
                 if (isTooGray) {
-                    av_frame_free(&hwFrame);
-                    av_frame_free(&tempFrame);
-                    av_frame_free(&frameRGB);
-                    av_freep(&buffer);
+                    av_frame_unref(frame);
+                    av_frame_free(&frame);
                     continue;
                 }
-#ifdef DEBUG_VIDEO_FRAME_WRITE
-                g_videoFrameIndex++;
-                //opencv默认使用的是BGR格式，需要进行转换
-                cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
-                char filename[100];
-                sprintf(filename, "%d.jpg", g_videoFrameIndex);
-                cv::imwrite(filename, mat);
-#endif // DEBUG_VIDEO_FRAME_WRITE
-                VideoFrame vframe;
-                vframe.videoData = mat.clone();
-                double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base) * 1000000;
-                qDebug() << "frameDelay:" << frameDelay;
-                //av_usleep(frameDelay);
-                if (m_param.videoCallback)
-                    m_param.videoCallback(vframe);
-                m_lastVideoFramePts = frame->pts;
+                if (m_pVideoDisplay) {
+                    VideoFrame outFrame;
+                    m_pVideoDisplay->DisplayInput(frame, outFrame);
+                    double frameDelay = (frame->pts - m_lastVideoFramePts) * av_q2d(videoStream->time_base);
+                    double curTime = av_gettime_relative() / 1000000.0;
+                    double usedTime = m_lastFrameRenderTime == 0 ? 0.0 : curTime - m_lastFrameRenderTime;
+                    double actualDelay = frameDelay - usedTime - m_lastDelayDelta;
+                    if (m_lastFrameRenderTime != 0) {
+                        //double pts = frame->pts * av_q2d(videoStream->time_base);
+                        //// 计算与音频时钟的差值
+                        //double diff = pts - m_masterClock;
+                        //// 同步阈值（可根据需要调整）
+                        //if (diff > m_syncThreshold) {
+                        //    // 视频落后，加快播放（减少延迟）
+                        //    delay = delay * 0.9;
+                        //}
+                        //else if (diff < -m_syncThreshold) {
+                        //    // 视频超前，减慢播放（增加延迟）
+                        //    delay = delay * 1.1;
+                        //}
+                        //// 确保延迟在合理范围内
+                        //delay = FFMAX(0.01, FFMIN(delay, 0.1));
+                        if (actualDelay > 0) {
+                            av_usleep(actualDelay * 1000000.0);
+                        }
+                    }
+                    auto displayTime = av_gettime_relative() / 1000000.0;
+                    if (m_playEvent)
+                        m_playEvent->onVideoFrame(outFrame);
+                    double delayDelta = displayTime - curTime - actualDelay;
+                    qDebug() << "display time:" << (displayTime - m_lastFrameRenderTime) << ", delta:" << delayDelta << ", usedTime:" << usedTime << ", frameDelay:" << frameDelay << ", actualDelay:" << actualDelay;
 
-                av_frame_free(&hwFrame);
-                av_frame_free(&tempFrame);
-                av_frame_free(&frameRGB);
-                av_freep(&buffer);
+                    m_lastFrameRenderTime = displayTime;
+                    m_lastVideoFramePts = frame->pts;
+                    m_lastDelayDelta = delayDelta;
+                }
+                av_frame_unref(frame);
+                av_frame_free(&frame);
             }
         }
         else if (packet->stream_index == m_audioStreamIndex)
@@ -817,3 +735,85 @@ void MediaReader::FrameReaderSync()
     av_packet_free(&packet);
     qDebug() << "FrameReader end";
 }
+
+bool MediaReader::IsGrayFrame(AVFrame* pFrame)
+{
+    return false;
+    if (pFrame->width <= 0 || pFrame->height <= 0)
+        return false;
+
+    int iWidth = pFrame->width;
+    int iHeight = pFrame->height;
+    int gcd = GetGCD(iWidth, iHeight);
+    if (gcd > 0) {
+        iWidth = iWidth / gcd;
+        iHeight = iHeight / gcd;
+        //获取一个宽高都比100大的，比例一致的宽高，宽高比例要是不一致，重采样出来的图片是混乱的
+        while (iWidth <= 100 && iHeight <= 100)
+        {
+            iWidth *= 2;
+            iHeight *= 2;
+        }
+    }
+
+    if (!m_pGrayFrameDisplay) {
+        VideoSpec spec;
+        spec.width = iWidth;
+        spec.height = iHeight;
+        spec.format = 8;//AV_PIX_FMT_GRAY8
+        m_pGrayFrameDisplay = new VideoDisplay(0, spec);
+    }
+    VideoFrame outFrame;
+    auto err = m_pGrayFrameDisplay->DisplayInput(pFrame, outFrame);
+    if (err.code != PlayErrorCode::kNoError)
+        return false;
+
+    try {//尝试捕捉opencv的错误
+
+        // 将帧转换为灰度图像
+        cv::Mat grayFrame = cv::Mat(outFrame.spec.height, outFrame.spec.width, CV_8UC1, outFrame.data, outFrame.size);
+        //检查灰度可以压缩图像大小，以加速检查
+        //cv::resize(matRgb,grayFrame,cv::Size(100,100));
+        //cv::cvtColor(grayFrame, grayFrame, cv::COLOR_RGB2GRAY);
+
+        // 计算灰度图像的方差
+        cv::Scalar mean, stddev;
+        cv::meanStdDev(grayFrame, mean, stddev);
+        double dGrayScaleDegree = stddev[0] * stddev[0];
+        if (dGrayScaleDegree < 100.0) {
+            // cv::imshow("gray",matRgb);
+            // cv::waitKey(1);
+            return true;
+        }
+    }
+    catch (const std::bad_alloc& e) {
+        // 捕获内存分配失败的异常
+        qCritical() << "Memory allocation failed: " << e.what();
+    }
+    catch (const cv::Exception& e) {
+        // 捕获 OpenCV 相关的异常
+        qCritical() << "OpenCV error: " << e.what();
+    }
+    catch (...) {
+        // 捕获其他类型的异常
+        qCritical() << "An unexpected error occurred.";
+    }
+    //cv::Mat mat = cv::Mat(frame->height, frame->width, CV_8UC3, frameRGB->data[0], frameRGB->linesize[0]);
+    //bool isTooGray = false;
+    //{
+    //    // 将帧转换为灰度图像
+    //    cv::Mat grayFrame;
+    //    //检查灰度可以压缩图像大小，以加速检查
+    //    cv::resize(mat, grayFrame, cv::Size(100, 100));
+    //    cv::cvtColor(grayFrame, grayFrame, cv::COLOR_RGB2GRAY);
+    //    // 计算灰度图像的方差
+    //    cv::Scalar mean, stddev;
+    //    cv::meanStdDev(grayFrame, mean, stddev);
+    //    double dGrayScaleDegree = stddev[0] * stddev[0];
+    //    if (dGrayScaleDegree < 100.0) {
+    //        isTooGray = true;
+    //    }
+    //}
+    return false;
+}
+

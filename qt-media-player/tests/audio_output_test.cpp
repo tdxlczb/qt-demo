@@ -80,26 +80,24 @@ void AudioRenderTest()
     const int kBitPerSample = 16;
     int renderFrames = 1600;
     int bufSize = renderFrames * kChannels * kBitPerSample / 8;
-    char* pcmData = new char[bufSize];
+    uint8_t* pcmData = new uint8_t[bufSize];
 
-    player->Start(kSampleRate, kBitPerSample, kChannels, renderFrames);
+    player->Start({ kSampleRate, kBitPerSample, kChannels }, renderFrames);
 
     AudioFrame frame;
-    frame.audioData = pcmData;
-    frame.dataSize = bufSize;
-    frame.sampleRate = kSampleRate;
-    frame.bitPerSample = kBitPerSample;
-    frame.channelCount = kChannels;
+    frame.data = pcmData;
+    frame.size = bufSize;
+    frame.spec.sampleRate = kSampleRate;
+    frame.spec.bitPerSample = kBitPerSample;
+    frame.spec.channels = kChannels;
 
     float speed = 1.5f;
     if (speed != 1.0f) {
-        char* speedPcmData = new char[bufSize];
+        uint8_t* speedPcmData = new uint8_t[bufSize];
         sonicStream ss = sonicCreateStream(kSampleRate, kChannels);
         sonicSetSpeed(ss, speed);
         AudioFrame speedFrame;
-        speedFrame.sampleRate = kSampleRate;
-        speedFrame.bitPerSample = kBitPerSample;
-        speedFrame.channelCount = kChannels;
+        speedFrame.spec = frame.spec;
         int readSize = 0;
         do {
             memset(pcmData, 0, bufSize);
@@ -107,8 +105,8 @@ void AudioRenderTest()
 
             int ret = sonicWriteShortToStream(ss, reinterpret_cast<short*>(pcmData), renderFrames);
             int samples = sonicReadShortFromStream(ss, reinterpret_cast<short*>(speedPcmData), renderFrames);
-            speedFrame.audioData = speedPcmData;
-            speedFrame.dataSize = samples * kChannels * kBitPerSample / 8;
+            speedFrame.data = speedPcmData;
+            speedFrame.size = samples * kChannels * kBitPerSample / 8;
 
             player->Write(speedFrame);
             readSize = file.gcount();

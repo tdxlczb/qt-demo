@@ -9,9 +9,10 @@ std::ofstream g_pcmOutput;
 std::ofstream g_pcmInput;
 #endif
 
-AudioRender::AudioRender() 
+AudioRender::AudioRender(bool useJitterBuffer)
     : m_audioBuffer(new DynamicJitterBuffer())
     , m_rtAudio(new RtAudio())
+    , m_isUseJitterBuffer(useJitterBuffer)
 {
 
 }
@@ -29,33 +30,34 @@ static int audioCallback(void *outputBuffer, void *inputBuffer, unsigned int nFr
     return render->AudioOutputCallback(outputBuffer,nFrames);
 }
 
-void AudioRender::Start(int16_t sampleRate, int16_t bitPerSample, int16_t channelCount, int16_t renderFrameCount)
+void AudioRender::Start(const AudioSpec& audioSpec, int renderFrameCount)
 {
-    if (!m_audioBuffer->IsInit())
-    {
-        if (bitPerSample == 8)
-            m_audioBuffer->Init<int8_t>();
-        else if (bitPerSample == 16)
-            m_audioBuffer->Init<int16_t>();
-        else if (bitPerSample == 32)
-            m_audioBuffer->Init<int32_t>();
+    if (m_isUseJitterBuffer) {
+        if (!m_audioBuffer->IsInit())
+        {
+            if (audioSpec.bitPerSample == 8)
+                m_audioBuffer->Init<int8_t>();
+            else if (audioSpec.bitPerSample == 16)
+                m_audioBuffer->Init<int16_t>();
+            else if (audioSpec.bitPerSample == 32)
+                m_audioBuffer->Init<int32_t>();
+        }
     }
-
     RtAudio::StreamParameters params;
     params.deviceId = m_rtAudio->getDefaultOutputDevice(); // 默认输出设备
-    params.nChannels = channelCount;                   // 立体声
+    params.nChannels = audioSpec.channels;                   // 立体声
     params.firstChannel = 0;                       // 起始声道
 
     RtAudioFormat audioFmt;
-    if (bitPerSample == 8)
+    if (audioSpec.bitPerSample == 8)
         audioFmt = RTAUDIO_SINT8;
-    else if (bitPerSample == 16)
+    else if (audioSpec.bitPerSample == 16)
         audioFmt = RTAUDIO_SINT16;
-    else if (bitPerSample == 32)
+    else if (audioSpec.bitPerSample == 32)
         audioFmt = RTAUDIO_SINT32;
 
     uint32_t bufferFrames = renderFrameCount;
-    auto err = m_rtAudio->openStream(&params, nullptr, audioFmt, sampleRate,
+    auto err = m_rtAudio->openStream(&params, nullptr, audioFmt, audioSpec.sampleRate,
                                      &bufferFrames, &audioCallback, this);
     if (err != RTAUDIO_NO_ERROR)
     {
@@ -69,9 +71,7 @@ void AudioRender::Start(int16_t sampleRate, int16_t bitPerSample, int16_t channe
         return;
     }
 
-    m_sampleRate = sampleRate;
-    m_bitPerSample =bitPerSample;
-    m_channelCount = channelCount;
+    m_audioSpec = audioSpec;
     m_renderFrameCount = renderFrameCount;
 }
 
@@ -79,8 +79,13 @@ void AudioRender::Start(int16_t sampleRate, int16_t bitPerSample, int16_t channe
 // 回调函数：实时填充音频数据
 int AudioRender::AudioOutputCallback(void* outputBuffer, unsigned int nFrames)
 {
-    size_t sampleCount = nFrames * m_channelCount;
-    size_t bufferSize = sampleCount * m_bitPerSample / 8;
+    size_t sampleCount = nFrames * m_audioSpec.channels;
+    size_t bufferSize = sampleCount * m_audioSpec.bitPerSample / 8;
+    if (!m_isUseJitterBuffer) {
+        m_pcmCallback(reinterpret_cast<uint8_t*>(outputBuffer), bufferSize);
+        return 0;
+    }
+
     memset(outputBuffer, 0, bufferSize);
 
     int16_t* outputShort = static_cast<int16_t*>(outputBuffer);
@@ -108,7 +113,7 @@ int AudioRender::AudioOutputCallback(void* outputBuffer, unsigned int nFrames)
     inputShort = nullptr;
 
     m_audioBufferCV.notify_all();
-    return readSize;
+    return 0;
 }
 
 void AudioRender::Stop()
@@ -131,6 +136,11 @@ void AudioRender::Stop()
     }
 }
 
+void AudioRender::SetPCMCallback(PCMCallback callback)
+{
+    m_pcmCallback = callback;
+}
+
 void AudioRender::SetVolume(float volume)
 {
     m_audioVolume = volume;
@@ -148,23 +158,23 @@ void AudioRender::Write(const AudioFrame&frame)
 
     std::unique_lock<std::mutex> lock(m_audioBufferMutex);
     m_audioBufferCV.wait(lock, [this, &frame]() {
-        return m_audioBuffer->GetFreeSize() > frame.dataSize;
+        return m_audioBuffer->GetFreeSize() > frame.size;
         });
 
-    if (frame.bitPerSample == 8)
+    if (frame.spec.bitPerSample == 8)
     {
-        int8_t* data = reinterpret_cast<int8_t*>(frame.audioData);
-        m_audioBuffer->PushData(data, frame.dataSize);
+        int8_t* data = reinterpret_cast<int8_t*>(frame.data);
+        m_audioBuffer->PushData(data, frame.size);
     }
-    else if (frame.bitPerSample == 16)
+    else if (frame.spec.bitPerSample == 16)
     {
-        int16_t* data = reinterpret_cast<int16_t*>(frame.audioData);
-        m_audioBuffer->PushData(data, frame.dataSize);
+        int16_t* data = reinterpret_cast<int16_t*>(frame.data);
+        m_audioBuffer->PushData(data, frame.size);
     }
-    else if (frame.bitPerSample == 32)
+    else if (frame.spec.bitPerSample == 32)
     {
-        int32_t* data = reinterpret_cast<int32_t*>(frame.audioData);
-        m_audioBuffer->PushData(data, frame.dataSize);
+        int32_t* data = reinterpret_cast<int32_t*>(frame.data);
+        m_audioBuffer->PushData(data, frame.size);
     }
     return;
 }

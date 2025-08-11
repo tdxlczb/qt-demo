@@ -1,5 +1,5 @@
-#ifndef PLAYERWIDGET_H
-#define PLAYERWIDGET_H
+#ifndef PLAYER_WIDGET_H
+#define PLAYER_WIDGET_H
 
 #include <atomic>
 #include <QWidget>
@@ -9,7 +9,7 @@
 class VideoRender;
 class AudioRender;
 class MediaReader;
-class PlayerWidget : public QWidget
+class PlayerWidget : public QWidget, public PlayEvent
 {
     Q_OBJECT
 public:
@@ -18,6 +18,11 @@ public:
 
     void StartPlay(const QString& url);
     void StopPlay();
+
+protected:
+    virtual void onVideoFrame(const VideoFrame& frame) override;
+    virtual void onClose(const PlayError& error) override;
+
 signals:
 private:
     void on_pbOpenFileButton_clicked();
@@ -25,8 +30,7 @@ private:
     void on_pbStopButton_clicked();
 
     void resizeEvent(QResizeEvent* event) override;
-    void HandleVideoFrame(const VideoFrame& frame);
-    void HandleAudioFrame(const AudioFrame& frame);
+
 private:
     VideoRender* m_pVideoRender = nullptr;
     AudioRender* m_pAudioRender = nullptr;
@@ -39,4 +43,4 @@ private:
     QTextEdit* m_pTextEditUrl = nullptr;
 };
 
-#endif // PLAYERWIDGET_H
+#endif // PLAYER_WIDGET_H

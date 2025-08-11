@@ -1,29 +1,65 @@
 #include "video_render.h"
 #include <QPainter>
 
-VideoRender::VideoRender(QWidget* parent) : QWidget(parent)
+VideoRGBRender::VideoRGBRender(QWidget* parent) : QWidget(parent)
 {
     this->setAutoFillBackground(true);//启用背景填充
     QPalette palette = this->palette();
     //通常指窗口部件的背景色
     palette.setColor(QPalette::Window, QColor(0, 0, 0));
     this->setPalette(palette);
+    connect(this, &VideoRGBRender::sig_Update, this, &VideoRGBRender::on_Update, Qt::QueuedConnection);
 }
 
-VideoRender::~VideoRender()
+VideoRGBRender::~VideoRGBRender()
 {
-
+    disconnect(this, &VideoRGBRender::sig_Update, this, &VideoRGBRender::on_Update);
 }
 
-void VideoRender::UpdateContent(const cv::Mat& mat)
+VideoFrame VideoRGBRender::GetContent()
 {
-    m_matDataMutex.lock();
-    m_matData = mat;
-    m_matDataMutex.unlock();
+    QMutexLocker guard(&m_frameMutex);
+    return m_frame;
+}
+
+void VideoRGBRender::UpdateContent(const VideoFrame& frame)
+{
+    if (frame.spec.width <= 0 || frame.spec.height <= 0 || !frame.data || frame.size <= 0) {
+        qDebug() << "frame is err";
+        return;
+    }
+
+    QMutexLocker locker(&m_frameMutex);
+    if (!m_frame.data) {
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    else if (m_frame.size < frame.size) {
+        delete[] m_frame.data;
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    m_frame.spec = frame.spec;
+    memcpy(m_frame.data, frame.data, frame.size);
+
+    emit sig_Update();
+}
+
+void VideoRGBRender::ClearContent()
+{
+    QMutexLocker locker(&m_frameMutex);
+    if (m_frame.data)
+        delete[] m_frame.data;
+    m_frame = VideoFrame();
+    emit sig_Update();
+}
+
+void VideoRGBRender::on_Update()
+{
     update();
 }
 
-void VideoRender::paintEvent(QPaintEvent* event)
+void VideoRGBRender::paintEvent(QPaintEvent* event)
 {
     QWidget::paintEvent(event);
     QPainter painter(this);
@@ -31,18 +67,561 @@ void VideoRender::paintEvent(QPaintEvent* event)
     //rect()的x()、y()始终从(0, 0)起，宽高客户区宽高。
     //pos()相对于父窗体的位置
     QRect rc = rect();
-    if (m_matData.empty())
+    if (!m_frame.data)
     {
         //painter.fillRect(rc, QColor(0, 0, 0));
         return;
     }
-    m_matDataMutex.lock();
+    m_frameMutex.lock();
     //计算保持宽高比的缩放尺寸
-    QImage scaledImage = QImage(m_matData.data, m_matData.cols, m_matData.rows, m_matData.step, QImage::Format_RGB888)
+    //scaled方法会申请新的内存空间，可以解锁，如没有申请新的内存空间，需要在drawImage之后才能解锁，避免数据更改
+    //QImage image = QImage(m_matData.data, m_matData.cols, m_matData.rows, m_matData.step, QImage::Format_RGB888);
+    QImage scaledImage = QImage(m_frame.data, m_frame.spec.width, m_frame.spec.height, QImage::Format_RGB888)
         .scaled(rc.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    m_matDataMutex.unlock();
+    m_frameMutex.unlock();
 
     int xPos = (rc.width() - scaledImage.width()) / 2;
     int yPos = (rc.height() - scaledImage.height()) / 2;
     painter.drawImage(xPos, yPos, scaledImage);
+}
+
+/*
+* ====================================================
+*/
+
+#include <QOpenGLTexture>
+#include <QOpenGLBuffer>
+#include <QMouseEvent>
+
+#define PROGRAM_VERTEX_ATTRIBUTE 0
+#define PROGRAM_TEXCOORD_ATTRIBUTE 1
+
+template <typename T>
+T alignBack(T x, T a) {
+    return a * (x / a);
+}
+
+
+PlayGLWidget::PlayGLWidget(QWidget* parent) :QOpenGLWidget(parent)
+{
+    connect(this, &PlayGLWidget::sig_Update, this, &PlayGLWidget::on_Update, Qt::QueuedConnection);
+}
+
+PlayGLWidget::~PlayGLWidget()
+{
+    disconnect(this, &PlayGLWidget::sig_Update, this, &PlayGLWidget::on_Update);
+    if (m_frame.data)
+        delete[] m_frame.data;
+}
+
+VideoFrame PlayGLWidget::GetContent()
+{
+    QMutexLocker guard(&m_frameMutex);
+    return m_frame;
+}
+
+void PlayGLWidget::UpdateContent(const VideoFrame& frame)
+{
+    if (frame.spec.width <= 0 || frame.spec.height <= 0 || !frame.data || frame.size <= 0) {
+        qDebug() << "frame is err";
+        return;
+    }
+
+    QMutexLocker locker(&m_frameMutex);
+    if (!m_frame.data) {
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    else if (m_frame.size < frame.size) {
+        delete[] m_frame.data;
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    m_frame.spec = frame.spec;
+    memcpy(m_frame.data, frame.data, frame.size);
+    if (m_nVideoW != m_frame.spec.width || m_nVideoH != m_frame.spec.height) {
+        qDebug() << "width:" << m_frame.spec.width << ",height:" << m_frame.spec.height;
+    }
+    m_pBufYuv420p = m_frame.data;
+    m_nVideoW = m_frame.spec.width;
+    m_nVideoH = m_frame.spec.height;
+
+    emit sig_Update();
+}
+
+void PlayGLWidget::ClearContent()
+{
+    QMutexLocker locker(&m_frameMutex);
+    if (m_frame.data)
+        delete[] m_frame.data;
+    m_frame = VideoFrame();
+    emit sig_Update();
+}
+
+void PlayGLWidget::on_Update()
+{
+    //glViewport(0, 0, m_nVideoW, m_nVideoH);
+    update();
+}
+
+void PlayGLWidget::initializeGL()
+{
+    initializeOpenGLFunctions();
+    glEnable(GL_DEPTH_TEST);
+    //现代opengl渲染管线依赖着色器来处理传入的数据
+    //着色器：就是使用openGL着色语言(OpenGL Shading Language, GLSL)编写的一个小函数,
+    //       GLSL是构成所有OpenGL着色器的语言,具体的GLSL语言的语法需要读者查找相关资料
+    //初始化顶点着色器 对象
+    m_pVSHader = new QOpenGLShader(QOpenGLShader::Vertex, this);
+    //顶点着色器源码
+    const char* vsrc = "attribute vec4 vertexIn; \
+            attribute vec2 textureIn; \
+    varying vec2 textureOut;  \
+    void main(void)           \
+    {                         \
+        gl_Position = vertexIn; \
+        textureOut = textureIn; \
+    }";
+    //编译顶点着色器程序
+    bool bCompile = m_pVSHader->compileSourceCode(vsrc);
+    if (!bCompile)
+    {
+    }
+    //初始化片段着色器 功能gpu中yuv转换成rgb
+    m_pFSHader = new QOpenGLShader(QOpenGLShader::Fragment, this);
+    //片段着色器源码
+    const char* fsrc = "varying vec2 textureOut; \
+            uniform sampler2D tex_y; \
+    uniform sampler2D tex_u; \
+    uniform sampler2D tex_v; \
+    void main(void) \
+    { \
+        vec3 yuv; \
+        vec3 rgb; \
+        yuv.x = texture2D(tex_y, textureOut).r; \
+        yuv.y = texture2D(tex_u, textureOut).r - 0.5; \
+        yuv.z = texture2D(tex_v, textureOut).r - 0.5; \
+        rgb = mat3( 1,       1,         1, \
+                    0,       -0.39465,  2.03211, \
+                    1.13983, -0.58060,  0) * yuv; \
+        gl_FragColor = vec4(rgb, 1); \
+    }";
+    //将glsl源码送入编译器编译着色器程序
+    bCompile = m_pFSHader->compileSourceCode(fsrc);
+    if (!bCompile)
+    {
+    }
+
+    //创建着色器程序容器
+    m_pShaderProgram = new QOpenGLShaderProgram;
+    //将片段着色器添加到程序容器
+    m_pShaderProgram->addShader(m_pFSHader);
+    //将顶点着色器添加到程序容器
+    m_pShaderProgram->addShader(m_pVSHader);
+    //绑定属性vertexIn到指定位置ATTRIB_VERTEX,该属性在顶点着色源码其中有声明
+    m_pShaderProgram->bindAttributeLocation("vertexIn", ATTRIB_VERTEX);
+    //绑定属性textureIn到指定位置ATTRIB_TEXTURE,该属性在顶点着色源码其中有声明
+    m_pShaderProgram->bindAttributeLocation("textureIn", ATTRIB_TEXTURE);
+    //链接所有所有添入到的着色器程序
+    m_pShaderProgram->link();
+    //激活所有链接
+    m_pShaderProgram->bind();
+    //读取着色器中的数据变量tex_y, tex_u, tex_v的位置,这些变量的声明可以在
+    //片段着色器源码中可以看到
+    textureUniformY = m_pShaderProgram->uniformLocation("tex_y");
+    textureUniformU = m_pShaderProgram->uniformLocation("tex_u");
+    textureUniformV = m_pShaderProgram->uniformLocation("tex_v");
+    // 顶点矩阵
+    static const GLfloat vertexVertices[] = {
+        -1.0f, -1.0f,
+        1.0f, -1.0f,
+        -1.0f, 1.0f,
+        1.0f, 1.0f,
+    };
+    //纹理矩阵
+    static const GLfloat textureVertices[] = {
+        0.0f,  1.0f,
+        1.0f,  1.0f,
+        0.0f,  0.0f,
+        1.0f,  0.0f,
+    };
+    //设置属性ATTRIB_VERTEX的顶点矩阵值以及格式
+    glVertexAttribPointer(ATTRIB_VERTEX, 2, GL_FLOAT, 0, 0, vertexVertices);
+    //设置属性ATTRIB_TEXTURE的纹理矩阵值以及格式
+    glVertexAttribPointer(ATTRIB_TEXTURE, 2, GL_FLOAT, 0, 0, textureVertices);
+    //启用ATTRIB_VERTEX属性的数据,默认是关闭的
+    glEnableVertexAttribArray(ATTRIB_VERTEX);
+    //启用ATTRIB_TEXTURE属性的数据,默认是关闭的
+    glEnableVertexAttribArray(ATTRIB_TEXTURE);
+    //分别创建y,u,v纹理对象
+    m_pTextureY = new QOpenGLTexture(QOpenGLTexture::Target2D);
+    m_pTextureU = new QOpenGLTexture(QOpenGLTexture::Target2D);
+    m_pTextureV = new QOpenGLTexture(QOpenGLTexture::Target2D);
+    m_pTextureY->create();
+    m_pTextureU->create();
+    m_pTextureV->create();
+    //获取返回y分量的纹理索引值
+    id_y = m_pTextureY->textureId();
+    //获取返回u分量的纹理索引值
+    id_u = m_pTextureU->textureId();
+    //获取返回v分量的纹理索引值
+    id_v = m_pTextureV->textureId();
+    glClearColor(0.5f, 0.5f, 0.5f, 1.0f);//设置背景色
+    //qDebug("addr=%x id_y = %d id_u=%d id_v=%d\n", this, id_y, id_u, id_v);
+}
+
+void PlayGLWidget::resizeGL(int w, int h)
+{
+    if (h == 0)// 防止被零除
+    {
+        h = 1;// 将高设为1
+    }
+    //设置视口
+    glViewport(0, 0, w, h);
+
+    //float aspectRatio = static_cast<float>(m_nVideoW) / m_nVideoH;
+    //int viewportWidth = w;
+    //int viewportHeight = static_cast<int>(w / aspectRatio);
+
+    //if (viewportHeight > h) {
+    //    viewportHeight = h;
+    //    viewportWidth = static_cast<int>(h * aspectRatio);
+    //}
+
+    //int viewportX = (w - viewportWidth) / 2;
+    //int viewportY = (h - viewportHeight) / 2;
+
+    //glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+
+    //qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
+}
+
+void PlayGLWidget::paintGL()
+{
+    QMutexLocker guard(&m_frameMutex);
+
+    //默认背景颜色为绿色，这里更改默认背景为灰色
+    if (!m_pBufYuv420p) {
+        // 清除颜色缓冲区和深度缓冲区
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // 设置灰色背景
+        glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        return;
+    }
+
+    //加载y数据纹理
+    //激活纹理单元GL_TEXTURE0
+    glActiveTexture(GL_TEXTURE0);
+    //使用来自y数据生成纹理
+    glBindTexture(GL_TEXTURE_2D, id_y);
+    //使用内存中m_pBufYuv420p数据创建真正的y数据纹理
+    if (m_isZoom)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoWZoom, m_nVideoHZoom, 0, GL_RED, GL_UNSIGNED_BYTE, m_pBufYuv420pZoom);
+    else
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, m_pBufYuv420p);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    //加载u数据纹理
+    glActiveTexture(GL_TEXTURE1);//激活纹理单元GL_TEXTURE1
+    glBindTexture(GL_TEXTURE_2D, id_u);
+    if (m_isZoom)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoWZoom / 2, m_nVideoHZoom / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420pZoom + m_nVideoWZoom * m_nVideoHZoom);
+    else
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420p + m_nVideoW * m_nVideoH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    //加载v数据纹理
+    glActiveTexture(GL_TEXTURE2);//激活纹理单元GL_TEXTURE2
+    glBindTexture(GL_TEXTURE_2D, id_v);
+    if (m_isZoom)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoWZoom / 2, m_nVideoHZoom / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420pZoom + m_nVideoWZoom * m_nVideoHZoom * 5 / 4);
+    else
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420p + m_nVideoW * m_nVideoH * 5 / 4);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    //指定y纹理要使用新值 只能用0,1,2等表示纹理单元的索引，这是opengl不人性化的地方
+    //0对应纹理单元GL_TEXTURE0 1对应纹理单元GL_TEXTURE1 2对应纹理的单元
+    glUniform1i(textureUniformY, 0);
+    //指定u纹理要使用新值
+    glUniform1i(textureUniformU, 1);
+    //指定v纹理要使用新值
+    glUniform1i(textureUniformV, 2);
+    //使用顶点数组方式绘制图形
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    return;
+}
+
+
+
+void PlayGLWidget::croppingYUVData() {
+    if (!m_pBufYuv420p) {
+        return;
+    }
+    //该方法的上下文无锁，故于此处增添，防止pYuvBuf_/pZoomYuvBuf_异步变值
+    //放在此处而不是在cropI420p里面的原因是：m_nWidth/m_nHeight也有可能随着pYuvBuf_的设置变值
+//    QMutexLocker guard(&mutexYuvBuf_);
+    /*新图片的宽高*/
+    int nWidth = m_nVideoW / m_fScaleFactor;
+    int nHeight = m_nVideoH / m_fScaleFactor;
+    nWidth = alignBack(nWidth, 8);
+    nHeight = alignBack(nHeight, 8);
+    /*鼠标在窗口的移动总距离*/
+    int nMoveX = -(m_pointMouseMove.x() + m_pointLastMove.x());
+    int nMoveY = -(m_pointMouseMove.y() + m_pointLastMove.y());
+    /*显示窗口和图片的比例*/
+    float fFactorX = (float)m_nVideoW / (float)width();
+    float fFactorY = (float)m_nVideoH / (float)height();
+    /*坐标点位置=鼠标在窗口的移动距离*实际图片大小和显示窗口的比例/缩放比例*/
+    int nX = nMoveX * fFactorX / m_fScaleFactor;
+    int nY = nMoveY * fFactorY / m_fScaleFactor;
+    nX = alignBack(nX, 8);
+    nY = alignBack(nY, 8);
+    cropI420p(m_nVideoW, m_nVideoH, nX, nY, nWidth, nHeight);
+    m_nVideoWZoom = m_nVideoW;
+    m_nVideoHZoom = m_nVideoH;
+}
+
+void PlayGLWidget::cropI420p(int nSrcWidth, int nSrcHeight, int nLeft, int nTop, int nClipWidth, int nClipHeight)
+{
+    uchar* pSrcYplane = m_pBufYuv420p;
+    uchar* pSrcUplane = m_pBufYuv420p + nSrcWidth * nSrcHeight;
+    uchar* pSrcVplane = pSrcUplane + (nSrcWidth * nSrcHeight / 4);
+
+    uchar* pDstYplane = m_pBufYuv420pZoom;
+    uchar* pDstUplane = m_pBufYuv420pZoom + nClipWidth * nClipHeight;
+    uchar* pDstVplane = pDstUplane + (nClipWidth * nClipHeight / 4);
+
+    /*uv 参数*/
+    int nUvTotalWidth = nSrcWidth / 2;
+    int nYClipWidth = sizeof(char) * nClipWidth;
+    int nUvClipWidth = sizeof(char) * nClipWidth / 2;
+
+    /*uv 参数*/
+    int nTotalClipWidth = sizeof(char) * nClipWidth / 2;
+    for (int i = 0; i < nClipHeight; i++) {
+        int nYh = nTop + i;
+        int nSrcPos = nLeft + nSrcWidth * nYh;
+        /*Y*/
+        memcpy(pDstYplane + (i * nClipWidth), pSrcYplane + nSrcPos, nYClipWidth);
+        if (i < nClipHeight / 2) {
+            /*获取 UV分量*/
+            int nUvh = nTop / 2 + i;
+            int nSrcPosU = nLeft / 2 + nUvTotalWidth * nUvh;
+            int nSrcPosV = nLeft / 2 + nUvTotalWidth * nUvh;
+            int nDesPos = nTotalClipWidth * i;
+            /*U*/
+            memcpy(pDstUplane + nDesPos, pSrcUplane + nSrcPosU, nUvClipWidth);
+            /*V*/
+            memcpy(pDstVplane + nDesPos, pSrcVplane + nSrcPosV, nUvClipWidth);
+        }
+    }
+}
+
+
+/*
+* ====================================================
+*/
+
+#include <QDebug>
+
+SDLRenderWidget::SDLRenderWidget(QWidget* parent) : QWidget(parent)
+{
+    setAttribute(Qt::WA_NativeWindow, true);
+    setAttribute(Qt::WA_PaintOnScreen, true); // 关键设置
+    setAttribute(Qt::WA_NoSystemBackground, true);
+    setAttribute(Qt::WA_OpaquePaintEvent, true);
+    setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+
+    // 禁用Qt的背景绘制
+    setAutoFillBackground(false);
+    // 禁用Qt的刷新
+    setUpdatesEnabled(false);
+
+    connect(this, &SDLRenderWidget::sig_Update, this, &SDLRenderWidget::on_Update, Qt::QueuedConnection);
+    InitSDL();
+}
+
+SDLRenderWidget::~SDLRenderWidget()
+{
+    disconnect(this, &SDLRenderWidget::sig_Update, this, &SDLRenderWidget::on_Update);
+    if (m_frame.data)
+        delete[] m_frame.data;
+
+    if (m_sdlTexture) SDL_DestroyTexture(m_sdlTexture);
+    if (m_sdlRenderer) SDL_DestroyRenderer(m_sdlRenderer);
+    if (m_sdlWindow) SDL_DestroyWindow(m_sdlWindow);
+    SDL_Quit();
+}
+
+bool SDLRenderWidget::InitSDL()
+{
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        qDebug() << "SDL初始化失败:" << SDL_GetError();
+        return false;
+    }
+
+    // 使用现有窗口句创建SDL窗口
+    m_sdlWindow = SDL_CreateWindowFrom((void*)winId());
+    if (!m_sdlWindow) {
+        qDebug() << "无法创建SDL窗口:" << SDL_GetError();
+        return false;
+    }
+
+    // 创建渲染器
+    m_sdlRenderer = SDL_CreateRenderer(m_sdlWindow, -1, SDL_RENDERER_ACCELERATED);
+    if (!m_sdlRenderer) {
+        qDebug() << "无法创建渲染器:" << SDL_GetError();
+        return false;
+    }
+    return true;
+}
+
+VideoFrame SDLRenderWidget::GetContent()
+{
+    QMutexLocker guard(&m_frameMutex);
+    return m_frame;
+}
+
+void SDLRenderWidget::UpdateContent(const VideoFrame& frame)
+{
+    if (frame.spec.width <= 0 || frame.spec.height <= 0 || !frame.data || frame.size <= 0) {
+        qDebug() << "frame is err";
+        return;
+    }
+
+    QMutexLocker locker(&m_frameMutex);
+    if (!m_frame.data) {
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    else if (m_frame.size < frame.size) {
+        delete[] m_frame.data;
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    m_frame.spec = frame.spec;
+    memcpy(m_frame.data, frame.data, frame.size);
+    
+    if (m_nVideoW != m_frame.spec.width || m_nVideoH != m_frame.spec.height) {
+        qDebug() << "width:" << m_frame.spec.width << ",height:" << m_frame.spec.height;
+        // 设置SDL纹理格式
+        Uint32 sdlFormat = SDL_PIXELFORMAT_IYUV;
+        // 创建纹理
+        m_sdlTexture = SDL_CreateTexture(m_sdlRenderer, sdlFormat,
+            SDL_TEXTUREACCESS_STREAMING,
+            m_frame.spec.width, m_frame.spec.height);
+        if (!m_sdlTexture) {
+            qDebug() << "无法创建纹理:" << SDL_GetError();
+            return;
+        }
+    }
+    m_pBufYuv420p = m_frame.data;
+    m_nVideoW = m_frame.spec.width;
+    m_nVideoH = m_frame.spec.height;
+
+    emit sig_Update();
+}
+
+void SDLRenderWidget::ClearContent()
+{
+    QMutexLocker locker(&m_frameMutex);
+    if (m_frame.data)
+        delete[] m_frame.data;
+    m_frame = VideoFrame();
+}
+
+SDL_Rect SDLRenderWidget::CalculateRenderRect()
+{
+    // 计算可用区域（考虑窗口内边距等）
+    int availableWidth = width();
+    int availableHeight = height();
+
+    // 计算目标渲染区域
+    SDL_Rect renderRect = { 0, 0, availableWidth, availableHeight };
+    return renderRect;
+    if (m_nVideoW <= 0 || m_nVideoH <= 0)
+        return renderRect;
+
+    // 计算视频原始比例
+    float videoAspect = (float)m_nVideoW / m_nVideoH;
+
+    // 基于宽度计算高度
+    int heightBasedOnWidth = availableWidth / videoAspect;
+    if (heightBasedOnWidth <= availableHeight) {
+        // 宽度为限制因素，上下加黑边
+        renderRect.h = heightBasedOnWidth;
+        renderRect.y = (availableHeight - renderRect.h) / 2;
+    }
+    else {
+        // 高度为限制因素，左右加黑边
+        int widthBasedOnHeight = availableHeight * videoAspect;
+        renderRect.w = widthBasedOnHeight;
+        renderRect.x = (availableWidth - renderRect.w) / 2;
+    }
+    return renderRect;
+}
+
+void SDLRenderWidget::RenderFrame()
+{
+    if (!m_sdlRenderer) return;
+
+    SDL_UpdateTexture(m_sdlTexture, NULL, m_pBufYuv420p, m_nVideoW);
+
+    // 1. 清除为黑色（用于黑边）
+    SDL_SetRenderDrawColor(m_sdlRenderer, 0, 0, 0, 255);
+    SDL_RenderClear(m_sdlRenderer);
+
+    // 2. 计算当前渲染区域
+    SDL_Rect renderRect = CalculateRenderRect();
+
+    // 3. 渲染YUV纹理到目标区域
+    if (m_sdlTexture) {
+        SDL_Rect srcRect = { 0, 0, m_nVideoW, m_nVideoH };
+        SDL_RenderCopy(m_sdlRenderer, m_sdlTexture, &srcRect, &renderRect);
+    }
+
+    // 4. 提交渲染
+    SDL_RenderPresent(m_sdlRenderer);
+
+    //// 更新纹理
+    //SDL_UpdateTexture(m_sdlTexture, NULL, m_pBufYuv420p, m_nVideoW);
+    //// 渲染
+    //SDL_RenderClear(m_sdlRenderer);
+    //SDL_RenderCopy(m_sdlRenderer, m_sdlTexture, NULL, NULL);
+    //SDL_RenderPresent(m_sdlRenderer);
+}
+
+void SDLRenderWidget::on_Update()
+{
+    //update();
+    RenderFrame();
+}
+
+void SDLRenderWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    // SDL窗口会自动跟随QWidget大小变化
+
+    if (m_sdlWindow) {
+        // 延迟处理以避免竞争条件
+        QTimer::singleShot(0, this, [this]() {
+            // 更新SDL窗口大小
+            SDL_SetWindowSize(m_sdlWindow, width(), height());
+            // 强制重绘
+            RenderFrame();
+            });
+    }
+}
+
+void SDLRenderWidget::paintEvent(QPaintEvent* event)
+{
+    //QWidget::paintEvent(event);
 }
