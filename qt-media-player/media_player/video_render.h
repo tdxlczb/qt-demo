@@ -89,6 +89,10 @@ protected:
     void initializeGL() Q_DECL_OVERRIDE;
     void resizeGL(int w, int h) Q_DECL_OVERRIDE;
     void paintGL() Q_DECL_OVERRIDE;
+private:
+    void initShaders();
+    void initTextures();
+    void calculateViewport();
 
     void croppingYUVData();
     void cropI420p(int nSrcWidth, int nSrcHeight, int nLeft, int nTop, int nClipWidth, int nClipHeight);
@@ -96,12 +100,7 @@ private:
     GLuint textureUniformY = 0; //y纹理数据位置
     GLuint textureUniformU = 0; //u纹理数据位置
     GLuint textureUniformV = 0; //v纹理数据位置
-    GLuint id_y = 0; //y纹理对象ID
-    GLuint id_u = 0; //u纹理对象ID
-    GLuint id_v = 0; //v纹理对象ID
-    QOpenGLTexture* m_pTextureY = nullptr;  //y纹理对象
-    QOpenGLTexture* m_pTextureU = nullptr;  //u纹理对象
-    QOpenGLTexture* m_pTextureV = nullptr;  //v纹理对象
+    GLuint m_textures[3]; // Y, U, V textures
     QOpenGLShader* m_pVSHader = nullptr;  //顶点着色器程序对象
     QOpenGLShader* m_pFSHader = nullptr;  //片段着色器对象
     QOpenGLShaderProgram* m_pShaderProgram = nullptr; //着色器程序容器
@@ -120,7 +119,6 @@ private:
     VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
 };
-
 
 /*
 * ====================================================

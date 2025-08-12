@@ -138,10 +138,11 @@ void PlayGLWidget::UpdateContent(const VideoFrame& frame)
         m_frame.size = frame.size;
     }
     m_frame.spec = frame.spec;
-    memcpy(m_frame.data, frame.data, frame.size);
     if (m_nVideoW != m_frame.spec.width || m_nVideoH != m_frame.spec.height) {
         qDebug() << "width:" << m_frame.spec.width << ",height:" << m_frame.spec.height;
     }
+    memcpy(m_frame.data, frame.data, frame.size);
+
     m_pBufYuv420p = m_frame.data;
     m_nVideoW = m_frame.spec.width;
     m_nVideoH = m_frame.spec.height;
@@ -160,7 +161,6 @@ void PlayGLWidget::ClearContent()
 
 void PlayGLWidget::on_Update()
 {
-    //glViewport(0, 0, m_nVideoW, m_nVideoH);
     update();
 }
 
@@ -174,14 +174,16 @@ void PlayGLWidget::initializeGL()
     //初始化顶点着色器 对象
     m_pVSHader = new QOpenGLShader(QOpenGLShader::Vertex, this);
     //顶点着色器源码
-    const char* vsrc = "attribute vec4 vertexIn; \
-            attribute vec2 textureIn; \
-    varying vec2 textureOut;  \
-    void main(void)           \
-    {                         \
-        gl_Position = vertexIn; \
-        textureOut = textureIn; \
-    }";
+    const char* vsrc = R"(
+    attribute vec4 vertexIn;
+    attribute vec2 textureIn;
+    varying vec2 textureOut;
+    void main(void)
+    {
+        gl_Position = vertexIn;
+        textureOut = textureIn;
+    }
+)";
     //编译顶点着色器程序
     bool bCompile = m_pVSHader->compileSourceCode(vsrc);
     if (!bCompile)
@@ -190,22 +192,24 @@ void PlayGLWidget::initializeGL()
     //初始化片段着色器 功能gpu中yuv转换成rgb
     m_pFSHader = new QOpenGLShader(QOpenGLShader::Fragment, this);
     //片段着色器源码
-    const char* fsrc = "varying vec2 textureOut; \
-            uniform sampler2D tex_y; \
-    uniform sampler2D tex_u; \
-    uniform sampler2D tex_v; \
-    void main(void) \
-    { \
-        vec3 yuv; \
-        vec3 rgb; \
-        yuv.x = texture2D(tex_y, textureOut).r; \
-        yuv.y = texture2D(tex_u, textureOut).r - 0.5; \
-        yuv.z = texture2D(tex_v, textureOut).r - 0.5; \
-        rgb = mat3( 1,       1,         1, \
-                    0,       -0.39465,  2.03211, \
-                    1.13983, -0.58060,  0) * yuv; \
-        gl_FragColor = vec4(rgb, 1); \
-    }";
+    const char* fsrc = R"(
+    varying vec2 textureOut;
+    uniform sampler2D tex_y;
+    uniform sampler2D tex_u;
+    uniform sampler2D tex_v;
+    void main(void)
+    {
+        vec3 yuv;
+        vec3 rgb;
+        yuv.x = texture2D(tex_y, textureOut).r;
+        yuv.y = texture2D(tex_u, textureOut).r - 0.5;
+        yuv.z = texture2D(tex_v, textureOut).r - 0.5;
+        rgb = mat3(1, 1, 1,
+            0, -0.39465, 2.03211,
+            1.13983, -0.58060, 0) * yuv;
+        gl_FragColor = vec4(rgb, 1);
+    }
+)";
     //将glsl源码送入编译器编译着色器程序
     bCompile = m_pFSHader->compileSourceCode(fsrc);
     if (!bCompile)
@@ -253,21 +257,13 @@ void PlayGLWidget::initializeGL()
     glEnableVertexAttribArray(ATTRIB_VERTEX);
     //启用ATTRIB_TEXTURE属性的数据,默认是关闭的
     glEnableVertexAttribArray(ATTRIB_TEXTURE);
-    //分别创建y,u,v纹理对象
-    m_pTextureY = new QOpenGLTexture(QOpenGLTexture::Target2D);
-    m_pTextureU = new QOpenGLTexture(QOpenGLTexture::Target2D);
-    m_pTextureV = new QOpenGLTexture(QOpenGLTexture::Target2D);
-    m_pTextureY->create();
-    m_pTextureU->create();
-    m_pTextureV->create();
-    //获取返回y分量的纹理索引值
-    id_y = m_pTextureY->textureId();
-    //获取返回u分量的纹理索引值
-    id_u = m_pTextureU->textureId();
-    //获取返回v分量的纹理索引值
-    id_v = m_pTextureV->textureId();
+
+    //初始化纹理
+    initTextures();
+
     glClearColor(0.5f, 0.5f, 0.5f, 1.0f);//设置背景色
     //qDebug("addr=%x id_y = %d id_u=%d id_v=%d\n", this, id_y, id_u, id_v);
+
 }
 
 void PlayGLWidget::resizeGL(int w, int h)
@@ -277,7 +273,7 @@ void PlayGLWidget::resizeGL(int w, int h)
         h = 1;// 将高设为1
     }
     //设置视口
-    glViewport(0, 0, w, h);
+    //glViewport(0, 0, w, h);
 
     //float aspectRatio = static_cast<float>(m_nVideoW) / m_nVideoH;
     //int viewportWidth = w;
@@ -292,8 +288,8 @@ void PlayGLWidget::resizeGL(int w, int h)
     //int viewportY = (h - viewportHeight) / 2;
 
     //glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
-
     //qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
+
 }
 
 void PlayGLWidget::paintGL()
@@ -310,42 +306,54 @@ void PlayGLWidget::paintGL()
         return;
     }
 
+    float aspectRatio = static_cast<float>(m_nVideoW) / m_nVideoH;
+    int w = width();
+    int h = height();
+    int viewportWidth = w;
+    int viewportHeight = static_cast<int>(w / aspectRatio);
+
+    if (viewportHeight > h) {
+        viewportHeight = h;
+        viewportWidth = static_cast<int>(h * aspectRatio);
+    }
+
+    int viewportX = (w - viewportWidth) / 2;
+    int viewportY = (h - viewportHeight) / 2;
+
+    glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+    qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
+
+    int nY = m_nVideoW * m_nVideoH;
+    int nU = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
+    int nV = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
+
     //加载y数据纹理
     //激活纹理单元GL_TEXTURE0
     glActiveTexture(GL_TEXTURE0);
     //使用来自y数据生成纹理
-    glBindTexture(GL_TEXTURE_2D, id_y);
+    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
     //使用内存中m_pBufYuv420p数据创建真正的y数据纹理
     if (m_isZoom)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoWZoom, m_nVideoHZoom, 0, GL_RED, GL_UNSIGNED_BYTE, m_pBufYuv420pZoom);
     else
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, m_pBufYuv420p);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
     //加载u数据纹理
     glActiveTexture(GL_TEXTURE1);//激活纹理单元GL_TEXTURE1
-    glBindTexture(GL_TEXTURE_2D, id_u);
+    glBindTexture(GL_TEXTURE_2D, m_textures[1]);
     if (m_isZoom)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoWZoom / 2, m_nVideoHZoom / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420pZoom + m_nVideoWZoom * m_nVideoHZoom);
     else
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420p + m_nVideoW * m_nVideoH);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420p + nY);
+
     //加载v数据纹理
     glActiveTexture(GL_TEXTURE2);//激活纹理单元GL_TEXTURE2
-    glBindTexture(GL_TEXTURE_2D, id_v);
+    glBindTexture(GL_TEXTURE_2D, m_textures[2]);
     if (m_isZoom)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoWZoom / 2, m_nVideoHZoom / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420pZoom + m_nVideoWZoom * m_nVideoHZoom * 5 / 4);
     else
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420p + m_nVideoW * m_nVideoH * 5 / 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, (char*)m_pBufYuv420p + nY + nU);
+
     //指定y纹理要使用新值 只能用0,1,2等表示纹理单元的索引，这是opengl不人性化的地方
     //0对应纹理单元GL_TEXTURE0 1对应纹理单元GL_TEXTURE1 2对应纹理的单元
     glUniform1i(textureUniformY, 0);
@@ -353,12 +361,33 @@ void PlayGLWidget::paintGL()
     glUniform1i(textureUniformU, 1);
     //指定v纹理要使用新值
     glUniform1i(textureUniformV, 2);
+
     //使用顶点数组方式绘制图形
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     return;
 }
 
+void PlayGLWidget::initShaders()
+{
+}
 
+void PlayGLWidget::initTextures()
+{
+    //创建y,u,v纹理对象
+    glGenTextures(3, m_textures);
+
+    for (int i = 0; i < 3; ++i) {
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+}
+
+void PlayGLWidget::calculateViewport()
+{
+}
 
 void PlayGLWidget::croppingYUVData() {
     if (!m_pBufYuv420p) {
@@ -366,7 +395,7 @@ void PlayGLWidget::croppingYUVData() {
     }
     //该方法的上下文无锁，故于此处增添，防止pYuvBuf_/pZoomYuvBuf_异步变值
     //放在此处而不是在cropI420p里面的原因是：m_nWidth/m_nHeight也有可能随着pYuvBuf_的设置变值
-//    QMutexLocker guard(&mutexYuvBuf_);
+    //QMutexLocker guard(&mutexYuvBuf_);
     /*新图片的宽高*/
     int nWidth = m_nVideoW / m_fScaleFactor;
     int nHeight = m_nVideoH / m_fScaleFactor;

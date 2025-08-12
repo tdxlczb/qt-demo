@@ -105,6 +105,8 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
     if (m_dstSpec.format == (int)AV_PIX_FMT_NONE)
         m_dstSpec.format = pFrame->format;
 
+    //m_dstSpec.width = 1168;
+    //m_dstSpec.height = 657;
     bool needInitSwsContext = false;
     if (pFrame->width != m_srcSpec.width || pFrame->height != m_srcSpec.height || pFrame->format != m_srcSpec.format) {
         m_srcSpec.width = pFrame->width;
@@ -147,7 +149,14 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
     }
     buffer = m_pFrameDst->data[0];
     bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
-
+    
+    int tryBufferSize = m_dstSpec.width * m_dstSpec.height * 1.5;
+    if (bufferSize != tryBufferSize) {
+        int ny = m_pFrameDst->linesize[0] * m_pFrameDst->height;
+        int nu = m_pFrameDst->linesize[1] * ((m_pFrameDst->height + 2 - 1) / 2);//必须向上取整
+        int nv = m_pFrameDst->linesize[2] * ((m_pFrameDst->height + 2 - 1) / 2);//必须向上取整
+        //重采样后动态大小的yuv帧可能存在数据对齐问题，使用av_image_get_buffer_size等于ny + nu + nv
+    }
     outFrame.data = buffer;
     outFrame.size = bufferSize;
     outFrame.spec = m_dstSpec;
