@@ -8,7 +8,7 @@ namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
 class PlayGLWidget;
-
+class GLWidget;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -20,6 +20,7 @@ public:
 private:
     Ui::MainWindow *ui;
 
-    PlayGLWidget * playGLWidget_ = nullptr;
+    PlayGLWidget * m_playGLWidget = nullptr;
+    GLWidget* m_glWidget = nullptr;
 };
 #endif // MAINWINDOW_H
