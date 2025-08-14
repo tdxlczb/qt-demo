@@ -1,8 +1,10 @@
 #include "main_window.h"
 #include "ui_main_window.h"
 
-#include "play_glwidget.h"
+#include "glwidget_old.h"
 #include "graphics_glwidget.h"
+#include "play_glwidget.h"
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -10,12 +12,17 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    //m_playGLWidget = new PlayGLWidget();
-    //m_playGLWidget->PlayOneFrame();
-    //m_playGLWidget->show();
 
-    m_glWidget = new GLWidget();
-    m_glWidget->show();
+    //m_pGLWidget = new GLWidget();
+    //m_pGLWidget->show();
+
+    m_pGraphicsGLWidget = new GraphicsGLWidget();
+    m_pGraphicsGLWidget->show();
+
+    //m_pPlayGLWidget = new PlayGLWidget();
+    //m_pPlayGLWidget->PlayOneFrame();
+    //m_pPlayGLWidget->show();
+
 }
 
 MainWindow::~MainWindow()

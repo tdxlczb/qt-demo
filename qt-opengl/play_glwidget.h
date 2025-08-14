@@ -1,5 +1,5 @@
-#ifndef PLAYGLWIDGET_H
-#define PLAYGLWIDGET_H
+#ifndef PLAY_GLWIDGET_H
+#define PLAY_GLWIDGET_H
 
 #include <QOpenGLWidget>
 #include <QOpenGLShaderProgram>
@@ -23,6 +23,7 @@ protected:
     void resizeGL(int w, int h) Q_DECL_OVERRIDE;
     void paintGL() Q_DECL_OVERRIDE;
 
+private:
     void croppingYUVData();
     void cropI420p(int nSrcWidth, int nSrcHeight, int nLeft, int nTop,int nClipWidth, int nClipHeight);
 private:
@@ -53,4 +54,4 @@ private:
 };
 
 
-#endif // PLAYGLWIDGET_H
+#endif // PLAY_GLWIDGET_H

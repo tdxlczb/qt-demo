@@ -9,12 +9,14 @@ CONFIG += c++11
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    glwidget_old.cpp \
     graphics_glwidget.cpp \
     main.cpp \
     main_window.cpp \
     play_glwidget.cpp
 
 HEADERS += \
+    glwidget_old.h \
     graphics_glwidget.h \
     main_window.h \
     play_glwidget.h

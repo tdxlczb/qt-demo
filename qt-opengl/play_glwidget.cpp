@@ -94,14 +94,27 @@ void PlayGLWidget::initializeGL()
     //初始化顶点着色器 对象
     m_pVSHader = new QOpenGLShader(QOpenGLShader::Vertex, this);
     //顶点着色器源码
-    const char *vsrc = "attribute vec4 vertexIn; \
-            attribute vec2 textureIn; \
-    varying vec2 textureOut;  \
-    void main(void)           \
-    {                         \
-        gl_Position = vertexIn; \
-        textureOut = textureIn; \
-    }";
+    const char *vsrc = R"(
+    attribute vec4 vertexIn;
+    attribute vec2 textureIn;
+    varying vec2 textureOut;
+    void main(void)
+    {
+        gl_Position = vertexIn;
+        textureOut = textureIn;
+    }
+)";
+    const char* vsrc2 = R"(
+    #version 330 core
+    layout(location = 3) in vec4 vertexIn;
+    layout(location = 4) in vec2 textureIn;
+    varying vec2 textureOut;
+    void main(void)
+    {
+        gl_Position = vertexIn;
+        textureOut = textureIn;
+    }
+)";
     //编译顶点着色器程序
     bool bCompile = m_pVSHader->compileSourceCode(vsrc);
     if(!bCompile)
@@ -110,22 +123,24 @@ void PlayGLWidget::initializeGL()
     //初始化片段着色器 功能gpu中yuv转换成rgb
     m_pFSHader = new QOpenGLShader(QOpenGLShader::Fragment, this);
     //片段着色器源码
-    const char *fsrc = "varying vec2 textureOut; \
-            uniform sampler2D tex_y; \
-    uniform sampler2D tex_u; \
-    uniform sampler2D tex_v; \
-    void main(void) \
-    { \
-        vec3 yuv; \
-        vec3 rgb; \
-        yuv.x = texture2D(tex_y, textureOut).r; \
-        yuv.y = texture2D(tex_u, textureOut).r - 0.5; \
-        yuv.z = texture2D(tex_v, textureOut).r - 0.5; \
-        rgb = mat3( 1,       1,         1, \
-                    0,       -0.39465,  2.03211, \
-                    1.13983, -0.58060,  0) * yuv; \
-        gl_FragColor = vec4(rgb, 1); \
-    }";
+    const char *fsrc = R"(
+    varying vec2 textureOut;
+    uniform sampler2D tex_y;
+    uniform sampler2D tex_u;
+    uniform sampler2D tex_v;
+    void main(void)
+    {
+        vec3 yuv;
+        vec3 rgb;
+        yuv.x = texture2D(tex_y, textureOut).r;
+        yuv.y = texture2D(tex_u, textureOut).r - 0.5;
+        yuv.z = texture2D(tex_v, textureOut).r - 0.5;
+        rgb = mat3(1, 1, 1,
+            0, -0.39465, 2.03211,
+            1.13983, -0.58060, 0) * yuv;
+        gl_FragColor = vec4(rgb, 1);
+    }
+)";
     //将glsl源码送入编译器编译着色器程序
     bCompile = m_pFSHader->compileSourceCode(fsrc);
     if(!bCompile)
@@ -139,18 +154,29 @@ void PlayGLWidget::initializeGL()
     //将顶点着色器添加到程序容器
     m_pShaderProgram->addShader(m_pVSHader);
     //绑定属性vertexIn到指定位置ATTRIB_VERTEX,该属性在顶点着色源码其中有声明
-    m_pShaderProgram->bindAttributeLocation("vertexIn", ATTRIB_VERTEX);
-    //绑定属性textureIn到指定位置ATTRIB_TEXTURE,该属性在顶点着色源码其中有声明
-    m_pShaderProgram->bindAttributeLocation("textureIn", ATTRIB_TEXTURE);
+    //使用vsrc2时，layout(location = 3)会自动绑定，可以不需要手动绑定
+    //m_pShaderProgram->bindAttributeLocation("vertexIn", ATTRIB_VERTEX);
+    ////绑定属性textureIn到指定位置ATTRIB_TEXTURE,该属性在顶点着色源码其中有声明
+    //m_pShaderProgram->bindAttributeLocation("textureIn", ATTRIB_TEXTURE);
+    //glBindAttribLocation(m_pShaderProgram->programId(), ATTRIB_VERTEX, "vertexIn");
+    //glBindAttribLocation(m_pShaderProgram->programId(), ATTRIB_TEXTURE, "textureIn");
+
     //链接所有所有添入到的着色器程序
     m_pShaderProgram->link();
+
+    //GLint posLoc = glGetAttribLocation(m_pShaderProgram->programId(), "vertexIn");
+    //GLint texLoc = glGetAttribLocation(m_pShaderProgram->programId(), "textureIn");
+
     //激活所有链接
     m_pShaderProgram->bind();
     //读取着色器中的数据变量tex_y, tex_u, tex_v的位置,这些变量的声明可以在
     //片段着色器源码中可以看到
-    textureUniformY = m_pShaderProgram->uniformLocation("tex_y");
-    textureUniformU =  m_pShaderProgram->uniformLocation("tex_u");
-    textureUniformV =  m_pShaderProgram->uniformLocation("tex_v");
+    //textureUniformY = m_pShaderProgram->uniformLocation("tex_y");
+    //textureUniformU = m_pShaderProgram->uniformLocation("tex_u");
+    //textureUniformV = m_pShaderProgram->uniformLocation("tex_v");
+    textureUniformY = glGetUniformLocation(m_pShaderProgram->programId(), "tex_y");
+    textureUniformU = glGetUniformLocation(m_pShaderProgram->programId(), "tex_u");
+    textureUniformV = glGetUniformLocation(m_pShaderProgram->programId(), "tex_v");
     // 顶点矩阵
     static const GLfloat vertexVertices[] = {
         -1.0f, -1.0f,
@@ -249,8 +275,6 @@ void PlayGLWidget::paintGL()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     return;
 }
-
-
 
 void PlayGLWidget::croppingYUVData() {
     if(!m_pBufYuv420p) {
