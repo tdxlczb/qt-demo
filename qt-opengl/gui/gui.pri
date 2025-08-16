@@ -1,0 +1,11 @@
+FORMS +=
+
+HEADERS += \
+    $$PWD/glwidget_old.h \
+    $$PWD/graphics_glwidget.h \
+    $$PWD/play_glwidget.h
+
+SOURCES += \
+    $$PWD/glwidget_old.cpp \
+    $$PWD/graphics_glwidget.cpp \
+    $$PWD/play_glwidget.cpp

@@ -4,7 +4,8 @@
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <QOpenGLExtraFunctions>
-
+#include <QDatetime>
+#include <QTimer>
 /*
 * QOpenGLExtraFunctions包含了QOpenGLFunctions
 */
@@ -15,8 +16,6 @@ public:
     explicit GraphicsGLWidget(QWidget* parent = nullptr);
     ~GraphicsGLWidget();
 
-    void Play();
-
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -25,12 +24,17 @@ protected:
 private:
     void initShaders();
     void initTextures();
+    void loadImageTextures(int index, const char* path);
     void render();
 private:
     GLuint m_shaderProgram = 0;
-    GLuint m_VAO;
-    int m_nVideoW; //视频分辨率宽
-    int m_nVideoH; //视频分辨率高
+    GLuint m_VAO = 0;
+    GLuint m_textures[16];
+
+    float screenWidth = 0;
+    float screenHeight = 0;
     uint8_t* m_pBufYuv420p = nullptr;
+    QDateTime m_startTime;
+    QTimer* m_pUpdateTimer = nullptr;
 };
 #endif // GRAPHICS_GLWIDGET_H
