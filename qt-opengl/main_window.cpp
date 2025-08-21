@@ -17,7 +17,7 @@ MainWindow::MainWindow(QWidget *parent)
     //m_pGLWidget->show();
 
     m_pGraphicsGLWidget = new GraphicsGLWidget();
-    m_pGraphicsGLWidget->resize(1200, 900);
+    m_pGraphicsGLWidget->resize(800, 800);
     m_pGraphicsGLWidget->show();
 
     //m_pPlayGLWidget = new PlayGLWidget();

@@ -24,6 +24,8 @@ void GraphicsGLWidget::initializeGL()
     initializeOpenGLFunctions();
     glEnable(GL_DEPTH_TEST);
 
+    //glDepthFunc(GL_LESS);
+
     initShaders();
     initTextures();
 
@@ -117,7 +119,7 @@ void GraphicsGLWidget::initTextures()
 
     glGenTextures(2, m_textures);
 
-    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\container.jpg)");
+    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\container0.jpg)");
     loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\awesomeface.png)");
 
     glUseProgram(m_shaderProgram);
@@ -129,7 +131,7 @@ void GraphicsGLWidget::initTextures()
 
 void GraphicsGLWidget::loadImageTextures(int index, const char* path)
 {
-    glActiveTexture(GL_TEXTURE0 + index); // 在绑定纹理之前先激活纹理单元
+    //glActiveTexture(GL_TEXTURE0 + index); // 在绑定纹理之前先激活纹理单元
     glBindTexture(GL_TEXTURE_2D, m_textures[index]);
     // 为当前绑定的纹理对象设置环绕、过滤方式
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -143,16 +145,15 @@ void GraphicsGLWidget::loadImageTextures(int index, const char* path)
     cv::cvtColor(matBGR, matRGB, cv::COLOR_BGR2RGB);
     cv::Mat matRGBFlip;
     cv::flip(matRGB, matRGBFlip, 0);  // 0表示垂直翻转
+    //cv::imshow("test", matBGR);
+    //glPixelStorei(GL_UNPACK_ALIGNMENT, 1);//强制 1 字节对齐，避免图片大小不是4的倍数时显示异常，非默认4字节对齐可能会影响效率
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, matRGBFlip.cols, matRGBFlip.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, matRGBFlip.data);
+    //glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void GraphicsGLWidget::render()
 {
-    QDateTime currentTime = QDateTime::currentDateTime();
-    int deltms = currentTime.toMSecsSinceEpoch() - m_startTime.toMSecsSinceEpoch();
-    float ts = deltms / float(1000);
-
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -162,25 +163,46 @@ void GraphicsGLWidget::render()
     glBindTexture(GL_TEXTURE_2D, m_textures[1]);
     glUseProgram(m_shaderProgram);
 
+    QDateTime currentTime = QDateTime::currentDateTime();
+    int deltms = currentTime.toMSecsSinceEpoch() - m_startTime.toMSecsSinceEpoch();
+    float ts = deltms / float(1000);
+    //ts = glm::radians(45.0);
+    //ts = glm::sin(ts);
+    
+    // create transformations
     glm::mat4 model = glm::mat4(1.0f);
-    model = glm::rotate(model, ts * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
     glm::mat4 view = glm::mat4(1.0f);
-    // 注意，我们将矩阵向我们要进行移动场景的反方向移动。
-    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
     glm::mat4 projection = glm::mat4(1.0f);
-    projection = glm::perspective(glm::radians(45.0f), screenWidth / screenHeight, 0.1f, 100.0f);
 
-    GLint modelLoc = glGetUniformLocation(m_shaderProgram, "model");
-    GLint viewLoc = glGetUniformLocation(m_shaderProgram, "view");
-    GLint projectionLoc = glGetUniformLocation(m_shaderProgram, "projection");
+    //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
+    model = glm::rotate(model, ts, glm::vec3(1.0f, 1.0f, 0.0f));
+    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+    projection = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+
+    // retrieve the matrix uniform locations
+    unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
+    unsigned int viewLoc = glGetUniformLocation(m_shaderProgram, "view");
+    unsigned int projectionLoc = glGetUniformLocation(m_shaderProgram, "projection");
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &projection[0][0]);
 
     // render container
     glBindVertexArray(m_VAO);
     //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 36);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
 
+    //for (unsigned int i = 0; i < 10; i++)
+    //{
+    //    // calculate the model matrix for each object and pass it to shader before drawing
+    //    glm::mat4 model = glm::mat4(1.0f);
+    //    model = glm::translate(model, cubePositions[i]);
+    //    float angle = 20.0f * i;
+    //    model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+    //    unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
+    //    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+    //    glDrawArrays(GL_TRIANGLES, 0, 36);
+    //}
 
 }
