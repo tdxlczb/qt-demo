@@ -18,6 +18,7 @@ SOURCES += \
     mask_widget.cpp \
     test01_widget.cpp \
     test02_widget.cpp \
+    test03_widget.cpp \
     toast_widget.cpp
 
 HEADERS += \
@@ -29,13 +30,15 @@ HEADERS += \
     mask_widget.h \
     test01_widget.h \
     test02_widget.h \
+    test03_widget.h \
     toast_widget.h
 
 FORMS += \
     main_widget.ui \
     main_window.ui \
     test01_widget.ui \
-    test02_widget.ui
+    test02_widget.ui \
+    test03_widget.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

@@ -7,9 +7,11 @@
 #include <QMouseEvent>
 #include <QLabel>
 #include <QMenu>
+#include <QScreen>
 
 #include "test01_widget.h"
 #include "test02_widget.h"
+#include "test03_widget.h"
 #include "custom_child_widget.h"
 #include "custom_toolbar.h"
 #include "custom_border_widget.h"
@@ -31,18 +33,20 @@ MainWidget::MainWidget(QWidget *parent)
     //CustomToolBar * pToolBar = new CustomToolBar();
     //pToolBar->show();
 
-    Test02Widget* pWidget2 = new Test02Widget();
-    pWidget2->show();
+    //Test02Widget* pWidget2 = new Test02Widget();
+    //pWidget2->show();
+
+    Test03Widget* pWidget3 = new Test03Widget();
+    pWidget3->show();
 
     Test01Widget* pWidget = new Test01Widget();
-    //{
-    //    HWND hwnd = (HWND)pWidget->winId();
-    //    HWND parentHwnd = (HWND)(394884);
-    //    if (!SetParent(hwnd, parentHwnd)) {
-    //        qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
-    //        return;
-    //    }
-    //}
+    {
+        //HWND hwnd = (HWND)pWidget->winId();
+        //HWND parentHwnd = (HWND)(2954348);
+        //if (!SetParent(hwnd, parentHwnd)) {
+        //    qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
+        //}
+    }
     pWidget->move(200, 200);
     pWidget->show();
 
@@ -53,11 +57,10 @@ MainWidget::MainWidget(QWidget *parent)
         HWND parentHwnd = (HWND)pWidget->winId();
         if (!SetParent(hwnd, parentHwnd)) {
             qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
-            return;
         }
     }
     //pChild->move(100, 100);
-    SetWindowPos((HWND)pChild->winId(), HWND_TOP, 100,200,0,0,  SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos((HWND)pChild->winId(), HWND_TOP, 100, 200, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
     //SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     pChild->show();
 
@@ -69,14 +72,15 @@ MainWidget::MainWidget(QWidget *parent)
 
     vBoxLayout->addWidget(button01);
     vBoxLayout->addWidget(button02);
-    connect(button01,&QPushButton::clicked,[this,pWidget](){
+    connect(button01,&QPushButton::clicked,[this,pWidget, pChild](){
         qDebug() << "button01 clicked";
-        pWidget->ShowMask(true);
+        //pWidget->ShowMask(true);
+
     });
 
-    connect(button02,&QPushButton::clicked,[this,pWidget](){
+    connect(button02,&QPushButton::clicked,[this,pWidget, pChild](){
         qDebug() << "button01 clicked";
-        pWidget->ShowMask(false);
+        //pWidget->ShowMask(false);
     });
 }
 

@@ -18,7 +18,7 @@ public:
     ~Test01Widget();
 
     void ShowMask(bool isShow);
-
+    void ShowFullScreen(bool isShow);
 private:
     void SwitchBackground();
 protected:
@@ -34,8 +34,8 @@ protected:
     // void enterEvent(QEnterEvent *event);
     // void leaveEvent(QEvent *event);
     // void paintEvent(QPaintEvent *event);
-    void moveEvent(QMoveEvent *event);
-    void resizeEvent(QResizeEvent *event);
+    void moveEvent(QMoveEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     // void closeEvent(QCloseEvent *event);
     // void contextMenuEvent(QContextMenuEvent *event);
     // void tabletEvent(QTabletEvent *event);
@@ -44,8 +44,8 @@ protected:
     // void dragMoveEvent(QDragMoveEvent *event);
     // void dragLeaveEvent(QDragLeaveEvent *event);
     // void dropEvent(QDropEvent *event);
-    // void showEvent(QShowEvent *event);
-    // void hideEvent(QHideEvent *event);
+     void showEvent(QShowEvent *event) override;
+     void hideEvent(QHideEvent *event) override;
 
 
 

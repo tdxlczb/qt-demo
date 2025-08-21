@@ -1,8 +1,10 @@
 #include "test01_widget.h"
 #include "ui_test01_widget.h"
 #include <QLabel>
+#include <QDebug>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QScreen>
 #include "mask_widget.h"
 #include "custom_child_widget.h"
 
@@ -13,6 +15,8 @@ Test01Widget::Test01Widget(QWidget *parent)
     ui->setupUi(this);
     this->resize(960,540);
     this->setWindowTitle("Test01Widget");
+
+    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
 
     QLabel * bgLabel = new QLabel(this);
     bgLabel->setPixmap(QPixmap(":/res/bg04.jpg"));
@@ -48,6 +52,24 @@ void Test01Widget::ShowMask(bool isShow)
 
     if(m_pMaskWidget && !isShow)
         m_pMaskWidget->hide();
+}
+
+void Test01Widget::ShowFullScreen(bool isShow)
+{
+    if (isShow) {
+        QPoint absolutePos = this->mapToGlobal(QPoint(0, 0));
+        // 获取当前窗口所在的屏幕
+        QScreen* screen = QApplication::screenAt(absolutePos);
+        // 获取目标屏幕的几何信息
+        QRect screenGeometry = screen->geometry();
+        // 将窗口移动到目标屏幕的位置
+        this->move(screenGeometry.topLeft());
+        this->showFullScreen();                 // 全屏显示
+        this->activateWindow();                 // 确保窗口激活
+    }
+    else {
+        this->showNormal();
+    }
 }
 
 void Test01Widget::SwitchBackground()
@@ -91,4 +113,14 @@ void Test01Widget::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
     if(m_pMaskWidget)
         m_pMaskWidget->setGeometry(this->geometry());
+}
+
+void Test01Widget::showEvent(QShowEvent* event)
+{
+    qDebug() << "show";
+}
+
+void Test01Widget::hideEvent(QHideEvent* event)
+{
+    qDebug() << "hide";
 }
