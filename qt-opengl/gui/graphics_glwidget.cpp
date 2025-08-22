@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
 #include "core/shaders_define.h"
 #include "core/vertices_define.h"
 
@@ -39,8 +40,8 @@ void GraphicsGLWidget::initializeGL()
 
 void GraphicsGLWidget::resizeGL(int w, int h)
 {
-    screenWidth = w;
-    screenHeight = h;
+    m_screenWidth = w;
+    m_screenHeight = h;
     glViewport(0, 0, w, h);
 }
 
@@ -99,27 +100,51 @@ void GraphicsGLWidget::initTextures()
 {
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
+    //m_customGraphics = CustomGraphics::Cylinder;
+    if (m_customGraphics == CustomGraphics::None) {
+        GLuint VBO;
+        glGenBuffers(1, &VBO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    GLuint VBO;
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        // position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        // texture coord attribute
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+
+        m_customVerticesCount = 36;
+    }
+    else {
+        std::vector<VertexAL> vertices = CreateCylinderVertices(72, 0.5f, 1.0f);
+        GLuint VBO;
+        glGenBuffers(1, &VBO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(VertexAL), &vertices[0], GL_STATIC_DRAW);
+
+        // 位置属性
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)0);
+        // 法线属性
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, normal));
+        // 纹理坐标属性
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, texcoord));
+
+        m_customVerticesCount = vertices.size();
+    }
 
     //GLuint EBO;
     //glGenBuffers(1, &EBO);
     //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    ////glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
     glGenTextures(2, m_textures);
 
-    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\container0.jpg)");
+    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img1.jpg)");
     loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\awesomeface.png)");
 
     glUseProgram(m_shaderProgram);
@@ -165,9 +190,9 @@ void GraphicsGLWidget::render()
 
     QDateTime currentTime = QDateTime::currentDateTime();
     int deltms = currentTime.toMSecsSinceEpoch() - m_startTime.toMSecsSinceEpoch();
-    float ts = deltms / float(1000);
-    //ts = glm::radians(45.0);
-    //ts = glm::sin(ts);
+    float timeSeconds = deltms / float(1000);
+    //timeSeconds = glm::radians(30.0);
+    //timeSeconds = glm::sin(timeSeconds);
     
     // create transformations
     glm::mat4 model = glm::mat4(1.0f);
@@ -175,9 +200,10 @@ void GraphicsGLWidget::render()
     glm::mat4 projection = glm::mat4(1.0f);
 
     //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
-    model = glm::rotate(model, ts, glm::vec3(1.0f, 1.0f, 0.0f));
-    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-    projection = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+    model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
+    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
+    //projection = glm::ortho(-2.0f, 2.0f, -2.0f, 2.0f, 1.0f, 4.0f);
+    projection = glm::perspective(glm::radians(45.0f), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
 
     // retrieve the matrix uniform locations
     unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
@@ -189,8 +215,8 @@ void GraphicsGLWidget::render()
 
     // render container
     glBindVertexArray(m_VAO);
-    //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+    glDrawArrays(GL_TRIANGLES, 0, m_customVerticesCount);
 
     //for (unsigned int i = 0; i < 10; i++)
     //{
@@ -205,4 +231,28 @@ void GraphicsGLWidget::render()
     //    glDrawArrays(GL_TRIANGLES, 0, 36);
     //}
 
+    //glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+    //float radius = 10.0f;
+    //float camX = static_cast<float>(sin(timeSeconds) * radius);
+    //float camZ = static_cast<float>(cos(timeSeconds) * radius);
+    //view = glm::lookAt(glm::vec3(camX, 0.0f, camZ), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    ////view = glm::translate(view, glm::vec3(0.0f, 0.0f, -10.0f));
+    //glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "view"), 1, GL_FALSE, &view[0][0]);
+
+    //glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+    //glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "projection"), 1, GL_FALSE, &projection[0][0]);
+
+    //// render boxes
+    //glBindVertexArray(m_VAO);
+    //for (unsigned int i = 0; i < 3; i++)
+    //{
+    //    // calculate the model matrix for each object and pass it to shader before drawing
+    //    glm::mat4 model = glm::mat4(1.0f);
+    //    model = glm::translate(model, cubePositions[i]);
+    //    float angle = 20.0f * i;
+    //    model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 1.0f, 1.0f));
+    //    glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+    //    glDrawArrays(GL_TRIANGLES, 0, 36);
+    //}
 }
