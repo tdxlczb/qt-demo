@@ -2,6 +2,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QDateTime>
+#include <QMouseEvent>
 #include <opencv2/opencv.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -9,6 +10,7 @@
 
 #include "core/shaders_define.h"
 #include "core/vertices_define.h"
+
 
 GraphicsGLWidget::GraphicsGLWidget(QWidget* parent)
     : QOpenGLWidget(parent)
@@ -32,7 +34,7 @@ void GraphicsGLWidget::initializeGL()
 
     m_pUpdateTimer = new QTimer(this);
     connect(m_pUpdateTimer, &QTimer::timeout, this, [this]() {
-        update();
+        //update();
         });
     m_pUpdateTimer->start(10);
 
@@ -49,6 +51,63 @@ void GraphicsGLWidget::paintGL()
 {
     //qDebug() << "paintGL";
     render();
+}
+
+void GraphicsGLWidget::mousePressEvent(QMouseEvent* event)
+{
+    QWidget::mousePressEvent(event);
+    if (event->button() == Qt::MouseButton::LeftButton) {
+        m_pointPress = event->pos();
+        m_pointMove = event->pos();
+        update();
+    }
+
+}
+
+void GraphicsGLWidget::mouseReleaseEvent(QMouseEvent* event)
+{
+    QWidget::mouseReleaseEvent(event);
+    if (event->button() == Qt::MouseButton::LeftButton) {
+        m_pointRelease = event->pos();
+        QPoint mouseMove = QPoint(m_pointRelease.x() - m_pointPress.x(), m_pointRelease.y() - m_pointPress.y());
+        qDebug() << "mouseMove" << mouseMove;
+        if (mouseMove.x() != 0 || mouseMove.y() != 0) {
+            glm::vec2 rotateVec = glm::vec2(mouseMove.y(), mouseMove.x());
+            float angel = (float)glm::length(rotateVec) / 100;
+            m_lastRotateMat = glm::rotate(glm::mat4(1.0f), angel, glm::vec3(rotateVec, 0.0f)) * m_lastRotateMat;
+            m_curRotateMat = glm::mat4(1.0f);
+        }
+        update();
+    }
+
+}
+
+void GraphicsGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+void GraphicsGLWidget::mouseMoveEvent(QMouseEvent* event)
+{
+    QWidget::mouseMoveEvent(event);
+    if ((event->buttons() & Qt::MouseButton::LeftButton) == Qt::MouseButton::LeftButton) {
+        m_pointMove = event->pos();
+
+        QPoint mouseMove = QPoint(m_pointMove.x() - m_pointPress.x(), m_pointMove.y() - m_pointPress.y());
+        //qDebug() << "mouseMove" << mouseMove;
+        if (mouseMove.x() != 0 || mouseMove.y() != 0) {
+            glm::vec2 rotateVec = glm::vec2(mouseMove.y(), mouseMove.x());
+            float angel = (float)glm::length(rotateVec) / 100;
+            m_curRotateMat = glm::rotate(glm::mat4(1.0f), angel, glm::vec3(rotateVec, 0.0f));
+        }
+        update();
+    }
+
+}
+
+void GraphicsGLWidget::wheelEvent(QWheelEvent* event)
+{
+    QWidget::wheelEvent(event);
 }
 
 void GraphicsGLWidget::initShaders()
@@ -100,7 +159,7 @@ void GraphicsGLWidget::initTextures()
 {
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
-    //m_customGraphics = CustomGraphics::Cylinder;
+    m_customGraphics = CustomGraphics::Cylinder;
     if (m_customGraphics == CustomGraphics::None) {
         GLuint VBO;
         glGenBuffers(1, &VBO);
@@ -199,9 +258,18 @@ void GraphicsGLWidget::render()
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 projection = glm::mat4(1.0f);
 
+    //glm::vec3 worldRotationAxis = glm::normalize(glm::vec3(1.0f, 0.0f, 0.0f));//转换为单位向量
+    //glm::mat4 worldRotation1 = glm::rotate(glm::mat4(1.0f), glm::radians(60.0f), glm::vec3(2.0f, 1.0f, 0.0f));
+    //glm::mat4 worldRotation2 = glm::rotate(glm::mat4(1.0f), glm::radians(120.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    //glm::mat4 worldRotation3 = glm::rotate(glm::mat4(1.0f), timeSeconds, glm::vec3(0.0f, 1.0f, 0.0f));
+
+    model = m_curRotateMat * m_lastRotateMat * model;
     //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
-    model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
-    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
+    //model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
+    
+    view = glm::lookAt(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    //view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
+    
     //projection = glm::ortho(-2.0f, 2.0f, -2.0f, 2.0f, 1.0f, 4.0f);
     projection = glm::perspective(glm::radians(45.0f), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
 
@@ -218,18 +286,6 @@ void GraphicsGLWidget::render()
     //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
     glDrawArrays(GL_TRIANGLES, 0, m_customVerticesCount);
 
-    //for (unsigned int i = 0; i < 10; i++)
-    //{
-    //    // calculate the model matrix for each object and pass it to shader before drawing
-    //    glm::mat4 model = glm::mat4(1.0f);
-    //    model = glm::translate(model, cubePositions[i]);
-    //    float angle = 20.0f * i;
-    //    model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-    //    unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
-    //    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-    //    glDrawArrays(GL_TRIANGLES, 0, 36);
-    //}
 
     //glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
     //float radius = 10.0f;
@@ -239,7 +295,7 @@ void GraphicsGLWidget::render()
     ////view = glm::translate(view, glm::vec3(0.0f, 0.0f, -10.0f));
     //glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "view"), 1, GL_FALSE, &view[0][0]);
 
-    //glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+    //glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
     //glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "projection"), 1, GL_FALSE, &projection[0][0]);
 
     //// render boxes
