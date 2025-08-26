@@ -4,6 +4,7 @@
 #include "gui/glwidget_old.h"
 #include "gui/graphics_glwidget.h"
 #include "gui/play_glwidget.h"
+#include "gui/video_glwidget.h"
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -16,14 +17,17 @@ MainWindow::MainWindow(QWidget *parent)
     //m_pGLWidget = new GLWidget();
     //m_pGLWidget->show();
 
-    m_pGraphicsGLWidget = new GraphicsGLWidget();
-    m_pGraphicsGLWidget->resize(800, 800);
-    m_pGraphicsGLWidget->show();
+    //m_pGraphicsGLWidget = new GraphicsGLWidget();
+    //m_pGraphicsGLWidget->resize(800, 800);
+    //m_pGraphicsGLWidget->show();
 
     //m_pPlayGLWidget = new PlayGLWidget();
     //m_pPlayGLWidget->PlayOneFrame();
     //m_pPlayGLWidget->show();
 
+    m_pVideoGLWidget = new VideoGLWidget();
+    m_pVideoGLWidget->resize(800, 800);
+    m_pVideoGLWidget->show();
 }
 
 MainWindow::~MainWindow()

@@ -10,6 +10,7 @@ QT_END_NAMESPACE
 class GLWidget;
 class GraphicsGLWidget;
 class PlayGLWidget;
+class VideoGLWidget;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -24,5 +25,6 @@ private:
     GLWidget* m_pGLWidget = nullptr;
     GraphicsGLWidget* m_pGraphicsGLWidget = nullptr;
     PlayGLWidget* m_pPlayGLWidget = nullptr;
+    VideoGLWidget* m_pVideoGLWidget = nullptr;
 };
 #endif // MAINWINDOW_H
