@@ -1,5 +1,5 @@
-#ifndef VIDEO_GLWIDGET_H
-#define VIDEO_GLWIDGET_H
+#ifndef PANORAMIC_VIEW_GLWIDGET_H
+#define PANORAMIC_VIEW_GLWIDGET_H
 
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
@@ -9,14 +9,14 @@
 #include <glm/glm.hpp>
 
 /*
-* 视频播放渲染
+* QOpenGLExtraFunctions包含了QOpenGLFunctions
 */
-class VideoGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions
+class PanoramicViewGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions
 {
     Q_OBJECT
 public:
-    explicit VideoGLWidget(QWidget* parent = nullptr);
-    ~VideoGLWidget();
+    explicit PanoramicViewGLWidget(QWidget* parent = nullptr);
+    ~PanoramicViewGLWidget();
 
 protected:
     void initializeGL() override;
@@ -39,15 +39,16 @@ private:
     GLuint m_VAO = 0;
     GLuint m_textures[16];
 
+    int m_customVerticesCount = 0;
     float m_screenWidth = 0;
     float m_screenHeight = 0;
-    glm::mat4 m_lastTranslateMat = glm::mat4(1.0f);
-    glm::mat4 m_curTranslateMat = glm::mat4(1.0f);
-    glm::mat4 m_curScaleMat = glm::mat4(1.0f);
+    glm::mat4 m_lastRotateMat = glm::mat4(1.0f);
+    glm::mat4 m_curRotateMat = glm::mat4(1.0f);
 
     QPoint m_pointPress = { 0,0 };//鼠标按钮的坐标
     QPoint m_pointMove = { 0,0 };//鼠标移动的坐标
     QPoint m_pointRelease = { 0,0 };//鼠标弹起的坐标
-    bool m_isDraging = false;
+    QDateTime m_startTime;
+    QTimer* m_pUpdateTimer = nullptr;
 };
-#endif // VIDEO_GLWIDGET_H
+#endif // PANORAMIC_VIEW_GLWIDGET_H

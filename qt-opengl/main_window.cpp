@@ -5,6 +5,7 @@
 #include "gui/graphics_glwidget.h"
 #include "gui/play_glwidget.h"
 #include "gui/video_glwidget.h"
+#include "gui/panoramic_view_glwidget.h"
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -13,21 +14,25 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    //GLWidget* pGLWidget = new GLWidget();
+    //pGLWidget->show();
 
-    //m_pGLWidget = new GLWidget();
-    //m_pGLWidget->show();
+    //GraphicsGLWidget* pGraphicsGLWidget = new GraphicsGLWidget();
+    //pGraphicsGLWidget->resize(800, 800);
+    //pGraphicsGLWidget->show();
 
-    //m_pGraphicsGLWidget = new GraphicsGLWidget();
-    //m_pGraphicsGLWidget->resize(800, 800);
-    //m_pGraphicsGLWidget->show();
+    //PlayGLWidget* pPlayGLWidget = new PlayGLWidget();
+    //pPlayGLWidget->PlayOneFrame();
+    //pPlayGLWidget->show();
 
-    //m_pPlayGLWidget = new PlayGLWidget();
-    //m_pPlayGLWidget->PlayOneFrame();
-    //m_pPlayGLWidget->show();
+    //VideoGLWidget* pVideoGLWidget = new VideoGLWidget();
+    //pVideoGLWidget->resize(800, 800);
+    //pVideoGLWidget->show();
 
-    m_pVideoGLWidget = new VideoGLWidget();
-    m_pVideoGLWidget->resize(800, 800);
-    m_pVideoGLWidget->show();
+    PanoramicViewGLWidget* pPanoramicViewGLWidget = new PanoramicViewGLWidget();
+    pPanoramicViewGLWidget->resize(800, 800);
+    pPanoramicViewGLWidget->show();
+
 }
 
 MainWindow::~MainWindow()

@@ -1,4 +1,4 @@
-#include "graphics_glwidget.h"
+#include "panoramic_view_glwidget.h"
 #include <QDebug>
 #include <QFile>
 #include <QDateTime>
@@ -8,20 +8,115 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "core/shaders_define.h"
-#include "core/vertices_define.h"
+namespace {
 
+const char* vertexShaderSource = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
 
-GraphicsGLWidget::GraphicsGLWidget(QWidget* parent)
+out vec2 TexCoord;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+	gl_Position = projection * view * model * vec4(aPos, 1.0);
+	TexCoord = vec2(aTexCoord.x, aTexCoord.y);
+}
+)";
+
+const char* fragmentShaderSource = R"(
+#version 330 core
+out vec4 FragColor;
+
+in vec2 TexCoord;
+
+// texture samplers
+uniform sampler2D texture1;
+
+void main()
+{
+	FragColor = texture(texture1, TexCoord);
+}
+)";
+/*
+* 立方体每个面按照以下顺序创建顶点
+*        6---4
+*        | t |
+*    6---0---2---4---6
+*    | l | f | r | ba|
+*    7---1---3---5---7
+*        | bo|
+*        7---5
+*/
+
+// 立方体顶点数据
+float vertices[] = {
+    // 位置               // 纹理坐标
+    // front
+    -0.5f,  0.5f,  0.5f,  0.0f, 1.0f, //0
+    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //1
+     0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //2
+    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //1
+     0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //2
+     0.5f, -0.5f,  0.5f,  1.0f, 0.0f, //3
+
+    //back
+     0.5f,  0.5f, -0.5f,  0.0f, 1.0f, //4
+     0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //5
+    -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //6
+     0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //5
+    -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //6
+    -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, //7
+
+    //left
+    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, //6
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
+    -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //0
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
+    -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //0
+    -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, //1
+
+    //right
+     0.5f,  0.5f,  0.5f,  0.0f, 1.0f, //2
+     0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //3
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
+     0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //3
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
+     0.5f, -0.5f, -0.5f,  1.0f, 0.0f, //5
+    
+    //top
+    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, //6
+    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, //0
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
+    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, //0
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
+     0.5f,  0.5f,  0.5f,  1.0f, 0.0f, //2
+    
+    //bottom
+    -0.5f, -0.5f,  0.5f,  0.0f, 1.0f, //1
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
+     0.5f, -0.5f,  0.5f,  1.0f, 1.0f, //3
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
+     0.5f, -0.5f,  0.5f,  1.0f, 1.0f, //3
+     0.5f, -0.5f, -0.5f,  1.0f, 0.0f  //5
+};
+
+}
+
+PanoramicViewGLWidget::PanoramicViewGLWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
 }
 
-GraphicsGLWidget::~GraphicsGLWidget()
+PanoramicViewGLWidget::~PanoramicViewGLWidget()
 {
 }
 
-void GraphicsGLWidget::initializeGL()
+void PanoramicViewGLWidget::initializeGL()
 {
     qDebug() << "initializeGL";
     initializeOpenGLFunctions();
@@ -40,20 +135,20 @@ void GraphicsGLWidget::initializeGL()
 
 }
 
-void GraphicsGLWidget::resizeGL(int w, int h)
+void PanoramicViewGLWidget::resizeGL(int w, int h)
 {
     m_screenWidth = w;
     m_screenHeight = h;
     glViewport(0, 0, w, h);
 }
 
-void GraphicsGLWidget::paintGL()
+void PanoramicViewGLWidget::paintGL()
 {
     //qDebug() << "paintGL";
     render();
 }
 
-void GraphicsGLWidget::mousePressEvent(QMouseEvent* event)
+void PanoramicViewGLWidget::mousePressEvent(QMouseEvent* event)
 {
     QWidget::mousePressEvent(event);
     if (event->button() == Qt::MouseButton::LeftButton) {
@@ -64,7 +159,7 @@ void GraphicsGLWidget::mousePressEvent(QMouseEvent* event)
 
 }
 
-void GraphicsGLWidget::mouseReleaseEvent(QMouseEvent* event)
+void PanoramicViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
 {
     QWidget::mouseReleaseEvent(event);
     if (event->button() == Qt::MouseButton::LeftButton) {
@@ -82,12 +177,12 @@ void GraphicsGLWidget::mouseReleaseEvent(QMouseEvent* event)
 
 }
 
-void GraphicsGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
+void PanoramicViewGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
 {
     QWidget::mouseDoubleClickEvent(event);
 }
 
-void GraphicsGLWidget::mouseMoveEvent(QMouseEvent* event)
+void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
 {
     QWidget::mouseMoveEvent(event);
     if ((event->buttons() & Qt::MouseButton::LeftButton) == Qt::MouseButton::LeftButton) {
@@ -105,12 +200,12 @@ void GraphicsGLWidget::mouseMoveEvent(QMouseEvent* event)
 
 }
 
-void GraphicsGLWidget::wheelEvent(QWheelEvent* event)
+void PanoramicViewGLWidget::wheelEvent(QWheelEvent* event)
 {
     QWidget::wheelEvent(event);
 }
 
-void GraphicsGLWidget::initShaders()
+void PanoramicViewGLWidget::initShaders()
 {
     // build and compile our shader program
     // ------------------------------------
@@ -155,65 +250,38 @@ void GraphicsGLWidget::initShaders()
     glUseProgram(m_shaderProgram);
 }
 
-void GraphicsGLWidget::initTextures()
+void PanoramicViewGLWidget::initTextures()
 {
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
-    //m_customGraphics = CustomGraphics::Cylinder;
-    if (m_customGraphics == CustomGraphics::None) {
-        GLuint VBO;
-        glGenBuffers(1, &VBO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-        // position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-        // texture coord attribute
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(2);
+    GLuint VBO;
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-        m_customVerticesCount = 36;
-    }
-    else {
-        std::vector<VertexAL> vertices = CreateCylinderVertices(72, 0.5f, 1.0f);
-        GLuint VBO;
-        glGenBuffers(1, &VBO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(VertexAL), &vertices[0], GL_STATIC_DRAW);
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // texture coord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
-        // 位置属性
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)0);
-        // 法线属性
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, normal));
-        // 纹理坐标属性
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, texcoord));
+    m_customVerticesCount = 36;
 
-        m_customVerticesCount = vertices.size();
-    }
+    glGenTextures(6, m_textures);
 
-    //GLuint EBO;
-    //glGenBuffers(1, &EBO);
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    ////glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
-
-    glGenTextures(2, m_textures);
-
-    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img1.jpg)");
-    loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\awesomeface.png)");
-
-    glUseProgram(m_shaderProgram);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "texture1"), 0);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "texture2"), 1);
+    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\front.jpg)");
+    loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\back.jpg)");
+    loadImageTextures(2, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\left.jpg)");
+    loadImageTextures(3, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\right.jpg)");
+    loadImageTextures(4, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\top.jpg)");
+    loadImageTextures(5, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\bottom.jpg)");
 
     m_startTime = QDateTime::currentDateTime();
 }
 
-void GraphicsGLWidget::loadImageTextures(int index, const char* path)
+void PanoramicViewGLWidget::loadImageTextures(int index, const char* path)
 {
     //glActiveTexture(GL_TEXTURE0 + index); // 在绑定纹理之前先激活纹理单元
     glBindTexture(GL_TEXTURE_2D, m_textures[index]);
@@ -236,15 +304,13 @@ void GraphicsGLWidget::loadImageTextures(int index, const char* path)
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
-void GraphicsGLWidget::render()
+void PanoramicViewGLWidget::render()
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+    //glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, m_textures[0]);
     glUseProgram(m_shaderProgram);
 
     QDateTime currentTime = QDateTime::currentDateTime();
@@ -267,25 +333,41 @@ void GraphicsGLWidget::render()
     //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
     //model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
     
-    view = glm::lookAt(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    view = glm::lookAt(glm::vec3(5.0f, 5.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     //view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
     
     //projection = glm::ortho(-2.0f, 2.0f, -2.0f, 2.0f, 1.0f, 4.0f);
     projection = glm::perspective(glm::radians(45.0f), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
 
     // retrieve the matrix uniform locations
-    unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
+    //unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
     unsigned int viewLoc = glGetUniformLocation(m_shaderProgram, "view");
     unsigned int projectionLoc = glGetUniformLocation(m_shaderProgram, "projection");
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    //glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
     glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &projection[0][0]);
 
     // render container
     glBindVertexArray(m_VAO);
     //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-    glDrawArrays(GL_TRIANGLES, 0, m_customVerticesCount);
+    //glDrawArrays(GL_TRIANGLES, 0, m_customVerticesCount);
 
+
+    // 渲染立方体的每个面
+    for (unsigned int i = 0; i < 6; i++)
+    {
+        // 为每个面创建模型矩阵（这里使用单位矩阵，但你可以为每个面添加不同的变换）
+        unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+
+        // 绑定对应的纹理
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        glUniform1i(glGetUniformLocation(m_shaderProgram, "texture1"), i);
+
+        // 绘制当前面（每个面6个顶点）
+        glDrawArrays(GL_TRIANGLES, i * 6, 6);
+    }
 
     //glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
     //float radius = 10.0f;

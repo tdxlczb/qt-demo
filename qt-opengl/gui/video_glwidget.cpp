@@ -10,7 +10,7 @@
 
 namespace {
 
-    const char* videoVertexShaderSource = R"(
+    const char* vertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
@@ -26,7 +26,7 @@ void main()
 }
 )";
 
-    const char* videoFragmentShaderSource = R"(
+    const char* fragmentShaderSource = R"(
 #version 330 core
 out vec4 FragColor;
 
@@ -41,7 +41,7 @@ void main()
 }
 )";
 
-    float videoVertices[] = {
+    float vertices[] = {
          1.0f,  1.0f, 0.0f,  1.0f, 1.0f, // top right
          1.0f, -1.0f, 0.0f,  1.0f, 0.0f, // bottom right
         -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // top left 
@@ -85,13 +85,6 @@ void VideoGLWidget::initializeGL()
 
     initShaders();
     initTextures();
-
-    m_pUpdateTimer = new QTimer(this);
-    connect(m_pUpdateTimer, &QTimer::timeout, this, [this]() {
-        //update();
-        });
-    m_pUpdateTimer->start(10);
-
 }
 
 void VideoGLWidget::resizeGL(int w, int h)
@@ -126,7 +119,8 @@ void VideoGLWidget::mouseReleaseEvent(QMouseEvent* event)
         m_pointRelease = event->pos();
         m_isDraging = false;
         QPoint mouseMove = QPoint(m_pointRelease.x() - m_pointPress.x(), m_pointRelease.y() - m_pointPress.y());
-        m_lastTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight, 0.0f)) * m_lastTranslateMat;
+        glm::vec2 vecMove = glm::vec2(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight);
+        m_lastTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f)) * m_lastTranslateMat;
         m_curTranslateMat = glm::mat4(1.0f);
         update();
     }
@@ -145,7 +139,8 @@ void VideoGLWidget::mouseMoveEvent(QMouseEvent* event)
         m_pointMove = event->pos();
         if (m_isDraging) {
             QPoint mouseMove = QPoint(m_pointMove.x() - m_pointPress.x(), m_pointMove.y() - m_pointPress.y());
-            m_curTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight, 0.0f));
+            glm::vec2 vecMove = glm::vec2(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight);
+            m_curTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f));
             update();
         }
     }
@@ -176,7 +171,7 @@ void VideoGLWidget::wheelEvent(QWheelEvent* event)
         QPoint mouseMove = QPoint(position.x() - center.x(), position.y() - center.y());
         glm::vec2 vecMove = glm::vec2(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight);
         qDebug() << "mouseMove" << mouseMove << ", vecMove:" << vecMove.x << vecMove.y;
-
+        //这里以指定点进行缩放，移动的向量要以屏幕坐标系为基准，移动到屏幕中心点即(0.0f,0.0f)生成的向量，而不是已模型坐标系为基准
         glm::mat4 transformMats0 = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f)) * glm::inverse(m_lastTranslateMat);
         glm::mat4 transformMats1 = glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
         glm::mat4 transformMats2 = glm::translate(glm::mat4(1.0f), glm::vec3(-vecMove, 0.0f)) * m_lastTranslateMat;
@@ -197,7 +192,7 @@ void VideoGLWidget::initShaders()
     // ------------------------------------
     // vertex shader
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &videoVertexShaderSource, NULL);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
     glCompileShader(vertexShader);
     // check for shader compile errors
     int success;
@@ -210,7 +205,7 @@ void VideoGLWidget::initShaders()
     }
     // fragment shader
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &videoFragmentShaderSource, NULL);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
     glCompileShader(fragmentShader);
     // check for shader compile errors
     glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
@@ -243,7 +238,7 @@ void VideoGLWidget::initTextures()
     GLuint VBO;
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(videoVertices), videoVertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
@@ -258,8 +253,6 @@ void VideoGLWidget::initTextures()
 
     glUseProgram(m_shaderProgram);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "texture"), 0);
-
-    m_startTime = QDateTime::currentDateTime();
 }
 
 void VideoGLWidget::loadImageTextures(int index, const char* path)
@@ -293,17 +286,38 @@ void VideoGLWidget::render()
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_textures[0]);
     glUseProgram(m_shaderProgram);
-
-    QDateTime currentTime = QDateTime::currentDateTime();
-    int deltms = currentTime.toMSecsSinceEpoch() - m_startTime.toMSecsSinceEpoch();
-    float timeSeconds = deltms / float(1000);
-    //timeSeconds = glm::radians(30.0);
-    //timeSeconds = glm::sin(timeSeconds);
     
     // create transformations
     glm::mat4 transform = glm::mat4(1.0f);
-    //transform = transform * m_curScaleMat * m_lastTranslateMat * m_curTranslateMat;
+    //glm::mat4 scaleMat = glm::mat4(1.0f);
+    //glm::mat4 translateMat = glm::mat4(1.0f);
+    //{
+    //    //这里以指定点进行缩放，移动的向量要以屏幕坐标系为基准，移动到屏幕中心点即(0.0f,0.0f)生成的向量，而不是已模型坐标系为基准
+    //    glm::vec2 vecMove = glm::vec2(-0.5f, 0.0f);//鼠标中心为(-0.5f,0.0f)则移动(-0.5f，0.0f)
+    //    float scale = 0.5f;//缩放为0.5倍
+    //    glm::mat4 transformMats0 = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f));
+    //    glm::mat4 transformMats1 = glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
+    //    glm::mat4 transformMats2 = glm::translate(glm::mat4(1.0f), glm::vec3(-vecMove, 0.0f));
+
+    //    scaleMat = transformMats0 * transformMats1 * transformMats2;
+    //    translateMat = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    //}
+    ////transform = translateMat * transform * scaleMat;//第一轮操作显示
+    //{
+    //    //这里以指定点进行缩放，移动的向量要以屏幕坐标系为基准，移动到屏幕中心点即(0.0f,0.0f)生成的向量，而不是已模型坐标系为基准
+    //    glm::vec2 vecMove = glm::vec2(0.5f, 0.0f);//鼠标中心为(0.5f,0.0f)则移动(0.5f，0.0f)
+    //    float scale = 0.5f;//缩放为0.5倍
+    //    glm::mat4 transformMats0 = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f)) * glm::inverse(translateMat);
+    //    glm::mat4 transformMats1 = glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
+    //    glm::mat4 transformMats2 = glm::translate(glm::mat4(1.0f), glm::vec3(-vecMove, 0.0f)) * translateMat;
+
+    //    scaleMat = transformMats0 * transformMats1 * transformMats2 * scaleMat;
+    //    translateMat = glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, 0.0f, 0.0f)) * translateMat;
+    //}
+    //transform = translateMat * transform *  scaleMat;//第二轮操作
+
     transform = m_lastTranslateMat * m_curTranslateMat * transform * m_curScaleMat;
+    
     // retrieve the matrix uniform locations
     unsigned int transformLoc = glGetUniformLocation(m_shaderProgram, "transform");
     glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
