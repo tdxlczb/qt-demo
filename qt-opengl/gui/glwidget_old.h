@@ -1,5 +1,5 @@
-#ifndef GLWIDGET_H
-#define GLWIDGET_H
+#ifndef GLWIDGET_OLD_H
+#define GLWIDGET_OLD_H
 
 
 /*
@@ -8,13 +8,13 @@
 
 #include <QGLWidget>
 
-class GLWidget : public QGLWidget
+class GLWidgetOld : public QGLWidget
 {
     Q_OBJECT
 
 public:
-    GLWidget(QWidget* parent = 0);
-    ~GLWidget();
+    GLWidgetOld(QWidget* parent = 0);
+    ~GLWidgetOld();
 
 protected:
     void initializeGL() Q_DECL_OVERRIDE;
@@ -65,4 +65,4 @@ private:
     GLuint texture[2];
 
 };
-#endif // GLWIDGET_H
+#endif // GLWIDGET_OLD_H

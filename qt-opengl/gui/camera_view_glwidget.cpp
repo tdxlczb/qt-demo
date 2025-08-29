@@ -1,4 +1,4 @@
-#include "panoramic_view_glwidget.h"
+#include "camera_view_glwidget.h"
 #include <QDebug>
 #include <QFile>
 #include <QDateTime>
@@ -11,65 +11,16 @@
 #include "core/shaders_define.h"
 #include "core/vertices_define.h"
 
-namespace {
-
-float skyboxVertices[] = {
-    // positions          
-    -1.0f,  1.0f, -1.0f,
-    -1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
-
-    -1.0f, -1.0f,  1.0f,
-    -1.0f, -1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f,  1.0f,
-    -1.0f, -1.0f,  1.0f,
-
-     1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-
-    -1.0f, -1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,
-    -1.0f, -1.0f,  1.0f,
-
-    -1.0f,  1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,
-    -1.0f,  1.0f, -1.0f,
-
-    -1.0f, -1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f
-};
-
-}
-
-PanoramicViewGLWidget::PanoramicViewGLWidget(QWidget* parent)
+CameraViewGLWidget::CameraViewGLWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
 }
 
-PanoramicViewGLWidget::~PanoramicViewGLWidget()
+CameraViewGLWidget::~CameraViewGLWidget()
 {
 }
 
-void PanoramicViewGLWidget::initializeGL()
+void CameraViewGLWidget::initializeGL()
 {
     qDebug() << "initializeGL";
     initializeOpenGLFunctions();
@@ -77,7 +28,7 @@ void PanoramicViewGLWidget::initializeGL()
 
     //glDepthFunc(GL_LESS);
 
-    initShaders();
+    initShaders(vertexShaderSource, fragmentShaderSource);
     initTextures();
 
     m_pUpdateTimer = new QTimer(this);
@@ -88,20 +39,21 @@ void PanoramicViewGLWidget::initializeGL()
 
 }
 
-void PanoramicViewGLWidget::resizeGL(int w, int h)
+void CameraViewGLWidget::resizeGL(int w, int h)
 {
+    qDebug() << "resizeGL";
     m_screenWidth = w;
     m_screenHeight = h;
     glViewport(0, 0, w, h);
 }
 
-void PanoramicViewGLWidget::paintGL()
+void CameraViewGLWidget::paintGL()
 {
     //qDebug() << "paintGL";
     render();
 }
 
-void PanoramicViewGLWidget::mousePressEvent(QMouseEvent* event)
+void CameraViewGLWidget::mousePressEvent(QMouseEvent* event)
 {
     QWidget::mousePressEvent(event);
     if (event->button() == Qt::MouseButton::LeftButton) {
@@ -112,7 +64,7 @@ void PanoramicViewGLWidget::mousePressEvent(QMouseEvent* event)
 
 }
 
-void PanoramicViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
+void CameraViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
 {
     QWidget::mouseReleaseEvent(event);
     if (event->button() == Qt::MouseButton::LeftButton) {
@@ -139,12 +91,12 @@ void PanoramicViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
 
 }
 
-void PanoramicViewGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
+void CameraViewGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
 {
     QWidget::mouseDoubleClickEvent(event);
 }
 
-void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
+void CameraViewGLWidget::mouseMoveEvent(QMouseEvent* event)
 {
     QWidget::mouseMoveEvent(event);
     if ((event->buttons() & Qt::MouseButton::LeftButton) == Qt::MouseButton::LeftButton) {
@@ -178,7 +130,7 @@ void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
 
 }
 
-void PanoramicViewGLWidget::wheelEvent(QWheelEvent* event)
+void CameraViewGLWidget::wheelEvent(QWheelEvent* event)
 {
     QWidget::wheelEvent(event);
         // 获取滚轮滚动的角度差（通常120度为一个"刻度"）
@@ -210,58 +162,90 @@ void PanoramicViewGLWidget::wheelEvent(QWheelEvent* event)
     }
 }
 
-void PanoramicViewGLWidget::initShaders()
+void CameraViewGLWidget::initShaders(const char* vs, const char* fs)
 {
-    m_pShader = new Shader();
-    m_pShader->loadCode(vertexShaderSource, fragmentShaderSource);
+    // build and compile our shader program
+    // ------------------------------------
+    // vertex shader
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vs, NULL);
+    glCompileShader(vertexShader);
+    // check for shader compile errors
+    int success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        qDebug() << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog;
+    }
+    // fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fs, NULL);
+    glCompileShader(fragmentShader);
+    // check for shader compile errors
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+        qDebug() << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog;
+    }
+    // link shaders
+    m_shaderProgram = glCreateProgram();
+    glAttachShader(m_shaderProgram, vertexShader);
+    glAttachShader(m_shaderProgram, fragmentShader);
+    glLinkProgram(m_shaderProgram);
+    // check for linking errors
+    glGetProgramiv(m_shaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(m_shaderProgram, 512, NULL, infoLog);
+        qDebug() << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog;
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
 
-    m_pSkyboxShader = new Shader();
-    m_pSkyboxShader->loadCode(skyboxVS, skyboxFS);
+    glUseProgram(m_shaderProgram);
 }
 
-void PanoramicViewGLWidget::initTextures()
+void CameraViewGLWidget::initTextures()
 {
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
-    GLuint VBO = 0;
+
+    GLuint VBO;
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+
+    // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    // texture coord attribute
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    glGenVertexArrays(1, &m_skyboxVAO);
-    glBindVertexArray(m_skyboxVAO);
-    GLuint skyboxVBO = 0;
-    glGenBuffers(1, &skyboxVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    m_customVerticesCount = 36;
 
+    glGenTextures(6, m_textures);
 
-    glGenTextures(2, m_textures);
-    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
-    m_pShader->use();
-    m_pShader->setInt("texture1", 0);
+    //loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    //loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    //loadImageTextures(2, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    //loadImageTextures(3, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    loadImageTextures(4, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    loadImageTextures(5, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
 
-    std::vector<std::string> faces;
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\right.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\left.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\top.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\bottom.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\front.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\back.jpg)");
-    loadCubeTextures(1, faces);
-    m_pSkyboxShader->use();
-    m_pSkyboxShader->setInt("skybox", 1);
+    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\front.jpg)");
+    loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\back.jpg)");
+    loadImageTextures(2, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\left.jpg)");
+    loadImageTextures(3, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\right.jpg)");
+    //loadImageTextures(4, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\top.jpg)");
+    //loadImageTextures(5, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\bottom.jpg)");
 
     m_startTime = QDateTime::currentDateTime();
 }
 
-void PanoramicViewGLWidget::loadImageTextures(int index, const char* path)
+void CameraViewGLWidget::loadImageTextures(int index, const char* path)
 {
     //glActiveTexture(GL_TEXTURE0 + index); // 在绑定纹理之前先激活纹理单元
     glBindTexture(GL_TEXTURE_2D, m_textures[index]);
@@ -284,66 +268,57 @@ void PanoramicViewGLWidget::loadImageTextures(int index, const char* path)
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
-void PanoramicViewGLWidget::loadCubeTextures(int index, std::vector<std::string> faces)
-{
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_textures[index]);
-
-    int width, height, nrChannels;
-    for (unsigned int i = 0; i < faces.size(); i++)
-    {
-        // 加载并生成纹理
-        cv::Mat matRGB;
-        cv::Mat matBGR = cv::imread(faces[i]);
-        cv::cvtColor(matBGR, matRGB, cv::COLOR_BGR2RGB);
-        //cv::Mat matRGBFlip;
-        //cv::flip(matRGB, matRGBFlip, 0);  // 0表示垂直翻转
-        //cv::imshow("test", matBGR);
-        //glPixelStorei(GL_UNPACK_ALIGNMENT, 1);//强制 1 字节对齐，避免图片大小不是4的倍数时显示异常，非默认4字节对齐可能会影响效率
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, matRGB.cols, matRGB.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, matRGB.data);
-        //glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        //glGenerateMipmap(GL_TEXTURE_2D);
-
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-}
-
-void PanoramicViewGLWidget::render()
+void CameraViewGLWidget::render()
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    //glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+    glUseProgram(m_shaderProgram);
+
+    QDateTime currentTime = QDateTime::currentDateTime();
+    int deltms = currentTime.toMSecsSinceEpoch() - m_startTime.toMSecsSinceEpoch();
+    float timeSeconds = deltms / float(1000);
+    //timeSeconds = glm::radians(30.0);
+    //timeSeconds = glm::sin(timeSeconds);
+    
+    // create transformations
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 projection = glm::mat4(1.0f);
+
+    //model = m_curRotateMat * m_lastRotateMat * model;
+    //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
+    //model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
+
     view = glm::lookAt(m_cameraPos, m_cameraPos + m_cameraFront, m_cameraUp);
+    //view = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    //view = glm::lookAt(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    //view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
+    
+    //projection = glm::ortho(-2.0f, 2.0f, -2.0f, 2.0f, 1.0f, 4.0f);
     projection = glm::perspective(glm::radians(m_cameraZoom), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
 
-    m_pShader->use();
-    m_pShader->setMat4("model", model);
-    m_pShader->setMat4("view", view);
-    m_pShader->setMat4("projection", projection);
+    // retrieve the matrix uniform locations
+    unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
+    unsigned int viewLoc = glGetUniformLocation(m_shaderProgram, "view");
+    unsigned int projectionLoc = glGetUniformLocation(m_shaderProgram, "projection");
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &projection[0][0]);
 
-    // cubes
+
     glBindVertexArray(m_VAO);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    // 渲染立方体的每个面
+    for (unsigned int i = 0; i < 6; i++)
+    {
+        // 绑定对应的纹理
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        glUniform1i(glGetUniformLocation(m_shaderProgram, "texture1"), i);
 
-    glDepthFunc(GL_LEQUAL);
-    m_pSkyboxShader->use();
-    view = glm::mat4(glm::mat3(view));
-    m_pSkyboxShader->setMat4("view", view);
-    m_pSkyboxShader->setMat4("projection", projection);
-    // skybox cube
-    glBindVertexArray(m_skyboxVAO);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_textures[1]);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
-    glDepthFunc(GL_LESS); // set depth function back to default
+        // 绘制当前面（每个面6个顶点）
+        glDrawArrays(GL_TRIANGLES, i * 6, 6);
+    }
 }

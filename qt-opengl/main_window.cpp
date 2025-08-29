@@ -5,6 +5,7 @@
 #include "gui/graphics_glwidget.h"
 #include "gui/play_glwidget.h"
 #include "gui/video_glwidget.h"
+#include "gui/camera_view_glwidget.h"
 #include "gui/panoramic_view_glwidget.h"
 
 
@@ -14,8 +15,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    //GLWidget* pGLWidget = new GLWidget();
-    //pGLWidget->show();
+    //GLWidgetOld* pGLWidgetOld = new GLWidgetOld();
+    //pGLWidgetOld->show();
 
     //GraphicsGLWidget* pGraphicsGLWidget = new GraphicsGLWidget();
     //pGraphicsGLWidget->resize(800, 800);
@@ -28,6 +29,10 @@ MainWindow::MainWindow(QWidget *parent)
     //VideoGLWidget* pVideoGLWidget = new VideoGLWidget();
     //pVideoGLWidget->resize(800, 800);
     //pVideoGLWidget->show();
+
+    //CameraViewGLWidget* pCameraViewGLWidget = new CameraViewGLWidget();
+    //pCameraViewGLWidget->resize(800, 800);
+    //pCameraViewGLWidget->show();
 
     PanoramicViewGLWidget* pPanoramicViewGLWidget = new PanoramicViewGLWidget();
     pPanoramicViewGLWidget->resize(800, 800);

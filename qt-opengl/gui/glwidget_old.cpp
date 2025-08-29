@@ -25,7 +25,7 @@ void qgluPerspective(GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zF
     glFrustum(xmin, xmax, ymin, ymax, zNear, zFar);
 }
 
-GLWidget::GLWidget(QWidget* parent)
+GLWidgetOld::GLWidgetOld(QWidget* parent)
     : QGLWidget(parent)
     , xRot(0.0f)
     , yRot(0.0f)
@@ -35,12 +35,12 @@ GLWidget::GLWidget(QWidget* parent)
     setFormat(QGLFormat(QGL::DoubleBuffer | QGL::DepthBuffer));
 }
 
-GLWidget::~GLWidget()
+GLWidgetOld::~GLWidgetOld()
 {
 
 }
 
-void GLWidget::initializeGL()
+void GLWidgetOld::initializeGL()
 {
     // 启用阴影平滑
     glShadeModel(GL_SMOOTH);
@@ -60,13 +60,13 @@ void GLWidget::initializeGL()
     loadGLTextures();
 }
 
-void GLWidget::paintGL()
+void GLWidgetOld::paintGL()
 {
     renderScene();
     update();
 }
 
-void GLWidget::resizeGL(int width, int height)
+void GLWidgetOld::resizeGL(int width, int height)
 {
     // 防止窗口大小变为0
     if (height == 0)
@@ -88,7 +88,7 @@ void GLWidget::resizeGL(int width, int height)
 }
 
 // 绘制立方体
-void GLWidget::drawCube()
+void GLWidgetOld::drawCube()
 {
     glBegin(GL_QUAD_STRIP);         //填充凸多边形
     glColor3f(1, 0, 0);
@@ -133,7 +133,7 @@ void GLWidget::drawCube()
 }
 
 // 绘制圆形
-void GLWidget::drawCircle()
+void GLWidgetOld::drawCircle()
 {
     glBegin(GL_TRIANGLE_FAN);           //扇形连续填充三角形串
     glVertex3f(0.0f, 0.0f, 0.0f);
@@ -148,7 +148,7 @@ void GLWidget::drawCircle()
 }
 
 // 绘制圆柱体
-void GLWidget::drawCylinder()
+void GLWidgetOld::drawCylinder()
 {
     // 利用三角形和四边形等基本图元绘制底面圆圆心在坐标原点， 半径为 r，高为 h，方向沿 z 轴方向的圆柱；
     // 侧面用多个四边形,底面用多个三角形来表示
@@ -172,7 +172,7 @@ void GLWidget::drawCylinder()
 }
 
 // 绘制圆锥体
-void GLWidget::drawCone()
+void GLWidgetOld::drawCone()
 {
     glBegin(GL_QUAD_STRIP);//连续填充四边形串
     int i = 0;
@@ -190,7 +190,7 @@ void GLWidget::drawCone()
 }
 
 // 绘制四面体等
-void GLWidget::drawTetrahedron()
+void GLWidgetOld::drawTetrahedron()
 {
     glBegin(GL_QUADS);
     glNormal3f(0, 0, -1);
@@ -244,7 +244,7 @@ void GLWidget::drawTetrahedron()
 
 // 绘制球体
 // 球心坐标为（x，y，z），球的半径为radius，M，N分别表示球体的横纵向被分成多少份
-void GLWidget::drawSphere(GLfloat xx, GLfloat yy, GLfloat zz,
+void GLWidgetOld::drawSphere(GLfloat xx, GLfloat yy, GLfloat zz,
     GLfloat radius, GLfloat M, GLfloat N)
 {
     // 选择使用的纹理
@@ -294,7 +294,7 @@ void GLWidget::drawSphere(GLfloat xx, GLfloat yy, GLfloat zz,
 
 // 绘制圆环
 // 大半径Radius，小半径TubeRadius，边数Sides， 环数Rings
-void GLWidget::DrawTorus(double Radius, double TubeRadius, int Sides, int Rings)
+void GLWidgetOld::DrawTorus(double Radius, double TubeRadius, int Sides, int Rings)
 {
     double sideDelta = 2.0 * PI / Sides;
     double ringDelta = 2.0 * PI / Rings;
@@ -336,7 +336,7 @@ void GLWidget::DrawTorus(double Radius, double TubeRadius, int Sides, int Rings)
 }
 
 // 加载纹理
-void GLWidget::loadGLTextures()
+void GLWidgetOld::loadGLTextures()
 {
     QImage tex1, buf1;
     QImage tex2, buf2;
@@ -401,7 +401,7 @@ void GLWidget::loadGLTextures()
 }
 
 // 场景渲染
-void GLWidget::renderScene(void)
+void GLWidgetOld::renderScene(void)
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
@@ -422,7 +422,7 @@ void GLWidget::renderScene(void)
 }
 
 // 渲染基本图形
-void GLWidget::renderBasicShape()
+void GLWidgetOld::renderBasicShape()
 {
     static float fRotAngle = 0.0f;
     fRotAngle += ROT_DELTA;
@@ -480,7 +480,7 @@ void GLWidget::renderBasicShape()
 }
 
 // 渲染纹理
-void GLWidget::renderTextureCube()
+void GLWidgetOld::renderTextureCube()
 {
     // 纹理映射
     glColor3f(1.0, 1.0, 1.0);
@@ -548,7 +548,7 @@ void GLWidget::renderTextureCube()
     if (zRot > 360) zRot = 0;
 }
 
-void GLWidget::renderTextureCylinder()
+void GLWidgetOld::renderTextureCylinder()
 {
     // 纹理映射
     glTranslatef(0.0f, 0.0f, -12.0f);

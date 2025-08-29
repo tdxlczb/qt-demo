@@ -15,9 +15,12 @@ class Shader : protected QOpenGLExtraFunctions
 {
 public:
     GLuint ID;
+    Shader() {
+        initializeOpenGLFunctions();
+    }
     // constructor generates the shader on the fly
     // ------------------------------------------------------------------------
-    Shader(const char* vertexPath, const char* fragmentPath)
+    void loadFile(const char* vertexPath, const char* fragmentPath)
     {
         // 1. retrieve the vertex/fragment source code from filePath
         std::string vertexCode;
@@ -49,6 +52,10 @@ public:
         }
         const char* vShaderCode = vertexCode.c_str();
         const char * fShaderCode = fragmentCode.c_str();
+        loadCode(vShaderCode, fShaderCode);
+    }
+    void loadCode(const char* vShaderCode, const char* fShaderCode)
+    {
         // 2. compile shaders
         unsigned int vertex, fragment;
         // vertex shader

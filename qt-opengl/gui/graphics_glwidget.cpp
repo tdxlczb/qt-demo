@@ -11,7 +11,6 @@
 #include "core/shaders_define.h"
 #include "core/vertices_define.h"
 
-
 GraphicsGLWidget::GraphicsGLWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
@@ -29,7 +28,15 @@ void GraphicsGLWidget::initializeGL()
 
     //glDepthFunc(GL_LESS);
 
-    initShaders();
+    //m_customGraphics = CustomGraphics::Cylinder;
+
+    if (m_customGraphics == CustomGraphics::Cylinder) {
+        initShaders(normalVS, multiTextureFS);
+    }
+    else {
+        initShaders(vertexShaderSource, multiTextureFS);
+    }
+
     initTextures();
 
     m_pUpdateTimer = new QTimer(this);
@@ -42,6 +49,7 @@ void GraphicsGLWidget::initializeGL()
 
 void GraphicsGLWidget::resizeGL(int w, int h)
 {
+    qDebug() << "resizeGL";
     m_screenWidth = w;
     m_screenHeight = h;
     glViewport(0, 0, w, h);
@@ -110,13 +118,13 @@ void GraphicsGLWidget::wheelEvent(QWheelEvent* event)
     QWidget::wheelEvent(event);
 }
 
-void GraphicsGLWidget::initShaders()
+void GraphicsGLWidget::initShaders(const char* vs, const char* fs)
 {
     // build and compile our shader program
     // ------------------------------------
     // vertex shader
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glShaderSource(vertexShader, 1, &vs, NULL);
     glCompileShader(vertexShader);
     // check for shader compile errors
     int success;
@@ -129,7 +137,7 @@ void GraphicsGLWidget::initShaders()
     }
     // fragment shader
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glShaderSource(fragmentShader, 1, &fs, NULL);
     glCompileShader(fragmentShader);
     // check for shader compile errors
     glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
@@ -159,23 +167,7 @@ void GraphicsGLWidget::initTextures()
 {
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
-    //m_customGraphics = CustomGraphics::Cylinder;
-    if (m_customGraphics == CustomGraphics::None) {
-        GLuint VBO;
-        glGenBuffers(1, &VBO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-        // position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-        // texture coord attribute
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(2);
-
-        m_customVerticesCount = 36;
-    }
-    else {
+    if (m_customGraphics == CustomGraphics::Cylinder) {
         std::vector<VertexAL> vertices = CreateCylinderVertices(72, 0.5f, 1.0f);
         GLuint VBO;
         glGenBuffers(1, &VBO);
@@ -193,6 +185,21 @@ void GraphicsGLWidget::initTextures()
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, texcoord));
 
         m_customVerticesCount = vertices.size();
+    }
+    else {
+        GLuint VBO;
+        glGenBuffers(1, &VBO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        // position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        // texture coord attribute
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+
+        m_customVerticesCount = 36;
     }
 
     //GLuint EBO;

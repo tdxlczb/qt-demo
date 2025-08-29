@@ -31,7 +31,7 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
-    void initShaders();
+    void initShaders(const char* vs, const char* fs);
     void initTextures();
     void loadImageTextures(int index, const char* path);
     void render();

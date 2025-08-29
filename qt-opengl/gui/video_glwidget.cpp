@@ -8,38 +8,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "core/shaders_define.h"
+
 namespace {
-
-    const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
-
-out vec2 TexCoord;
-
-uniform mat4 transform;
-
-void main()
-{
-	gl_Position = transform * vec4(aPos, 1.0);
-	TexCoord = vec2(aTexCoord.x, aTexCoord.y);
-}
-)";
-
-    const char* fragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-
-in vec2 TexCoord;
-
-// texture samplers
-uniform sampler2D texture;
-
-void main()
-{
-	FragColor = texture(texture, TexCoord);
-}
-)";
 
     float vertices[] = {
          1.0f,  1.0f, 0.0f,  1.0f, 1.0f, // top right
@@ -83,7 +54,7 @@ void VideoGLWidget::initializeGL()
     qDebug() << "initializeGL";
     initializeOpenGLFunctions();
 
-    initShaders();
+    initShaders(transformVS, fragmentShaderSource);
     initTextures();
 }
 
@@ -186,13 +157,13 @@ void VideoGLWidget::wheelEvent(QWheelEvent* event)
     }
 }
 
-void VideoGLWidget::initShaders()
+void VideoGLWidget::initShaders(const char* vs, const char* fs)
 {
     // build and compile our shader program
     // ------------------------------------
     // vertex shader
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glShaderSource(vertexShader, 1, &vs, NULL);
     glCompileShader(vertexShader);
     // check for shader compile errors
     int success;
@@ -205,7 +176,7 @@ void VideoGLWidget::initShaders()
     }
     // fragment shader
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glShaderSource(fragmentShader, 1, &fs, NULL);
     glCompileShader(fragmentShader);
     // check for shader compile errors
     glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
@@ -252,7 +223,7 @@ void VideoGLWidget::initTextures()
     loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img3.jpg)");
 
     glUseProgram(m_shaderProgram);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "texture"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texture1"), 0);
 }
 
 void VideoGLWidget::loadImageTextures(int index, const char* path)

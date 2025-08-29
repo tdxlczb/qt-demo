@@ -1,5 +1,5 @@
-#ifndef PANORAMIC_VIEW_GLWIDGET_H
-#define PANORAMIC_VIEW_GLWIDGET_H
+#ifndef CAMERA_VIEW_GLWIDGET_H
+#define CAMERA_VIEW_GLWIDGET_H
 
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
@@ -7,17 +7,16 @@
 #include <QDatetime>
 #include <QTimer>
 #include <glm/glm.hpp>
-#include "core/shader_m.h"
 
 /*
-* 全景显示
+* 摄像机移动
 */
-class PanoramicViewGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions
+class CameraViewGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions
 {
     Q_OBJECT
 public:
-    explicit PanoramicViewGLWidget(QWidget* parent = nullptr);
-    ~PanoramicViewGLWidget();
+    explicit CameraViewGLWidget(QWidget* parent = nullptr);
+    ~CameraViewGLWidget();
 
 protected:
     void initializeGL() override;
@@ -30,24 +29,22 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
-    void initShaders();
+    void initShaders(const char* vs, const char* fs);
     void initTextures();
     void loadImageTextures(int index, const char* path);
-    void loadCubeTextures(int index, std::vector<std::string> faces);
     void render();
 
 private:
-    Shader* m_pShader = nullptr;
-    Shader* m_pSkyboxShader = nullptr;
+    GLuint m_shaderProgram = 0;
     GLuint m_VAO = 0;
-    GLuint m_skyboxVAO = 0;
     GLuint m_textures[16] = { 0 };
 
+    int m_customVerticesCount = 0;
     float m_screenWidth = 0;
     float m_screenHeight = 0;
     glm::mat4 m_lastRotateMat = glm::mat4(1.0f);
     glm::mat4 m_curRotateMat = glm::mat4(1.0f);
-    glm::vec3 m_cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+    glm::vec3 m_cameraPos = glm::vec3(0.0f);
     glm::vec3 m_cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 m_cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
     float m_lastPitch = 0.0f;
@@ -60,4 +57,4 @@ private:
     QDateTime m_startTime;
     QTimer* m_pUpdateTimer = nullptr;
 };
-#endif // PANORAMIC_VIEW_GLWIDGET_H
+#endif // CAMERA_VIEW_GLWIDGET_H
