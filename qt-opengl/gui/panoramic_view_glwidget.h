@@ -44,6 +44,12 @@ private:
     float m_screenHeight = 0;
     glm::mat4 m_lastRotateMat = glm::mat4(1.0f);
     glm::mat4 m_curRotateMat = glm::mat4(1.0f);
+    glm::vec3 m_cameraPos = glm::vec3(0.0f);
+    glm::vec3 m_cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+    glm::vec3 m_cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+    float m_lastPitch = 0.0f;
+    float m_lastYaw = 0.0f;
+    float m_cameraZoom = 45.0f;
 
     QPoint m_pointPress = { 0,0 };//鼠标按钮的坐标
     QPoint m_pointMove = { 0,0 };//鼠标移动的坐标

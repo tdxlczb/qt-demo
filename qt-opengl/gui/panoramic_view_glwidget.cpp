@@ -57,52 +57,52 @@ void main()
 float vertices[] = {
     // 位置               // 纹理坐标
     // front
-    -0.5f,  0.5f,  0.5f,  0.0f, 1.0f, //0
-    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //1
-     0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //2
-    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //1
-     0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //2
-     0.5f, -0.5f,  0.5f,  1.0f, 0.0f, //3
+    -1.0f,  1.0f,  1.0f,  0.0f, 1.0f, //0
+    -1.0f, -1.0f,  1.0f,  0.0f, 0.0f, //1
+     1.0f,  1.0f,  1.0f,  1.0f, 1.0f, //2
+    -1.0f, -1.0f,  1.0f,  0.0f, 0.0f, //1
+     1.0f,  1.0f,  1.0f,  1.0f, 1.0f, //2
+     1.0f, -1.0f,  1.0f,  1.0f, 0.0f, //3
 
     //back
-     0.5f,  0.5f, -0.5f,  0.0f, 1.0f, //4
-     0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //5
-    -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //6
-     0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //5
-    -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //6
-    -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, //7
+     1.0f,  1.0f, -1.0f,  0.0f, 1.0f, //4
+     1.0f, -1.0f, -1.0f,  0.0f, 0.0f, //5
+    -1.0f,  1.0f, -1.0f,  1.0f, 1.0f, //6
+     1.0f, -1.0f, -1.0f,  0.0f, 0.0f, //5
+    -1.0f,  1.0f, -1.0f,  1.0f, 1.0f, //6
+    -1.0f, -1.0f, -1.0f,  1.0f, 0.0f, //7
 
     //left
-    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, //6
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
-    -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //0
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
-    -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, //0
-    -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, //1
+    -1.0f,  1.0f, -1.0f,  0.0f, 1.0f, //6
+    -1.0f, -1.0f, -1.0f,  0.0f, 0.0f, //7
+    -1.0f,  1.0f,  1.0f,  1.0f, 1.0f, //0
+    -1.0f, -1.0f, -1.0f,  0.0f, 0.0f, //7
+    -1.0f,  1.0f,  1.0f,  1.0f, 1.0f, //0
+    -1.0f, -1.0f,  1.0f,  1.0f, 0.0f, //1
 
     //right
-     0.5f,  0.5f,  0.5f,  0.0f, 1.0f, //2
-     0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //3
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
-     0.5f, -0.5f,  0.5f,  0.0f, 0.0f, //3
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
-     0.5f, -0.5f, -0.5f,  1.0f, 0.0f, //5
+     1.0f,  1.0f,  1.0f,  0.0f, 1.0f, //2
+     1.0f, -1.0f,  1.0f,  0.0f, 0.0f, //3
+     1.0f,  1.0f, -1.0f,  1.0f, 1.0f, //4
+     1.0f, -1.0f,  1.0f,  0.0f, 0.0f, //3
+     1.0f,  1.0f, -1.0f,  1.0f, 1.0f, //4
+     1.0f, -1.0f, -1.0f,  1.0f, 0.0f, //5
     
     //top
-    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, //6
-    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, //0
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
-    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, //0
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f, //4
-     0.5f,  0.5f,  0.5f,  1.0f, 0.0f, //2
+    -1.0f,  1.0f, -1.0f,  0.0f, 1.0f, //6
+    -1.0f,  1.0f,  1.0f,  0.0f, 0.0f, //0
+     1.0f,  1.0f, -1.0f,  1.0f, 1.0f, //4
+    -1.0f,  1.0f,  1.0f,  0.0f, 0.0f, //0
+     1.0f,  1.0f, -1.0f,  1.0f, 1.0f, //4
+     1.0f,  1.0f,  1.0f,  1.0f, 0.0f, //2
     
     //bottom
-    -0.5f, -0.5f,  0.5f,  0.0f, 1.0f, //1
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
-     0.5f, -0.5f,  0.5f,  1.0f, 1.0f, //3
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, //7
-     0.5f, -0.5f,  0.5f,  1.0f, 1.0f, //3
-     0.5f, -0.5f, -0.5f,  1.0f, 0.0f  //5
+    -1.0f, -1.0f,  1.0f,  0.0f, 1.0f, //1
+    -1.0f, -1.0f, -1.0f,  0.0f, 0.0f, //7
+     1.0f, -1.0f,  1.0f,  1.0f, 1.0f, //3
+    -1.0f, -1.0f, -1.0f,  0.0f, 0.0f, //7
+     1.0f, -1.0f,  1.0f,  1.0f, 1.0f, //3
+     1.0f, -1.0f, -1.0f,  1.0f, 0.0f  //5
 };
 
 }
@@ -171,6 +171,15 @@ void PanoramicViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
             float angel = (float)glm::length(rotateVec) / 100;
             m_lastRotateMat = glm::rotate(glm::mat4(1.0f), angel, glm::vec3(rotateVec, 0.0f)) * m_lastRotateMat;
             m_curRotateMat = glm::mat4(1.0f);
+
+            float yaw = mouseMove.x() * 0.1f + m_lastYaw;
+            float pitch = -mouseMove.y() * 0.1f + m_lastPitch;
+            if (pitch > 45.0f)
+                pitch = 45.0f;
+            if (pitch < -45.0f)
+                pitch = -45.0f;
+            m_lastPitch = pitch;
+            m_lastYaw = yaw;
         }
         update();
     }
@@ -187,13 +196,29 @@ void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
     QWidget::mouseMoveEvent(event);
     if ((event->buttons() & Qt::MouseButton::LeftButton) == Qt::MouseButton::LeftButton) {
         m_pointMove = event->pos();
-
         QPoint mouseMove = QPoint(m_pointMove.x() - m_pointPress.x(), m_pointMove.y() - m_pointPress.y());
-        //qDebug() << "mouseMove" << mouseMove;
         if (mouseMove.x() != 0 || mouseMove.y() != 0) {
             glm::vec2 rotateVec = glm::vec2(mouseMove.y(), mouseMove.x());
             float angel = (float)glm::length(rotateVec) / 100;
             m_curRotateMat = glm::rotate(glm::mat4(1.0f), angel, glm::vec3(rotateVec, 0.0f));
+
+            float yaw = mouseMove.x() * 0.1f;
+            float pitch = -mouseMove.y() * 0.1f;
+            yaw = m_lastYaw + yaw;
+            pitch = m_lastPitch + pitch;
+            if (pitch > 45.0f)
+                pitch = 45.0f;
+            if (pitch < -45.0f)
+                pitch = -45.0f;
+            qDebug() << "pitch:" << pitch << "yaw:" << yaw;
+
+            glm::vec3 front;
+            front.x = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+            front.z = -cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+            front.y = sin(glm::radians(pitch));
+ 
+            qDebug() << "x:" << front.x << "y:" << front.y << "z:" << front.z;
+            m_cameraFront = glm::normalize(front);
         }
         update();
     }
@@ -203,6 +228,33 @@ void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
 void PanoramicViewGLWidget::wheelEvent(QWheelEvent* event)
 {
     QWidget::wheelEvent(event);
+        // 获取滚轮滚动的角度差（通常120度为一个"刻度"）
+    QPoint angleDelta = event->angleDelta();
+    // 获取鼠标位置
+    QPoint position = event->pos();
+    if (!angleDelta.isNull()) {
+        if (angleDelta.y() > 0) {
+            // 向上滚动
+            qDebug() << "向上滚动，角度:" << angleDelta.y() << "鼠标位置:" << position;
+        }
+        else if (angleDelta.y() < 0) {
+            // 向下滚动
+            qDebug() << "向下滚动，角度:" << angleDelta.y() << "鼠标位置:" << position;
+        }
+        float cameraZoom = angleDelta.y() / 120.f;
+        m_cameraZoom -= cameraZoom;
+        if (m_cameraZoom < 1.0f)
+            m_cameraZoom = 1.0f;
+        if (m_cameraZoom > 45.0f)
+            m_cameraZoom = 45.0f;
+        update();
+        // 接受事件，阻止继续传播
+        event->accept();
+    }
+    else {
+        // 让基类处理或其他处理
+        event->ignore();
+    }
 }
 
 void PanoramicViewGLWidget::initShaders()
@@ -271,12 +323,19 @@ void PanoramicViewGLWidget::initTextures()
 
     glGenTextures(6, m_textures);
 
+    //loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    //loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    //loadImageTextures(2, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    //loadImageTextures(3, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    loadImageTextures(4, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+    loadImageTextures(5, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
+
     loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\front.jpg)");
     loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\back.jpg)");
     loadImageTextures(2, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\left.jpg)");
     loadImageTextures(3, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\right.jpg)");
-    loadImageTextures(4, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\top.jpg)");
-    loadImageTextures(5, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\bottom.jpg)");
+    //loadImageTextures(4, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\top.jpg)");
+    //loadImageTextures(5, R"(E:\code\github\LearnOpenGL\resources\textures\skybox\bottom.jpg)");
 
     m_startTime = QDateTime::currentDateTime();
 }
@@ -324,42 +383,38 @@ void PanoramicViewGLWidget::render()
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 projection = glm::mat4(1.0f);
 
-    //glm::vec3 worldRotationAxis = glm::normalize(glm::vec3(1.0f, 0.0f, 0.0f));//转换为单位向量
-    //glm::mat4 worldRotation1 = glm::rotate(glm::mat4(1.0f), glm::radians(60.0f), glm::vec3(2.0f, 1.0f, 0.0f));
-    //glm::mat4 worldRotation2 = glm::rotate(glm::mat4(1.0f), glm::radians(120.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    //glm::mat4 worldRotation3 = glm::rotate(glm::mat4(1.0f), timeSeconds, glm::vec3(0.0f, 1.0f, 0.0f));
-
-    model = m_curRotateMat * m_lastRotateMat * model;
+    //model = m_curRotateMat * m_lastRotateMat * model;
     //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
     //model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
-    
-    view = glm::lookAt(glm::vec3(5.0f, 5.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    float pitch = 30.0f;
+    float yaw = 0.0f;
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    glm::vec3 cameraFront = glm::normalize(front);
+
+    view = glm::lookAt(m_cameraPos, m_cameraPos + m_cameraFront, m_cameraUp);
+    //view = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    //view = glm::lookAt(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     //view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
     
     //projection = glm::ortho(-2.0f, 2.0f, -2.0f, 2.0f, 1.0f, 4.0f);
-    projection = glm::perspective(glm::radians(45.0f), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
+    projection = glm::perspective(glm::radians(m_cameraZoom), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
 
     // retrieve the matrix uniform locations
-    //unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
+    unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
     unsigned int viewLoc = glGetUniformLocation(m_shaderProgram, "view");
     unsigned int projectionLoc = glGetUniformLocation(m_shaderProgram, "projection");
-    //glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
     glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &projection[0][0]);
 
-    // render container
+
     glBindVertexArray(m_VAO);
-    //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-    //glDrawArrays(GL_TRIANGLES, 0, m_customVerticesCount);
-
-
     // 渲染立方体的每个面
     for (unsigned int i = 0; i < 6; i++)
     {
-        // 为每个面创建模型矩阵（这里使用单位矩阵，但你可以为每个面添加不同的变换）
-        unsigned int modelLoc = glGetUniformLocation(m_shaderProgram, "model");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
-
         // 绑定对应的纹理
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, m_textures[i]);
@@ -368,29 +423,4 @@ void PanoramicViewGLWidget::render()
         // 绘制当前面（每个面6个顶点）
         glDrawArrays(GL_TRIANGLES, i * 6, 6);
     }
-
-    //glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
-    //float radius = 10.0f;
-    //float camX = static_cast<float>(sin(timeSeconds) * radius);
-    //float camZ = static_cast<float>(cos(timeSeconds) * radius);
-    //view = glm::lookAt(glm::vec3(camX, 0.0f, camZ), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    ////view = glm::translate(view, glm::vec3(0.0f, 0.0f, -10.0f));
-    //glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "view"), 1, GL_FALSE, &view[0][0]);
-
-    //glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
-    //glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "projection"), 1, GL_FALSE, &projection[0][0]);
-
-    //// render boxes
-    //glBindVertexArray(m_VAO);
-    //for (unsigned int i = 0; i < 3; i++)
-    //{
-    //    // calculate the model matrix for each object and pass it to shader before drawing
-    //    glm::mat4 model = glm::mat4(1.0f);
-    //    model = glm::translate(model, cubePositions[i]);
-    //    float angle = 20.0f * i;
-    //    model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 1.0f, 1.0f));
-    //    glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-
-    //    glDrawArrays(GL_TRIANGLES, 0, 36);
-    //}
 }
