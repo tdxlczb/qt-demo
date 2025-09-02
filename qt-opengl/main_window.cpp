@@ -7,7 +7,7 @@
 #include "gui/video_glwidget.h"
 #include "gui/camera_view_glwidget.h"
 #include "gui/panoramic_view_glwidget.h"
-
+#include "gui/light_view_glwidget.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -34,10 +34,13 @@ MainWindow::MainWindow(QWidget *parent)
     //pCameraViewGLWidget->resize(800, 800);
     //pCameraViewGLWidget->show();
 
-    PanoramicViewGLWidget* pPanoramicViewGLWidget = new PanoramicViewGLWidget();
-    pPanoramicViewGLWidget->resize(800, 800);
-    pPanoramicViewGLWidget->show();
+    //PanoramicViewGLWidget* pPanoramicViewGLWidget = new PanoramicViewGLWidget();
+    //pPanoramicViewGLWidget->resize(800, 800);
+    //pPanoramicViewGLWidget->show();
 
+    LightViewGLWidget* pLightViewGLWidget = new LightViewGLWidget();
+    pLightViewGLWidget->resize(800, 800);
+    pLightViewGLWidget->show();
 }
 
 MainWindow::~MainWindow()

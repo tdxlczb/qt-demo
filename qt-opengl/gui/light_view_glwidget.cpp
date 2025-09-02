@@ -1,4 +1,4 @@
-#include "panoramic_view_glwidget.h"
+#include "light_view_glwidget.h"
 #include <QDebug>
 #include <QFile>
 #include <QDateTime>
@@ -13,63 +13,144 @@
 
 namespace {
 
-float skyboxVertices[] = {
-    // positions          
-    -1.0f,  1.0f, -1.0f,
-    -1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
+    const char* const lightVS = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
 
-    -1.0f, -1.0f,  1.0f,
-    -1.0f, -1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f,  1.0f,
-    -1.0f, -1.0f,  1.0f,
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
 
-     1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
+void main()
+{
+	gl_Position = projection * view * model * vec4(aPos, 1.0);
+}
+)";
 
-    -1.0f, -1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,
-    -1.0f, -1.0f,  1.0f,
+    const char* const lightFS = R"(
+#version 330 core
+out vec4 FragColor;
 
-    -1.0f,  1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,
-     1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,
-    -1.0f,  1.0f, -1.0f,
+void main()
+{
+    FragColor = vec4(1.0); // set all 4 vector values to 1.0
+}
+)";
 
-    -1.0f, -1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f
-};
+
+    const char* const lightingVS = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+
+out vec3 FragPos;
+out vec3 Normal;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    Normal = mat3(transpose(inverse(model))) * aNormal;  
+    
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}
+)";
+
+    const char* const lightingFS = R"(
+#version 330 core
+out vec4 FragColor;
+
+in vec3 Normal;  
+in vec3 FragPos;  
+  
+uniform vec3 lightPos; 
+uniform vec3 viewPos; 
+uniform vec3 lightColor;
+uniform vec3 objectColor;
+
+void main()
+{
+    // ambient
+    float ambientStrength = 0.1;
+    vec3 ambient = ambientStrength * lightColor;
+  	
+    // diffuse 
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * lightColor;
+    
+    // specular
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);  
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+    vec3 specular = specularStrength * spec * lightColor;  
+        
+    vec3 result = (ambient + diffuse + specular) * objectColor;
+    FragColor = vec4(result, 1.0);
+} 
+)";
+
+    float lightVertices[] = {
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+     0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+     0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    };
 
 }
 
-PanoramicViewGLWidget::PanoramicViewGLWidget(QWidget* parent)
+LightViewGLWidget::LightViewGLWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
 }
 
-PanoramicViewGLWidget::~PanoramicViewGLWidget()
+LightViewGLWidget::~LightViewGLWidget()
 {
 }
 
-void PanoramicViewGLWidget::initializeGL()
+void LightViewGLWidget::initializeGL()
 {
     qDebug() << "initializeGL";
     initializeOpenGLFunctions();
@@ -82,26 +163,27 @@ void PanoramicViewGLWidget::initializeGL()
 
     m_pUpdateTimer = new QTimer(this);
     connect(m_pUpdateTimer, &QTimer::timeout, this, [this]() {
-        //update();
+        update();
         });
     m_pUpdateTimer->start(10);
 
 }
 
-void PanoramicViewGLWidget::resizeGL(int w, int h)
+void LightViewGLWidget::resizeGL(int w, int h)
 {
+    qDebug() << "resizeGL";
     m_screenWidth = w;
     m_screenHeight = h;
     glViewport(0, 0, w, h);
 }
 
-void PanoramicViewGLWidget::paintGL()
+void LightViewGLWidget::paintGL()
 {
     //qDebug() << "paintGL";
     render();
 }
 
-void PanoramicViewGLWidget::mousePressEvent(QMouseEvent* event)
+void LightViewGLWidget::mousePressEvent(QMouseEvent* event)
 {
     QWidget::mousePressEvent(event);
     if (event->button() == Qt::MouseButton::LeftButton) {
@@ -112,7 +194,7 @@ void PanoramicViewGLWidget::mousePressEvent(QMouseEvent* event)
 
 }
 
-void PanoramicViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
+void LightViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
 {
     QWidget::mouseReleaseEvent(event);
     if (event->button() == Qt::MouseButton::LeftButton) {
@@ -139,12 +221,12 @@ void PanoramicViewGLWidget::mouseReleaseEvent(QMouseEvent* event)
 
 }
 
-void PanoramicViewGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
+void LightViewGLWidget::mouseDoubleClickEvent(QMouseEvent* event)
 {
     QWidget::mouseDoubleClickEvent(event);
 }
 
-void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
+void LightViewGLWidget::mouseMoveEvent(QMouseEvent* event)
 {
     QWidget::mouseMoveEvent(event);
     if ((event->buttons() & Qt::MouseButton::LeftButton) == Qt::MouseButton::LeftButton) {
@@ -178,7 +260,7 @@ void PanoramicViewGLWidget::mouseMoveEvent(QMouseEvent* event)
 
 }
 
-void PanoramicViewGLWidget::wheelEvent(QWheelEvent* event)
+void LightViewGLWidget::wheelEvent(QWheelEvent* event)
 {
     QWidget::wheelEvent(event);
         // 获取滚轮滚动的角度差（通常120度为一个"刻度"）
@@ -210,59 +292,38 @@ void PanoramicViewGLWidget::wheelEvent(QWheelEvent* event)
     }
 }
 
-void PanoramicViewGLWidget::initShaders()
+void LightViewGLWidget::initShaders()
 {
     m_pShader = new Shader();
-    m_pShader->loadCode(vertexShaderSource, fragmentShaderSource);
+    m_pShader->loadCode(lightingVS, lightingFS);
 
-    m_pSkyboxShader = new Shader();
-    m_pSkyboxShader->loadCode(skyboxVS, skyboxFS);
+    m_pLightShader = new Shader();
+    m_pLightShader->loadCode(lightVS, lightFS);
 }
 
-void PanoramicViewGLWidget::initTextures()
+void LightViewGLWidget::initTextures()
 {
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
     GLuint VBO = 0;
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(lightVertices), lightVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    glGenVertexArrays(1, &m_skyboxVAO);
-    glBindVertexArray(m_skyboxVAO);
-    GLuint skyboxVBO = 0;
-    glGenBuffers(1, &skyboxVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glGenVertexArrays(1, &m_lightVAO);
+    glBindVertexArray(m_lightVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);//复用VBO的顶点
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-
-    glGenTextures(2, m_textures);
-    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
-    m_pShader->use();
-    m_pShader->setInt("texture1", 0);
-
-    std::vector<std::string> faces;
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\right.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\left.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\top.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\bottom.jpg)");
-    //faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
-    //faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\img5.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\front.jpg)");
-    faces.push_back(R"(E:\code\github\LearnOpenGL\resources\textures\skybox\back.jpg)");
-    loadCubeTextures(1, faces);
-    m_pSkyboxShader->use();
-    m_pSkyboxShader->setInt("skybox", 1);
 
     m_startTime = QDateTime::currentDateTime();
 }
 
-void PanoramicViewGLWidget::loadImageTextures(int index, const char* path)
+void LightViewGLWidget::loadImageTextures(int index, const char* path)
 {
     //glActiveTexture(GL_TEXTURE0 + index); // 在绑定纹理之前先激活纹理单元
     glBindTexture(GL_TEXTURE_2D, m_textures[index]);
@@ -285,7 +346,7 @@ void PanoramicViewGLWidget::loadImageTextures(int index, const char* path)
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
-void PanoramicViewGLWidget::loadCubeTextures(int index, std::vector<std::string> faces)
+void LightViewGLWidget::loadCubeTextures(int index, std::vector<std::string> faces)
 {
     glBindTexture(GL_TEXTURE_CUBE_MAP, m_textures[index]);
 
@@ -315,8 +376,14 @@ void PanoramicViewGLWidget::loadCubeTextures(int index, std::vector<std::string>
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 
-void PanoramicViewGLWidget::render()
+void LightViewGLWidget::render()
 {
+    QDateTime currentTime = QDateTime::currentDateTime();
+    int deltms = currentTime.toMSecsSinceEpoch() - m_startTime.toMSecsSinceEpoch();
+    float timeSeconds = deltms / float(1000);
+    //timeSeconds = glm::radians(135.0f);
+    //timeSeconds = glm::sin(timeSeconds);
+
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -326,28 +393,35 @@ void PanoramicViewGLWidget::render()
     view = glm::lookAt(m_cameraPos, m_cameraPos + m_cameraFront, m_cameraUp);
     projection = glm::perspective(glm::radians(m_cameraZoom), (float)m_screenWidth / (float)m_screenHeight, 0.1f, 100.0f);
 
+    glm::vec3 lightPos = glm::vec3(glm::sin(timeSeconds), 2.0f, 0.0f);
     m_pShader->use();
+    m_pShader->setVec3("objectColor", 1.0f, 0.5f, 0.31f);
+    m_pShader->setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+    m_pShader->setVec3("lightPos", lightPos);
+    m_pShader->setVec3("viewPos", m_cameraPos);
+
+    model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 0.0f, 0.0f));
     m_pShader->setMat4("model", model);
     m_pShader->setMat4("view", view);
     m_pShader->setMat4("projection", projection);
 
-    // cubes
-    glBindVertexArray(m_VAO);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    glm::vec3 aPos = glm::vec3(0.0f, 0.5f, 0.0f);
+    glm::vec3 FragPos = glm::vec3(model * glm::vec4(aPos, 1.0f));
+    glm::vec3 norm = glm::normalize(glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3 lightDir = glm::normalize(lightPos - FragPos);
+    float diff = glm::dot(norm, lightDir);
 
-    glDepthFunc(GL_LEQUAL);
-    m_pSkyboxShader->use();
-    view = glm::mat4(glm::mat3(view));
-    m_pSkyboxShader->setMat4("view", view);
-    m_pSkyboxShader->setMat4("projection", projection);
-    // skybox cube
-    glBindVertexArray(m_skyboxVAO);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_textures[1]);
+    glBindVertexArray(m_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
-    glDepthFunc(GL_LESS); // set depth function back to default
+
+    m_pLightShader->use();
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, lightPos);
+    model = glm::scale(model, glm::vec3(0.2f)); // a smaller cube
+    m_pLightShader->setMat4("model", model);
+    m_pLightShader->setMat4("projection", projection);
+    m_pLightShader->setMat4("view", view);
+
+    glBindVertexArray(m_lightVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
 }
