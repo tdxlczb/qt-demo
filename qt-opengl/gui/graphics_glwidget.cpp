@@ -28,20 +28,14 @@ void GraphicsGLWidget::initializeGL()
 
     //glDepthFunc(GL_LESS);
 
-    //m_customGraphics = CustomGraphics::Cylinder;
-
-    if (m_customGraphics == CustomGraphics::Cylinder) {
-        initShaders(normalVS, multiTextureFS);
-    }
-    else {
-        initShaders(vertexShaderSource, multiTextureFS);
-    }
-
+    //m_customGraphics = CustomGraphics::Sphere;
+    initShaders(normalVS, multiTextureFS);
+    //initShaders(vertexShaderSource, multiTextureFS);
     initTextures();
 
     m_pUpdateTimer = new QTimer(this);
     connect(m_pUpdateTimer, &QTimer::timeout, this, [this]() {
-        //update();
+        update();
         });
     m_pUpdateTimer->start(10);
 
@@ -165,53 +159,65 @@ void GraphicsGLWidget::initShaders(const char* vs, const char* fs)
 
 void GraphicsGLWidget::initTextures()
 {
-    glGenVertexArrays(1, &m_VAO);
-    glBindVertexArray(m_VAO);
+    m_customGraphics = CustomGraphics::Sphere;
+
+    std::vector<VertexAL> vertices;
+    std::vector<GLuint> indices;
     if (m_customGraphics == CustomGraphics::Cylinder) {
-        std::vector<VertexAL> vertices = CreateCylinderVertices(72, 0.5f, 1.0f);
-        GLuint VBO;
-        glGenBuffers(1, &VBO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(VertexAL), &vertices[0], GL_STATIC_DRAW);
-
-        // 位置属性
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)0);
-        // 法线属性
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, normal));
-        // 纹理坐标属性
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, texcoord));
-
-        m_customVerticesCount = vertices.size();
+        vertices = CreateCylinderVertices(1.0f, 360, 1.0f);
+    }
+    else if (m_customGraphics == CustomGraphics::Sphere) {
+        CreateSphereVertices(1.0f, 360, 180, vertices, indices);
     }
     else {
-        GLuint VBO;
-        glGenBuffers(1, &VBO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        size_t verticesSize = sizeof(cubeVertices) / sizeof(cubeVertices[0]) / 5;
+        for (size_t i = 0; i < verticesSize; i++)
+        {
+            float x = cubeVertices[i * 5];
+            float y = cubeVertices[i * 5 + 1];
+            float z = cubeVertices[i * 5 + 2];
+            float u = cubeVertices[i * 5 + 3];
+            float v = cubeVertices[i * 5 + 4];
 
-        // position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-        // texture coord attribute
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(1);
-
-        m_customVerticesCount = 36;
+            VertexAL vertex;
+            vertex.position = glm::vec3(x, y, z);
+            vertex.normal = glm::normalize(vertex.position);
+            vertex.texcoord = glm::vec2(u, v);
+            vertices.push_back(vertex);
+        }
     }
+    glGenVertexArrays(1, &m_VAO);
+    glBindVertexArray(m_VAO);
 
-    //GLuint EBO;
-    //glGenBuffers(1, &EBO);
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    ////glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+    GLuint VBO;
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(VertexAL), &vertices[0], GL_STATIC_DRAW);
+
+    // 位置属性
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)0);
+    // 法线属性
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, normal));
+    // 纹理坐标属性
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAL), (void*)offsetof(VertexAL, texcoord));
+
+    if (indices.size() > 0) {
+        GLuint EBO;
+        glGenBuffers(1, &EBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+        //glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+    }
+    m_vertices = vertices;
+    m_indices = indices;
 
     glGenTextures(2, m_textures);
 
-    loadImageTextures(0, R"(E:\code\github\LearnOpenGL\resources\textures\img1.jpg)");
-    loadImageTextures(1, R"(E:\code\github\LearnOpenGL\resources\textures\awesomeface.png)");
+    loadImageTextures(0, R"(E:\code\media\image\earth.jpg)");
+    loadImageTextures(1, R"(E:\code\media\image\earth_grid.jpg)");
 
     glUseProgram(m_shaderProgram);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "texture1"), 0);
@@ -272,7 +278,8 @@ void GraphicsGLWidget::render()
 
     model = m_curRotateMat * m_lastRotateMat * model;
     //model = glm::translate(model, glm::vec3(1.0f, 1.0f, -5.0f));
-    //model = glm::rotate(model, timeSeconds, glm::vec3(1.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(-23.5f), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::rotate(model, timeSeconds, glm::vec3(0.0f, 1.0f, 0.0f));
     
     view = glm::lookAt(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     //view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
@@ -290,9 +297,13 @@ void GraphicsGLWidget::render()
 
     // render container
     glBindVertexArray(m_VAO);
-    //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-    glDrawArrays(GL_TRIANGLES, 0, m_customVerticesCount);
-
+    //glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(m_indices.size()), GL_UNSIGNED_INT, (void*)0);
+    if (m_indices.size() > 0) {
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(m_indices.size()), GL_UNSIGNED_INT, (void*)0);
+    }
+    else {
+        glDrawArrays(GL_TRIANGLES, 0, m_vertices.size());
+    }
 
     //glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
     //float radius = 10.0f;

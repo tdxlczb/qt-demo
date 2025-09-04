@@ -6,8 +6,10 @@
 
 enum class CustomGraphics
 {
-    None = 0,
-    Cylinder
+    None = 0, //默认为正方体
+    Cube,     //正方体
+    Cylinder, //圆柱
+    Sphere,   //球体  
 };
 
 struct VertexAL {
@@ -17,13 +19,22 @@ struct VertexAL {
 };
 
 ///
-/// \brief 生成圆柱体顶点数组
-/// \param sectorCount 扇区数
+/// \brief 生成圆柱体顶点数据，上为顶部，下为底部
 /// \param pierRadius  半径
+/// \param sectorCount 扇区数
 /// \param pierHeight  高度
-/// \return 是否装载成功
+/// \return 返回顶点数据
 ///
-std::vector<VertexAL> CreateCylinderVertices(int sectorCount, float pierRadius, float pierHeight);
+std::vector<VertexAL> CreateCylinderVertices(float pierRadius, int sectorCount, float pierHeight);
 
+///
+/// \brief 生成球体顶点数据，按照经纬线划分
+/// \param radius  半径
+/// \param xSegNum   x轴片段数量，对应经度longitude，范围为-180度~180度
+/// \param ySegNum   y轴片段数量，对应纬度latitude，范围为-90度~90度
+/// \param vertices  返回顶点数组
+/// \param indices   返回索引数组
+///
+void CreateSphereVertices(float radius, int xSegNum, int ySegNum, std::vector<VertexAL>& vertices, std::vector<unsigned int>& indices);
 
 #endif // GRAPHICS_VERTICES_H

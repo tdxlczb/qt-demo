@@ -39,10 +39,11 @@ private:
 private:
     GLuint m_shaderProgram = 0;
     GLuint m_VAO = 0;
-    GLuint m_textures[16];
+    GLuint m_textures[16] = { 0 };
 
     CustomGraphics m_customGraphics = CustomGraphics::None;
-    int m_customVerticesCount = 0;
+    std::vector<VertexAL> m_vertices;
+    std::vector<GLuint> m_indices;
     float m_screenWidth = 0;
     float m_screenHeight = 0;
     glm::mat4 m_lastRotateMat = glm::mat4(1.0f);
