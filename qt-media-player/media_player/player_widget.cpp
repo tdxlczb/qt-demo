@@ -10,6 +10,7 @@
 #include "video_render.h"
 #include "audio_render.h"
 #include "media/media_reader.h"
+#include "fisheye_widget.h"
 
 PlayerWidget::PlayerWidget(QWidget* parent)
     : QWidget(parent)
@@ -24,7 +25,7 @@ PlayerWidget::PlayerWidget(QWidget* parent)
     this->setPalette(palette);
 
     //auto VideoRender = new VideoRGBRender(this);
-    auto VideoRender = new PlayGLWidget(this);
+    auto VideoRender = new OpenGLRenderWidget(this);
     //auto VideoRender = new SDLRenderWidget(this);
     m_pVideoRender = VideoRender;
 
@@ -69,7 +70,7 @@ void PlayerWidget::StartPlay(const QString& url)
     MediaParameter param;
     param.url = url.toStdString();
     //param.hwDeviceName = "dxva2";
-    param.outputVideoSpec = { 0, 0, AV_PIX_FMT_YUV420P };
+    param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
     //param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
     param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
 
@@ -82,6 +83,11 @@ void PlayerWidget::StartPlay(const QString& url)
     if (m_pMediaReader->Init(param)) {
         m_pMediaReader->SetPlayEvent(this);
         m_pMediaReader->Start();
+
+        m_pFishEyeWidget = new FishEyeWidget();
+        m_pFishEyeWidget->resize(1000, 800);
+        m_pFishEyeWidget->show();
+        m_pFishEyeWidget->SetFishEyeType(0, 0);
     }
 }
 
@@ -93,10 +99,19 @@ void PlayerWidget::StopPlay()
     }
 }
 
+#include <chrono>
 void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 {
     m_isVideoPlaying = true;
     m_pVideoRender->UpdateContent(frame);
+    auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
+    if (m_pFishEyeWidget) {
+        cv::Mat matIn = cv::Mat(frame.spec.height, frame.spec.width, CV_8UC3, frame.data);//传递处理后的效果图
+        m_pFishEyeWidget->UpdateContent(matIn);
+    }
+    auto t2 = std::chrono::high_resolution_clock().now().time_since_epoch();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    //qDebug() << "delta time:" << duration;
 }
 
 void PlayerWidget::onClose(const PlayError& error)
@@ -128,10 +143,10 @@ void PlayerWidget::on_pbPlayButton_clicked()
     if (playUrl.isEmpty())
     {
         playUrl = "E:/code/media/BaiduSyncdisk.mp4";
-        //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000002_34020000002000000002_20250724091720_20250724235959_1_100000_1753328209?token=YyC43CkbA5E8RUW7";
-        //playUrl = "rtsp://127.0.0.1/live/test";
+        //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
+        //playUrl = "rtsp://172.16.19.69/live/test";
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
-        //playUrl = "rtsp://172.16.19.44:554/proxy/44_160_0?token=uYeCn9fSppapqAbK";
+        //playUrl = "rtsp://172.16.19.40:554/rtp/34020000001110000001_34020000001320000001_3?token=xCO73xOfG5uekWf4";
     }
     StartPlay(playUrl);
 }

@@ -123,6 +123,55 @@ private:
 /*
 * ====================================================
 */
+#include <QOpenGLWidget>
+#include <QOpenGLExtraFunctions>
+
+class OpenGLRenderWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions, public VideoRender
+{
+    Q_OBJECT
+public:
+    explicit OpenGLRenderWidget(QWidget* parent = nullptr);
+    ~OpenGLRenderWidget();
+
+    //获取画面
+    VideoFrame GetContent() override;
+    //以新传入的Mat作为数据来源以显示该画面
+    void UpdateContent(const VideoFrame& frame) override;
+    //清空画面
+    void ClearContent() override;
+signals:
+    //以新传入的Mat作为数据来源以显示该画面
+    void sig_Update();
+
+public slots:
+    void on_Update();
+
+protected:
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
+private:
+    void initShaders();
+    void initTextures();
+    void render();
+    void calculateViewport();
+
+private:
+    GLuint m_shaderProgram = 0;
+    GLuint m_VAO = 0;
+    GLuint m_textures[16];
+
+    int m_nVideoW = 0; //视频分辨率宽
+    int m_nVideoH = 0; //视频分辨率高
+    uint8_t* m_pBufYuv420p = nullptr;
+
+    VideoFrame m_frame;//当前帧
+    QMutex m_frameMutex;//数据锁
+};
+
+/*
+* ====================================================
+*/
 #include <QTimer>
 #include "SDL2/SDL.h"
 

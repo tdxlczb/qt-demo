@@ -9,6 +9,7 @@
 class VideoRender;
 class AudioRender;
 class MediaReader;
+class FishEyeWidget;
 class PlayerWidget : public QWidget, public PlayEvent
 {
     Q_OBJECT
@@ -35,6 +36,8 @@ private:
     VideoRender* m_pVideoRender = nullptr;
     AudioRender* m_pAudioRender = nullptr;
     MediaReader* m_pMediaReader = nullptr;
+
+    FishEyeWidget* m_pFishEyeWidget = nullptr;
 
     QString m_playUrl;
     std::atomic_bool m_isVideoPlaying = {false};

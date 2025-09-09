@@ -321,7 +321,7 @@ void PlayGLWidget::paintGL()
     int viewportY = (h - viewportHeight) / 2;
 
     glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
-    qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
+    //qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
 
     int nY = m_nVideoW * m_nVideoH;
     int nU = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
@@ -453,6 +453,232 @@ void PlayGLWidget::cropI420p(int nSrcWidth, int nSrcHeight, int nLeft, int nTop,
     }
 }
 
+
+/*
+* ====================================================
+*/
+
+OpenGLRenderWidget::OpenGLRenderWidget(QWidget* parent) :QOpenGLWidget(parent)
+{
+    connect(this, &OpenGLRenderWidget::sig_Update, this, &OpenGLRenderWidget::on_Update, Qt::QueuedConnection);
+}
+
+OpenGLRenderWidget::~OpenGLRenderWidget()
+{
+    disconnect(this, &OpenGLRenderWidget::sig_Update, this, &OpenGLRenderWidget::on_Update);
+    if (m_frame.data)
+        delete[] m_frame.data;
+}
+
+VideoFrame OpenGLRenderWidget::GetContent()
+{
+    QMutexLocker guard(&m_frameMutex);
+    return m_frame;
+}
+
+void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
+{
+    if (frame.spec.width <= 0 || frame.spec.height <= 0 || !frame.data || frame.size <= 0) {
+        qDebug() << "frame is err";
+        return;
+    }
+
+    QMutexLocker locker(&m_frameMutex);
+    if (!m_frame.data) {
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    else if (m_frame.size < frame.size) {
+        delete[] m_frame.data;
+        m_frame.data = new uint8_t[frame.size];
+        m_frame.size = frame.size;
+    }
+    m_frame.spec = frame.spec;
+    if (m_nVideoW != m_frame.spec.width || m_nVideoH != m_frame.spec.height) {
+        qDebug() << "width:" << m_frame.spec.width << ",height:" << m_frame.spec.height;
+    }
+    memcpy(m_frame.data, frame.data, frame.size);
+
+    m_pBufYuv420p = m_frame.data;
+    m_nVideoW = m_frame.spec.width;
+    m_nVideoH = m_frame.spec.height;
+
+    emit sig_Update();
+}
+
+void OpenGLRenderWidget::ClearContent()
+{
+    QMutexLocker locker(&m_frameMutex);
+    if (m_frame.data)
+        delete[] m_frame.data;
+    m_frame = VideoFrame();
+    emit sig_Update();
+}
+
+void OpenGLRenderWidget::on_Update()
+{
+    update();
+}
+
+void OpenGLRenderWidget::initializeGL()
+{
+    initializeOpenGLFunctions();
+    //glEnable(GL_DEPTH_TEST);
+
+    initShaders();
+    initTextures();
+}
+
+void OpenGLRenderWidget::resizeGL(int w, int h)
+{
+    if (h == 0)// 防止被零除
+    {
+        h = 1;// 将高设为1
+    }
+    //设置视口
+    //glViewport(0, 0, w, h);
+
+    //float aspectRatio = static_cast<float>(m_nVideoW) / m_nVideoH;
+    //int viewportWidth = w;
+    //int viewportHeight = static_cast<int>(w / aspectRatio);
+
+    //if (viewportHeight > h) {
+    //    viewportHeight = h;
+    //    viewportWidth = static_cast<int>(h * aspectRatio);
+    //}
+
+    //int viewportX = (w - viewportWidth) / 2;
+    //int viewportY = (h - viewportHeight) / 2;
+
+    //glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+    //qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
+}
+
+void OpenGLRenderWidget::paintGL()
+{
+    render();
+}
+
+void OpenGLRenderWidget::initShaders()
+{
+    //顶点着色器源码
+    const char* vertexShaderSource = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+
+out vec2 TexCoord;
+
+void main()
+{
+	gl_Position = vec4(aPos, 1.0);
+	TexCoord = vec2(aTexCoord.x, aTexCoord.y);
+}
+)";
+
+    const char* fragmentShaderSource = R"(
+#version 330 core
+out vec4 FragColor;
+
+in vec2 TexCoord;
+uniform sampler2D texture;
+
+void main()
+{
+	FragColor = texture(texture, TexCoord);
+}
+)";
+
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+
+    // fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+
+    // link shaders
+    m_shaderProgram = glCreateProgram();
+    glAttachShader(m_shaderProgram, vertexShader);
+    glAttachShader(m_shaderProgram, fragmentShader);
+    glLinkProgram(m_shaderProgram);
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    glUseProgram(m_shaderProgram);
+}
+
+void OpenGLRenderWidget::initTextures()
+{
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    float vertices[] = {
+        // positions          // texture coords
+         1.0f,  1.0f, 0.0f,   1.0f, 0.0f, // top right
+         1.0f, -1.0f, 0.0f,   1.0f, 1.0f, // bottom right
+        -1.0f, -1.0f, 0.0f,   0.0f, 1.0f, // bottom left
+        -1.0f,  1.0f, 0.0f,   0.0f, 0.0f  // top left 
+    };
+    unsigned int indices[] = {
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
+    };
+
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glGenVertexArrays(1, &m_VAO);
+    glBindVertexArray(m_VAO);
+
+    GLuint VBO;
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    GLuint EBO;
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // texture coord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glGenTextures(1, m_textures);
+    glActiveTexture(GL_TEXTURE0); // 在绑定纹理之前先激活纹理单元
+    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+    // 为当前绑定的纹理对象设置环绕、过滤方式
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glUseProgram(m_shaderProgram);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texture"), 0);
+}
+
+void OpenGLRenderWidget::render()
+{
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_nVideoW, m_nVideoH, 0, GL_RGB, GL_UNSIGNED_BYTE, m_pBufYuv420p);
+    //glGenerateMipmap(GL_TEXTURE_2D);
+
+    glUseProgram(m_shaderProgram);
+    glBindVertexArray(m_VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
+void OpenGLRenderWidget::calculateViewport()
+{
+}
 
 /*
 * ====================================================
