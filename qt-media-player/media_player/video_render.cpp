@@ -76,7 +76,8 @@ void VideoRGBRender::paintEvent(QPaintEvent* event)
     //计算保持宽高比的缩放尺寸
     //scaled方法会申请新的内存空间，可以解锁，如没有申请新的内存空间，需要在drawImage之后才能解锁，避免数据更改
     //QImage image = QImage(m_matData.data, m_matData.cols, m_matData.rows, m_matData.step, QImage::Format_RGB888);
-    QImage scaledImage = QImage(m_frame.data, m_frame.spec.width, m_frame.spec.height, QImage::Format_RGB888)
+    //QImage(m_frame.data, m_frame.spec.width, m_frame.spec.height, QImage::Format_RGB888)//bytesPerLine这个参数如果不传，需要保证宽是4的倍数(数据对齐)，否则会显示异常
+    QImage scaledImage = QImage(m_frame.data, m_frame.spec.width, m_frame.spec.height, m_frame.spec.width * 3, QImage::Format_RGB888)
         .scaled(rc.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
     m_frameMutex.unlock();
 

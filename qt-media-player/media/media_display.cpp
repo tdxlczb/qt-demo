@@ -188,7 +188,7 @@ void VideoDisplay::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
     int iWidth = m_dstSpec.width;
     int iHeight = m_dstSpec.height;
     int gcd = GetGCD(iWidth, iHeight);
-    int times = 1;
+    int times = 0;
     if (gcd > 0) {
         int minW = iWidth / gcd;
         int minH = iHeight / gcd;
@@ -197,7 +197,7 @@ void VideoDisplay::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
         //获取一个宽高刚好比播放宽高大，比例一致的宽高，宽高比例要是不一致，重采样出来的图片是混乱的
         while (iWidth <= iDisplayWidth && iHeight <= iDisplayHeight)
         {
-            times++;
+            times += 8;//非4的倍数，在使用QImage加载时，会默认以4对齐取每行的字节数，非8的倍数，yuv渲染有点问题，这里强制保证宽高是8的倍数
             iWidth = minW * times;
             iHeight = minH * times;
         }
