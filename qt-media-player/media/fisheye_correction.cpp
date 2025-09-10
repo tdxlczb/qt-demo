@@ -26,7 +26,21 @@ double GetSectorAngleRadians(double arc, double radius) {
     return arc / radius;
 }
 
+cv::Mat GetLR2TBCroppingImage(const cv::Mat& src)
+{
+    int height = src.rows;
+    int width = src.cols;
+    int midX = width / 2;
 
+    cv::Mat leftPart = src(cv::Rect(0, 0, midX, height));
+    cv::Mat rightPart = src(cv::Rect(midX, 0, midX, height));
+    cv::Mat result(height * 2, midX, src.type());
+
+    // 将左右部分复制到结果图像的相应位置
+    leftPart.copyTo(result(cv::Rect(0, 0, midX, height)));
+    rightPart.copyTo(result(cv::Rect(0, height, midX, height)));
+    return result;
+}
 
 UnwrapCircular::UnwrapCircular()
 {
@@ -55,7 +69,7 @@ cv::Point2f UnwrapCircular::GetOriginPoint(const cv::Point2f& point)
     double theta = (2 * CV_PI * point.x) / rectWidth;
     double r = point.y;
 
-    float x = m_center.x + r * cos(theta);
+    float x = m_center.x - r * cos(theta);//这里使用+还是-需要和圆形展开保持一致
     float y = m_center.y + r * sin(theta);
     return cv::Point2f(x, y);
 }
@@ -75,8 +89,8 @@ void UnwrapCircular::CreateMappingMatrix(const cv::Point& center, int radius)
         for (int x = 0; x < rectWidth; x++) {
             double theta = (2 * CV_PI * x) / rectWidth;
             double r = y;
-
-            map_x.at<float>(y, x) = center.x + r * cos(theta);
+            //map_x.at<float>(y, x) = center.x + r * cos(theta);//顺时针展开
+            map_x.at<float>(y, x) = center.x - r * cos(theta);//逆时针展开更符合视觉效果
             map_y.at<float>(y, x) = center.y + r * sin(theta);
         }
     }

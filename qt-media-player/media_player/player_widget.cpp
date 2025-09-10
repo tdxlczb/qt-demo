@@ -87,7 +87,7 @@ void PlayerWidget::StartPlay(const QString& url)
         m_pFishEyeWidget = new FishEyeWidget();
         m_pFishEyeWidget->resize(1000, 800);
         m_pFishEyeWidget->show();
-        m_pFishEyeWidget->SetFishEyeType(0, 0);
+        m_pFishEyeWidget->SetFishEyeType(FECSetupType::None, FECShowType::Normal);
     }
 }
 

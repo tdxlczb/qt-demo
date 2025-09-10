@@ -15,6 +15,9 @@ double GetSectorAngle(double arc, double radius);
 // 计算扇形角度（弧度）
 double GetSectorAngleRadians(double arc, double radius);
 
+//图片左右裁剪成上下
+cv::Mat GetLR2TBCroppingImage(const cv::Mat& src);
+
 /*
 * 圆形展开类
 */
