@@ -3,8 +3,8 @@
 #include <QLabel>
 #include <QPainter>
 #include "fisheye_widget.h"
-#include "media/fisheye_correction.h"
-
+#include "core/fisheye_correction.h"
+#include "core/cv_utils.h"
 
 FishEyeChildWidget::FishEyeChildWidget(int index, bool isMainChild, FishEyeWidget* parent)
     : QWidget(parent)
@@ -56,6 +56,19 @@ cv::RotatedRect FishEyeChildWidget::GetRotatedRect()
         UpdateRotatedRect(m_lastRotateRadius, m_lastRotateAngle);
     }
     return m_rotatedRect;
+}
+
+CircularSector FishEyeChildWidget::GetCircularSector()
+{
+    return m_circularSector;
+}
+
+cv::Point FishEyeChildWidget::GetContentCenter()
+{
+    m_contentMutex.lock();
+    cv::Point pt(m_content.cols / 2, m_content.rows / 2);
+    m_contentMutex.unlock();
+    return pt;
 }
 
 void FishEyeChildWidget::UpdateOriginSize(int originWidth, int originHeight)
@@ -118,7 +131,7 @@ void FishEyeChildWidget::mousePressEvent(QMouseEvent* event)
         m_pointMove = event->pos();
         if (m_isMainChild) {
             int x = round(m_pointPress.x() / m_scaleX);
-            int y = round(m_pointPress.y() / m_scaleY) + m_content.rows * 0.2;
+            int y = round(m_pointPress.y() / m_scaleY);
             emit sig_ChildMousePress(QPoint(x, y));
         }
         //update();
@@ -226,17 +239,10 @@ void FishEyeChildWidget::paintEvent(QPaintEvent* event)
     m_contentMutex.lock();
     //计算保持宽高比的缩放尺寸
     //scaled方法会申请新的内存空间，可以解锁，如没有申请新的内存空间，需要在drawImage之后才能解锁，避免数据更改
-    cv::Mat dst;
-    if (m_isMainChild) {
-        dst = m_content(cv::Rect(0, m_content.rows * 0.2, m_content.cols, m_content.rows * 0.8));
-    }
-    else {
-        dst = m_content;
-    }
-    QImage image = QImage(dst.data, dst.cols, dst.rows, dst.step, QImage::Format_RGB888)
+    QImage image = QImage(m_content.data, m_content.cols, m_content.rows, m_content.step, QImage::Format_RGB888)
         .scaled(rc.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    m_scaleX = image.size().width() / (float)dst.cols;
-    m_scaleY = image.size().height() / (float)dst.rows;
+    m_scaleX = image.size().width() / (float)m_content.cols;
+    m_scaleY = image.size().height() / (float)m_content.rows;
     m_contentMutex.unlock();
 
     painter.drawImage(0, 0, image);

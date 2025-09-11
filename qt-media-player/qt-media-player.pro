@@ -9,6 +9,7 @@ CONFIG += c++11
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 DEFINES += QT_MESSAGELOGCONTEXT
 
+include(core/core.pri)
 include(media/media.pri)
 include(media_player/media_player.pri)
 include(tests/tests.pri)

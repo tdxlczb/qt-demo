@@ -1,5 +1,5 @@
-#ifndef FISHEYE_CORRECTION_H
-#define FISHEYE_CORRECTION_H
+#ifndef CV_UTILS_H
+#define CV_UTILS_H
 
 #include <opencv2/opencv.hpp>
 
@@ -18,6 +18,8 @@ double GetSectorAngleRadians(double arc, double radius);
 //图片左右裁剪成上下
 cv::Mat GetLR2TBCroppingImage(const cv::Mat& src);
 
+//获取中心点对称坐标
+cv::Point GetSymmetricPoint(const cv::Point& src, const cv::Point& center);
 /*
 * 圆形展开类
 */
@@ -94,4 +96,7 @@ private:
 cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius);
 cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius);
 
-#endif // FISHEYE_CORRECTION_H
+
+
+
+#endif // CV_UTILS_H

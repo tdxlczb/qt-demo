@@ -16,12 +16,16 @@ enum class FECSetupType
     Bottom  //底装(法线向上）
 };
 
+//Normal是原图
+//Panoramic是全景展开图，即圆形展开
+//FishEye是鱼眼矫正图
 enum class FECShowType
 {
     Normal,
-    Panoramic,           //全景
-    PanoramicWith3PTZ,   //全景+3PTZ
-    PanoramicWith8PTZ,   //全景+8PTZ
+    NormalWith2PTZ,      //原图+2PTZ
+    NormalWith3PTZ,      //原图+3PTZ
+    NormalWith4PTZ,      //原图+4PTZ
+    NormalWith8PTZ,      //原图+8PTZ
     Panoramic180,        //全景180
     Panoramic360,        //全景360
     Panoramic360With1PTZ,//全景360+1PTZ
@@ -35,6 +39,15 @@ enum class FECShowType
     HalfSphere,          //半球
     HalfSphereAR,        //AR半球
     cylinder             //圆柱
+};
+
+struct FishEyeChildInfo
+{
+    int row = 0;
+    int column = 0;
+    int rowSpan = 0;
+    int columnSpan = 0;
+    bool isMainChild = false;
 };
 
 class FishEyeCorrection;
@@ -66,6 +79,10 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 private:
     void UpdateContentSafe(const cv::Mat& content);
+    void CreatGridLayoutChild(const QList<FishEyeChildInfo>& list);
+    void UpdateChildNormalContent(const cv::Mat& content);
+    void UpdateChildPanoramicContent(const cv::Mat& content);
+    void UpdateChildFishEyeContent(const cv::Mat& content);
 private:
     cv::Mat m_content;
     QMutex m_contentMutex;

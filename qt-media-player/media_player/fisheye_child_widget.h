@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QMutex>
 #include <opencv2/core.hpp>
+#include "core/graphics.h"
 
 class FishEyeCorrection;
 class FishEyeWidget;
@@ -19,6 +20,8 @@ public:
     bool IsSelected();
     void SetDefaultRotatedRect(float rotateRadiusScale, float rotateDegree);//角度
     cv::RotatedRect GetRotatedRect();
+    CircularSector GetCircularSector();
+    cv::Point GetContentCenter();
     void UpdateOriginSize(int originWidth, int originHeight);
     void UpdateRotatedRect(int rotateRadius, float rotateAngle);//弧度
     void UpdateRotatedRect(int moveX, int moveY, bool isRelease);
@@ -73,6 +76,7 @@ private:
     int m_lastRotateRadius = 0;
     float m_lastRotateAngle = 0.0f;//弧度
     cv::RotatedRect m_rotatedRect;
+    CircularSector m_circularSector;
 };
 
 #endif // FISHEYE_CHILD_WIDGET_H

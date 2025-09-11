@@ -3,12 +3,14 @@
 #include <QLabel>
 #include <QPainter>
 #include "fisheye_child_widget.h"
-#include "media/fisheye_correction.h"
+#include "core/fisheye_correction.h"
+#include "core/cv_utils.h"
 
+//白红橙黄绿青蓝紫黑
 const std::vector<cv::Scalar> kColorList = {
-    cv::Scalar(255,255,255), cv::Scalar(255,0,0), cv::Scalar(0,255,0),
-    cv::Scalar(0,0,255), cv::Scalar(255,0,0), cv::Scalar(255,0,0),
-    cv::Scalar(255,0,0), cv::Scalar(255,0,0), cv::Scalar(255,0,0)
+    cv::Scalar(255,255,255), cv::Scalar(255,0,0), cv::Scalar(255, 165, 0),
+    cv::Scalar(255, 255, 0), cv::Scalar(0, 255, 0), cv::Scalar(0, 255, 255),
+    cv::Scalar(0, 0, 255), cv::Scalar(128, 0, 128), cv::Scalar(0,0,0)
 };
 
 FishEyeWidget::FishEyeWidget(QWidget* parent)
@@ -33,46 +35,78 @@ void FishEyeWidget::SetFishEyeType(FECSetupType eSetupType, FECShowType eShowTyp
     m_eSetupType = eSetupType;
     m_eShowType = eShowType;
 
-    m_eSetupType = FECSetupType::Top;
-    m_eShowType = FECShowType::Panoramic360With1PTZ;
+    m_eSetupType = FECSetupType::Bottom;
+    m_eShowType = FECShowType::Panoramic360With3PTZ;
 
     switch (m_eShowType)
     {
     case FECShowType::Normal:
         break;
-    case FECShowType::Panoramic:
+    case FECShowType::NormalWith2PTZ:
         break;
-    case FECShowType::PanoramicWith3PTZ:
+    case FECShowType::NormalWith3PTZ: {
+        QList<FishEyeChildInfo> list;
+        list.push_back({ 0,0,1,1,true });
+        list.push_back({ 0,1,1,1,false });
+        list.push_back({ 1,0,1,1,false });
+        list.push_back({ 1,1,1,1,false });
+        CreatGridLayoutChild(list);
         break;
-    case FECShowType::PanoramicWith8PTZ:
+    }
+    case FECShowType::NormalWith4PTZ:
+        break;
+    case FECShowType::NormalWith8PTZ:
         break;
     case FECShowType::Panoramic180:
         break;
     case FECShowType::Panoramic360:
-        break;  
-    case FECShowType::Panoramic360With1PTZ: 
+        break;
+    case FECShowType::Panoramic360With1PTZ:
     {
-        {
-            FishEyeChildWidget* pWidget = new FishEyeChildWidget(0, true, this);
-            m_listWidgets.push_back(pWidget);
-            m_pGridLayout->addWidget(pWidget, 0, 0, 1, 1);
-            m_pMainChildWidget = pWidget;
-        }
-        {
-            FishEyeChildWidget* pWidget = new FishEyeChildWidget(1, false, this);
-            m_listWidgets.push_back(pWidget);
-            m_pGridLayout->addWidget(pWidget, 1, 0, 2, 1);
-            pWidget->SetDefaultRotatedRect(0.5f, 90.0f);
-        }
+        QList<FishEyeChildInfo> list;
+        list.push_back({ 0,0,1,1,true });
+        list.push_back({ 1,0,2,1,false });
+        CreatGridLayoutChild(list);
         break;
     }
-
     case FECShowType::Panoramic360With3PTZ:
+    {
+        QList<FishEyeChildInfo> list;
+        list.push_back({ 0,0,1,1,true });
+        list.push_back({ 0,1,1,1,false });
+        list.push_back({ 1,0,1,1,false });
+        list.push_back({ 1,1,1,1,false });
+        CreatGridLayoutChild(list);
         break;
+    }
     case FECShowType::Panoramic360With6PTZ:
+    {
+        QList<FishEyeChildInfo> list;
+        list.push_back({ 0,0,1,3,true });
+        list.push_back({ 1,0,1,1,false });
+        list.push_back({ 1,1,1,1,false });
+        list.push_back({ 1,2,1,1,false });
+        list.push_back({ 2,0,1,1,false });
+        list.push_back({ 2,1,1,1,false });
+        list.push_back({ 2,2,1,1,false });
+        CreatGridLayoutChild(list);
         break;
+    }
     case FECShowType::Panoramic360With8PTZ:
+    {
+        QList<FishEyeChildInfo> list;
+        list.push_back({ 0,0,1,1,false });
+        list.push_back({ 0,1,1,1,false });
+        list.push_back({ 0,2,1,1,false });
+        list.push_back({ 1,0,1,1,false });
+        list.push_back({ 1,1,1,1,true });
+        list.push_back({ 1,2,1,1,false });
+        list.push_back({ 2,0,1,1,false });
+        list.push_back({ 2,1,1,1,false });
+        list.push_back({ 2,2,1,1,false });
+        CreatGridLayoutChild(list);
         break;
+    }
     case FECShowType::FishEyeWith2PTZ:
         break;
     case FECShowType::FishEyeWith3PTZ:
@@ -90,47 +124,6 @@ void FishEyeWidget::SetFishEyeType(FECSetupType eSetupType, FECShowType eShowTyp
     default:
         break;
     }
-
-    return;
-    int rows = 2, cols = 2;
-    int widgetSize = rows * cols;
-    if (widgetSize == 2) {
-        //从row行，col列开始，占rowSpan行，占columnSpan列
-        {
-            FishEyeChildWidget* pWidget = new FishEyeChildWidget(0, true, this);
-            m_listWidgets.push_back(pWidget);
-            m_pGridLayout->addWidget(pWidget, 0, 0, 1, 1);
-            m_pMainChildWidget = pWidget;
-        }
-        {
-            FishEyeChildWidget* pWidget = new FishEyeChildWidget(1, false, this);
-            m_listWidgets.push_back(pWidget);
-            m_pGridLayout->addWidget(pWidget, 1, 0, 2, 1);
-            pWidget->SetDefaultRotatedRect(0.5f, 90.0f);
-        }
-
-    }
-    else {
-        int index = 0;
-        for (size_t i = 0; i < rows; i++)
-        {
-            for (size_t j = 0; j < cols; j++)
-            {
-                bool isMainChild = (index == 0);
-                FishEyeChildWidget* pWidget = new FishEyeChildWidget(index, isMainChild, this);
-                m_listWidgets.push_back(pWidget);
-                m_pGridLayout->addWidget(pWidget, i, j, 1, 1);
-                if (isMainChild) {
-                    m_pMainChildWidget = pWidget;
-                }
-                else {
-                    float degree = (2 * index - 1) * 360 / ((widgetSize - 1) * 2);
-                    pWidget->SetDefaultRotatedRect(0.5f, degree);
-                }
-                index++;
-            }
-        }
-    }
 }
 
 void FishEyeWidget::UpdateContent(const cv::Mat& content)
@@ -142,25 +135,95 @@ void FishEyeWidget::UpdateContent(const cv::Mat& content)
     int minSize = std::min(content.cols, content.rows);
     cv::Mat src;
     cv::resize(content, src, cv::Size(minSize, minSize));
+    m_pFishEyeCorrection->GetUnwrapCircular()->SetCropRows(minSize * 0.1);
 
     if (m_eShowType == FECShowType::Panoramic180) {
-        cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2);
-        dst = dst(cv::Rect(0, minSize * 0.2, dst.cols, dst.rows * 0.8));//移除顶部的数据，因为顶部的数据畸变非常严重
+        cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
+        if (m_eSetupType == FECSetupType::Top) {
+            //顶装模式需要将数据翻转
+            cv::flip(dst, dst, -1);
+        }
         cv::Mat result = GetLR2TBCroppingImage(dst);
         UpdateContentSafe(result);
         return;
     }
     if (m_eShowType == FECShowType::Panoramic360) {
-        cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2);
-        dst = dst(cv::Rect(0, minSize * 0.2, dst.cols, dst.rows * 0.8));//移除顶部的数据，因为顶部的数据畸变非常严重
+        cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
+        if (m_eSetupType == FECSetupType::Top) {
+            //顶装模式需要将数据翻转
+            cv::flip(dst, dst, -1);
+        }
         UpdateContentSafe(dst);
         return;
     }
 
+    
+    
+    //cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
+    cv::Mat dst;
+    if (m_eShowType >= FECShowType::NormalWith2PTZ && m_eShowType <= FECShowType::NormalWith8PTZ) {
+        dst = src;
+    }
+    else if (m_eShowType >= FECShowType::Panoramic360With1PTZ && m_eShowType <= FECShowType::Panoramic360With8PTZ) {
+        UpdateChildPanoramicContent(src);
+        dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
+    }
+    else if (m_eShowType >= FECShowType::FishEyeWith2PTZ && m_eShowType <= FECShowType::FishEyeWith8PTZ) {
+        dst = src;
+    }
+    if (m_eSetupType == FECSetupType::Top) {
+        //顶装模式需要将数据翻转
+        cv::Mat result;
+        cv::flip(dst, result, -1);
+        m_pMainChildWidget->UpdateContent(result);
+    }
+    else if (m_eSetupType == FECSetupType::Bottom) {
+        m_pMainChildWidget->UpdateContent(dst);
+    }
+
+    //m_contentMutex.lock();
+    //m_content = dst(cv::Rect(0, minSize * 0.1, dst.cols, dst.rows - minSize * 0.1));//这里移除顶部10%的数据，因为顶部10%的数据畸变非常严重
+    //m_contentMutex.unlock();
+    //emit sig_Update();
+}
+
+void FishEyeWidget::UpdateContentSafe(const cv::Mat& content)
+{
+    //这里不使用clone，前面调用时判断是否使用clone
+    m_contentMutex.lock();
+    m_content = content;
+    m_contentMutex.unlock();
+    emit sig_Update();
+}
+
+void FishEyeWidget::CreatGridLayoutChild(const QList<FishEyeChildInfo>& list)
+{
+    for (size_t i = 0; i < list.size(); i++)
+    {
+        bool isMainChild = list[i].isMainChild;
+        FishEyeChildWidget* pWidget = new FishEyeChildWidget(i, isMainChild, this);
+        m_listWidgets.push_back(pWidget);
+        m_pGridLayout->addWidget(pWidget, list[i].row, list[i].column, list[i].rowSpan, list[i].columnSpan);
+        if (isMainChild) {
+            m_pMainChildWidget = pWidget;
+        }
+        else {
+            float degree = i * 360 / (list.size() - 1);
+            pWidget->SetDefaultRotatedRect(0.5f, degree);
+        }
+    }
+}
+
+void FishEyeWidget::UpdateChildNormalContent(const cv::Mat& src)
+{
+}
+
+void FishEyeWidget::UpdateChildPanoramicContent(const cv::Mat& src)
+{
     for (size_t i = 0; i < m_listWidgets.size(); i++)
     {
         FishEyeChildWidget* pWidget = m_listWidgets[i];
-        pWidget->UpdateOriginSize(minSize, minSize);
+        pWidget->UpdateOriginSize(src.cols, src.rows);
         if (!pWidget->IsMainChild()) {
             // 创建旋转矩形
             cv::RotatedRect rotatedRect = pWidget->GetRotatedRect();
@@ -184,25 +247,10 @@ void FishEyeWidget::UpdateContent(const cv::Mat& content)
             }
         }
     }
-
-    cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2);
-    //cv::Mat result;
-    //cv::flip(dst, result, -1);
-    m_pMainChildWidget->UpdateContent(dst);
-
-    //m_contentMutex.lock();
-    //m_content = dst(cv::Rect(0, minSize * 0.1, dst.cols, dst.rows - minSize * 0.1));//这里移除顶部10%的数据，因为顶部10%的数据畸变非常严重
-    //m_contentMutex.unlock();
-    //emit sig_Update();
 }
 
-void FishEyeWidget::UpdateContentSafe(const cv::Mat& content)
+void FishEyeWidget::UpdateChildFishEyeContent(const cv::Mat& src)
 {
-    //这里不使用clone，前面调用时判断是否使用clone
-    m_contentMutex.lock();
-    m_content = content;
-    m_contentMutex.unlock();
-    emit sig_Update();
 }
 
 void FishEyeWidget::on_Update()
@@ -212,7 +260,13 @@ void FishEyeWidget::on_Update()
 
 void FishEyeWidget::on_ChildMousePress(const QPoint& point)
 {
-    cv::Point originPoint = m_pFishEyeCorrection->GetUnwrapCircular()->GetOriginPoint(cv::Point(point.x(), point.y()));
+    cv::Point srcPoint = cv::Point(point.x(), point.y());
+    if (m_eSetupType == FECSetupType::Top) {
+        srcPoint = GetSymmetricPoint(srcPoint, m_pMainChildWidget->GetContentCenter());
+    }
+    srcPoint = cv::Point(srcPoint.x, srcPoint.y + m_pFishEyeCorrection->GetUnwrapCircular()->GetCropRows());
+
+    cv::Point originPoint = m_pFishEyeCorrection->GetUnwrapCircular()->GetOriginPoint(srcPoint);
     int selectedIndex = -1;
     for (size_t i = 0; i < m_listWidgets.size(); i++)
     {
@@ -231,7 +285,12 @@ void FishEyeWidget::on_ChildMouseMove(const QPoint& mouseMove)
     if (m_selectedIndex < 0)
         return;
     FishEyeChildWidget* pWidget = m_listWidgets[m_selectedIndex];
-    pWidget->UpdateRotatedRect(mouseMove.x(), mouseMove.y(), false);
+    if (m_eSetupType == FECSetupType::Top) {
+        pWidget->UpdateRotatedRect(-mouseMove.x(), -mouseMove.y(), false);
+    }
+    else {
+        pWidget->UpdateRotatedRect(mouseMove.x(), mouseMove.y(), false);
+    }
 }
 
 void FishEyeWidget::on_ChildMouseRelease(const QPoint& mouseMove)
@@ -239,7 +298,12 @@ void FishEyeWidget::on_ChildMouseRelease(const QPoint& mouseMove)
     if (m_selectedIndex < 0)
         return;
     FishEyeChildWidget* pWidget = m_listWidgets[m_selectedIndex];
-    pWidget->UpdateRotatedRect(mouseMove.x(), mouseMove.y(), true);
+    if (m_eSetupType == FECSetupType::Top) {
+        pWidget->UpdateRotatedRect(-mouseMove.x(), -mouseMove.y(), true);
+    }
+    else {
+        pWidget->UpdateRotatedRect(mouseMove.x(), mouseMove.y(), true);
+    }
     m_selectedIndex = -1;
 }
 
@@ -333,6 +397,9 @@ void FishEyeWidget::paintEvent(QPaintEvent* event)
     //painter.drawImage(xPos, yPos, image);
 
     int drawOffset = m_curScrollOffset % width();
+    if (drawOffset < 0) {
+        drawOffset = width() + drawOffset;
+    }
     if (drawOffset != 0) {
         painter.drawImage(QRect(xPos, yPos, drawOffset, image.height()), image, QRect(image.width() - drawOffset, 0, drawOffset, image.height()));
     }
