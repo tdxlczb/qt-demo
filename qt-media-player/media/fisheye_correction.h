@@ -26,16 +26,21 @@ class UnwrapCircular
 public:
 	UnwrapCircular();
 	~UnwrapCircular();
+
+    //设置和获取需要剪裁的行数据大小
+    void SetCropRows(int cropRows);
+    int GetCropRows();
     ///
     /// \brief 获取展开后的图片数据
     /// \param src    图片数据，以图片中心为圆心坐标
     /// \param radius 半径
+    /// \param isCropRows 是否剪裁行数据
     /// \return 返回展开后的图片数据
     ///
-    cv::Mat GetUnwrapImage(const cv::Mat& src, int radius);
+    cv::Mat GetUnwrapImage(const cv::Mat& src, int radius, bool isCropRows = false);
     ///
     /// \brief 获取展开前的点坐标
-    /// \param point  展开后的点坐标
+    /// \param point 输入坐标
     /// \return 返回展开前的点坐标
     ///
     cv::Point2f GetOriginPoint(const cv::Point2f& point);
@@ -50,6 +55,7 @@ private:
 private:
     cv::Point m_center;
     int m_radius = 0;
+    int m_cropRows = 0;
     cv::Mat m_mapX;//映射矩阵
     cv::Mat m_mapY;//映射矩阵
 };
@@ -87,8 +93,5 @@ private:
 
 cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius);
 cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius);
-
-
-
 
 #endif // FISHEYE_CORRECTION_H

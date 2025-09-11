@@ -42,15 +42,17 @@ cv::Mat GetLR2TBCroppingImage(const cv::Mat& src)
     return result;
 }
 
-UnwrapCircular::UnwrapCircular()
+void UnwrapCircular::SetCropRows(int cropRows)
 {
+    m_cropRows = cropRows;
 }
 
-UnwrapCircular::~UnwrapCircular()
+int UnwrapCircular::GetCropRows()
 {
+    return m_cropRows;
 }
 
-cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius)
+cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius, bool isCropRows)
 {
     int R = (radius > 0) ? radius : std::min(src.cols, src.rows) / 2;
     cv::Point center(src.cols / 2, src.rows / 2);
@@ -60,13 +62,18 @@ cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius)
 
     cv::Mat unwrappedImage;
     remap(src, unwrappedImage, m_mapX, m_mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+
+    if (isCropRows && m_cropRows > 0 && m_cropRows < unwrappedImage.rows) {
+        return unwrappedImage(cv::Rect(0, m_cropRows, unwrappedImage.cols, unwrappedImage.rows - m_cropRows));//移除顶部的数据，因为顶部的数据畸变非常严重
+    }
     return unwrappedImage;
 }
 
 cv::Point2f UnwrapCircular::GetOriginPoint(const cv::Point2f& point)
 {
     int rectWidth = round(2 * CV_PI * m_radius);
-    double theta = (2 * CV_PI * point.x) / rectWidth;
+    double theta = (2 * CV_PI * point.x) / rectWidth + CV_PI * 0.5f;//这里增加90度是为了保持和海康的画面一致，后续可以考虑不需要
+    //double theta = (2 * CV_PI * point.x) / rectWidth;
     double r = point.y;
 
     float x = m_center.x - r * cos(theta);//这里使用+还是-需要和圆形展开保持一致
@@ -87,7 +94,8 @@ void UnwrapCircular::CreateMappingMatrix(const cv::Point& center, int radius)
 
     for (int y = 0; y < rectHeight; y++) {
         for (int x = 0; x < rectWidth; x++) {
-            double theta = (2 * CV_PI * x) / rectWidth;
+            double theta = (2 * CV_PI * x) / rectWidth + CV_PI * 0.5f;//这里增加90度是为了保持和海康的画面一致，后续可以考虑不需要
+            //double theta = (2 * CV_PI * x) / rectWidth;
             double r = y;
             //map_x.at<float>(y, x) = center.x + r * cos(theta);//顺时针展开
             map_x.at<float>(y, x) = center.x - r * cos(theta);//逆时针展开更符合视觉效果
