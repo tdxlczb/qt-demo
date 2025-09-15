@@ -49,151 +49,6 @@ cv::Point GetSymmetricPoint(const cv::Point& src, const cv::Point& center)
     return cv::Point(symmetricX, symmetricY);
 }
 
-UnwrapCircular::UnwrapCircular()
-{
-}
-
-UnwrapCircular::~UnwrapCircular()
-{
-}
-
-void UnwrapCircular::SetCropRows(int cropRows)
-{
-    m_cropRows = cropRows;
-}
-
-int UnwrapCircular::GetCropRows()
-{
-    return m_cropRows;
-}
-
-cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius, bool isCropRows)
-{
-    int R = (radius > 0) ? radius : std::min(src.cols, src.rows) / 2;
-    cv::Point center(src.cols / 2, src.rows / 2);
-    if (m_center != center || m_radius != R) {
-        CreateMappingMatrix(center, R);
-    }
-
-    cv::Mat unwrappedImage;
-    remap(src, unwrappedImage, m_mapX, m_mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-
-    if (isCropRows && m_cropRows > 0 && m_cropRows < unwrappedImage.rows) {
-        return unwrappedImage(cv::Rect(0, m_cropRows, unwrappedImage.cols, unwrappedImage.rows - m_cropRows));//移除顶部的数据，因为顶部的数据畸变非常严重
-    }
-    return unwrappedImage;
-}
-
-cv::Point2f UnwrapCircular::GetOriginPoint(const cv::Point2f& point)
-{
-    int rectWidth = round(2 * CV_PI * m_radius);
-    double theta = (2 * CV_PI * point.x) / rectWidth;
-    double r = point.y;
-
-    float x = m_center.x - r * cos(theta);//这里使用+还是-需要和圆形展开保持一致
-    float y = m_center.y + r * sin(theta);
-    return cv::Point2f(x, y);
-}
-
-void UnwrapCircular::CreateMappingMatrix(const cv::Point& center, int radius)
-{
-    m_center = center;
-    m_radius = radius;
-    int rectWidth = round(2 * CV_PI * radius);
-    int rectHeight = radius;
-
-    // 创建映射矩阵
-    cv::Mat map_x(rectHeight, rectWidth, CV_32F);
-    cv::Mat map_y(rectHeight, rectWidth, CV_32F);
-
-    for (int y = 0; y < rectHeight; y++) {
-        for (int x = 0; x < rectWidth; x++) {
-            double theta = (2 * CV_PI * x) / rectWidth + CV_PI * 0.5f;//这里增加90度是为了保持和海康的画面一致，后续可以考虑不需要
-            double r = y;
-            //map_x.at<float>(y, x) = center.x + r * cos(theta);//顺时针展开
-            map_x.at<float>(y, x) = center.x - r * cos(theta);//逆时针展开更符合视觉效果
-            map_y.at<float>(y, x) = center.y + r * sin(theta);
-        }
-    }
-    m_mapX = map_x;
-    m_mapY = map_y;
-}
-
-FishEyeCorrection::FishEyeCorrection()
-    : pUnwrapCircular(new UnwrapCircular())
-{
-}
-
-FishEyeCorrection::~FishEyeCorrection()
-{
-    delete pUnwrapCircular;
-}
-
-UnwrapCircular* FishEyeCorrection::GetUnwrapCircular()
-{
-    return pUnwrapCircular;
-}
-
-
-cv::Mat FishEyeCorrection::ExtractRotatedRegionROI(const cv::Mat& src, const cv::RotatedRect& rotatedRect)
-{
-    // 获取旋转矩形的最小外接矩形
-    cv::Rect boundingRect = rotatedRect.boundingRect();
-
-    // 扩展边界以确保包含整个旋转矩形
-    int padding = 50;
-    boundingRect.x = std::max(0, boundingRect.x - padding);
-    boundingRect.y = std::max(0, boundingRect.y - padding);
-    boundingRect.width = std::min(src.cols - boundingRect.x, boundingRect.width + 2 * padding);
-    boundingRect.height = std::min(src.rows - boundingRect.y, boundingRect.height + 2 * padding);
-
-    // 提取ROI
-    cv::Mat roi = src(boundingRect).clone();
-
-    // 调整旋转中心坐标为ROI内的相对坐标
-    cv::Point2f adjustedCenter = rotatedRect.center - cv::Point2f(boundingRect.x, boundingRect.y);
-
-    // 只旋转ROI区域，提高效率
-    cv::Mat rotationMatrix = getRotationMatrix2D(adjustedCenter, rotatedRect.angle, 1.0);
-    cv::Mat rotatedROI;
-    warpAffine(roi, rotatedROI, rotationMatrix, roi.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-
-    // 计算在旋转后图像中的裁剪位置
-    cv::Rect extractRect(adjustedCenter.x - rotatedRect.size.width / 2,
-        adjustedCenter.y - rotatedRect.size.height / 2,
-        rotatedRect.size.width, rotatedRect.size.height);
-
-    extractRect = extractRect & cv::Rect(0, 0, rotatedROI.cols, rotatedROI.rows);
-
-    if (extractRect.width > 0 && extractRect.height > 0) {
-        return rotatedROI(extractRect).clone();
-    }
-    return cv::Mat();
-}
-
-
-bool FishEyeCorrection::IsPointInRotatedRectTransform(const cv::Point2f& point, const cv::RotatedRect& rect)
-{
-    // 获取旋转矩形的角度（弧度）
-    float angle = rect.angle * CV_PI / 180.0f;
-
-    // 计算旋转矩阵
-    float cos_angle = std::cos(-angle);
-    float sin_angle = std::sin(-angle);
-
-    // 将点转换到旋转矩形的局部坐标系
-    cv::Point2f translated(point.x - rect.center.x, point.y - rect.center.y);
-
-    // 旋转点（反向旋转）
-    float local_x = translated.x * cos_angle - translated.y * sin_angle;
-    float local_y = translated.x * sin_angle + translated.y * cos_angle;
-
-    // 检查点是否在非旋转的矩形内
-    float half_width = rect.size.width / 2.0f;
-    float half_height = rect.size.height / 2.0f;
-
-    return (std::abs(local_x) <= half_width) && (std::abs(local_y) <= half_height);
-}
 
 // 将圆形图像展开成矩形
 cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius = -1)
@@ -214,11 +69,11 @@ cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius = -1)
         for (int x = 0; x < rectWidth; x++) {
             // 将矩形坐标转换为极坐标
             double theta = (2 * CV_PI * x) / rectWidth;  // 角度 [0, 2π]
-            double r = y;                                // 半径 [0, R]
+            double radius = y;                           // 半径 [0, R]
 
             // 将极坐标转换为原图像中的笛卡尔坐标
-            int srcX = center.x - r * cos(theta);
-            int srcY = center.y + r * sin(theta);
+            int srcX = center.x + radius * cos(theta);
+            int srcY = center.y + radius * sin(theta);
 
             // 确保坐标在原始图像范围内
             if (srcX >= 0 && srcX < circularImage.cols &&
@@ -230,6 +85,7 @@ cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius = -1)
     return unwrappedImage;
 }
 
+//优化使用remap创建映射矩阵实现，不使用使用映射矩阵，每次计算耗时较高，不能用于处理视频图像
 cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius = -1)
 {
     int R = (radius > 0) ? radius : std::min(circularImage.cols, circularImage.rows) / 2;
@@ -245,10 +101,10 @@ cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius = 
     for (int y = 0; y < rectHeight; y++) {
         for (int x = 0; x < rectWidth; x++) {
             double theta = (2 * CV_PI * x) / rectWidth;
-            double r = y;
+            double radius = y;
 
-            map_x.at<float>(y, x) = center.x + r * cos(theta);
-            map_y.at<float>(y, x) = center.y + r * sin(theta);
+            map_x.at<float>(y, x) = center.x + radius * cos(theta);
+            map_y.at<float>(y, x) = center.y + radius * sin(theta);
         }
     }
 
@@ -256,4 +112,40 @@ cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius = 
     remap(circularImage, unwrappedImage, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
     return unwrappedImage;
+}
+
+// 反向操作：将矩形图像重新卷成圆形
+cv::Mat RewrapToCircularImage(const cv::Mat& unwrappedImage, cv::Size circularSize) 
+{
+    cv::Mat circularImage(circularSize, unwrappedImage.type(), cv::Scalar(0));
+
+    int R = unwrappedImage.rows;  // 矩形高度就是半径
+    cv::Point center(circularSize.width / 2, circularSize.height / 2);
+    int rectWidth = unwrappedImage.cols;
+
+    // 遍历圆形图像的每个像素
+    for (int y = 0; y < circularSize.height; y++) {
+        for (int x = 0; x < circularSize.width; x++) {
+            // 计算当前点到圆心的距离和角度
+            double dx = x - center.x;
+            double dy = y - center.y;
+            double r = sqrt(dx * dx + dy * dy);
+            double theta = atan2(dy, dx);
+            if (theta < 0) theta += 2 * CV_PI;  // 将角度转换到 [0, 2π]
+
+            // 如果点在圆内
+            if (r <= R) {
+                // 将极坐标转换为矩形坐标
+                int rectX = round((theta * rectWidth) / (2 * CV_PI));
+                int rectY = round(r);
+
+                // 确保坐标在矩形图像范围内
+                if (rectX >= 0 && rectX < rectWidth && rectY >= 0 && rectY < R) {
+                    circularImage.at<cv::Vec3b>(y, x) = unwrappedImage.at<cv::Vec3b>(rectY, rectX);
+                }
+            }
+        }
+    }
+
+    return circularImage;
 }

@@ -3,6 +3,7 @@
 
 
 int UnwrapCircularDemo();
+int StretchCircularDemo();
 int FisheyeDemo01();
 int FisheyeDemo02();
 int FisheyeDemo03();
