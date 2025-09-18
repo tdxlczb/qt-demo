@@ -35,8 +35,8 @@ void FishEyeWidget::SetFishEyeType(FECSetupType eSetupType, FECShowType eShowTyp
     m_eSetupType = eSetupType;
     m_eShowType = eShowType;
 
-    m_eSetupType = FECSetupType::Bottom;
-    m_eShowType = FECShowType::Panoramic360With3PTZ;
+    m_eSetupType = FECSetupType::Floor;
+    m_eShowType = FECShowType::FishEyeWith3PTZ;
 
     switch (m_eShowType)
     {
@@ -44,7 +44,8 @@ void FishEyeWidget::SetFishEyeType(FECSetupType eSetupType, FECShowType eShowTyp
         break;
     case FECShowType::NormalWith2PTZ:
         break;
-    case FECShowType::NormalWith3PTZ: {
+    case FECShowType::NormalWith3PTZ: 
+    {
         QList<FishEyeChildInfo> list;
         list.push_back({ 0,0,1,1,true });
         list.push_back({ 0,1,1,1,false });
@@ -110,7 +111,15 @@ void FishEyeWidget::SetFishEyeType(FECSetupType eSetupType, FECShowType eShowTyp
     case FECShowType::FishEyeWith2PTZ:
         break;
     case FECShowType::FishEyeWith3PTZ:
+    {
+        QList<FishEyeChildInfo> list;
+        list.push_back({ 0,0,1,1,true });
+        list.push_back({ 0,1,1,1,false });
+        list.push_back({ 1,0,1,1,false });
+        list.push_back({ 1,1,1,1,false });
+        CreatGridLayoutChild(list);
         break;
+    }
     case FECShowType::FishEyeWith4PTZ:
         break;
     case FECShowType::FishEyeWith8PTZ:
@@ -135,11 +144,12 @@ void FishEyeWidget::UpdateContent(const cv::Mat& content)
     int minSize = std::min(content.cols, content.rows);
     cv::Mat src;
     cv::resize(content, src, cv::Size(minSize, minSize));
-    m_pFishEyeCorrection->GetUnwrapCircular()->SetCropRows(minSize * 0.1);
+    m_pFishEyeCorrection->GetUnwrapCircular()->SetCropRect({ 0, minSize / 10,0,0 });
+    m_pFishEyeCorrection->GetStretchCircular()->SetCropRect({ minSize / 20, minSize / 10,minSize / 20,minSize / 10 });
 
     if (m_eShowType == FECShowType::Panoramic180) {
         cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
-        if (m_eSetupType == FECSetupType::Top) {
+        if (m_eSetupType == FECSetupType::Ceiling) {
             //顶装模式需要将数据翻转
             cv::flip(dst, dst, -1);
         }
@@ -149,7 +159,7 @@ void FishEyeWidget::UpdateContent(const cv::Mat& content)
     }
     if (m_eShowType == FECShowType::Panoramic360) {
         cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
-        if (m_eSetupType == FECSetupType::Top) {
+        if (m_eSetupType == FECSetupType::Ceiling) {
             //顶装模式需要将数据翻转
             cv::flip(dst, dst, -1);
         }
@@ -157,11 +167,10 @@ void FishEyeWidget::UpdateContent(const cv::Mat& content)
         return;
     }
 
-    
-    
     //cv::Mat dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
     cv::Mat dst;
     if (m_eShowType >= FECShowType::NormalWith2PTZ && m_eShowType <= FECShowType::NormalWith8PTZ) {
+        UpdateChildNormalContent(src);
         dst = src;
     }
     else if (m_eShowType >= FECShowType::Panoramic360With1PTZ && m_eShowType <= FECShowType::Panoramic360With8PTZ) {
@@ -169,15 +178,16 @@ void FishEyeWidget::UpdateContent(const cv::Mat& content)
         dst = m_pFishEyeCorrection->GetUnwrapCircular()->GetUnwrapImage(src, minSize / 2, true);
     }
     else if (m_eShowType >= FECShowType::FishEyeWith2PTZ && m_eShowType <= FECShowType::FishEyeWith8PTZ) {
-        dst = src;
+        UpdateChildFishEyeContent(src);
+        dst = m_pFishEyeCorrection->GetStretchCircular()->GetStretchImage(src, minSize / 2, true);
     }
-    if (m_eSetupType == FECSetupType::Top) {
+    if (m_eSetupType == FECSetupType::Ceiling) {
         //顶装模式需要将数据翻转
         cv::Mat result;
         cv::flip(dst, result, -1);
         m_pMainChildWidget->UpdateContent(result);
     }
-    else if (m_eSetupType == FECSetupType::Bottom) {
+    else if (m_eSetupType == FECSetupType::Floor) {
         m_pMainChildWidget->UpdateContent(dst);
     }
 
@@ -216,6 +226,33 @@ void FishEyeWidget::CreatGridLayoutChild(const QList<FishEyeChildInfo>& list)
 
 void FishEyeWidget::UpdateChildNormalContent(const cv::Mat& src)
 {
+    for (size_t i = 0; i < m_listWidgets.size(); i++)
+    {
+        FishEyeChildWidget* pWidget = m_listWidgets[i];
+        pWidget->UpdateOriginSize(src.cols, src.rows);
+        if (!pWidget->IsMainChild()) {
+            // 创建旋转矩形
+            cv::RotatedRect rotatedRect = pWidget->GetRotatedRect();
+            // 提取区域
+            cv::Mat extractedRegion = m_pFishEyeCorrection->ExtractRotatedRegionROI(src, rotatedRect);
+            pWidget->UpdateContent(extractedRegion);
+        }
+    }
+
+    for (size_t i = 0; i < m_listWidgets.size(); i++)
+    {
+        FishEyeChildWidget* pWidget = m_listWidgets[i];
+        if (!pWidget->IsMainChild()) {
+            // 创建旋转矩形
+            cv::RotatedRect rotatedRect = pWidget->GetRotatedRect();
+            // 在原图上绘制旋转矩形
+            cv::Point2f vertices[4];
+            rotatedRect.points(vertices);
+            for (int j = 0; j < 4; j++) {
+                line(src, vertices[j], vertices[(j + 1) % 4], kColorList[i], 3);
+            }
+        }
+    }
 }
 
 void FishEyeWidget::UpdateChildPanoramicContent(const cv::Mat& src)
@@ -251,6 +288,33 @@ void FishEyeWidget::UpdateChildPanoramicContent(const cv::Mat& src)
 
 void FishEyeWidget::UpdateChildFishEyeContent(const cv::Mat& src)
 {
+    for (size_t i = 0; i < m_listWidgets.size(); i++)
+    {
+        FishEyeChildWidget* pWidget = m_listWidgets[i];
+        pWidget->UpdateOriginSize(src.cols, src.rows);
+        if (!pWidget->IsMainChild()) {
+            // 创建旋转矩形
+            cv::RotatedRect rotatedRect = pWidget->GetRotatedRect();
+            // 提取区域
+            cv::Mat extractedRegion = m_pFishEyeCorrection->ExtractRotatedRegionROI(src, rotatedRect);
+            pWidget->UpdateContent(extractedRegion);
+        }
+    }
+
+    for (size_t i = 0; i < m_listWidgets.size(); i++)
+    {
+        FishEyeChildWidget* pWidget = m_listWidgets[i];
+        if (!pWidget->IsMainChild()) {
+            // 创建旋转矩形
+            cv::RotatedRect rotatedRect = pWidget->GetRotatedRect();
+            // 在原图上绘制旋转矩形
+            cv::Point2f vertices[4];
+            rotatedRect.points(vertices);
+            for (int j = 0; j < 4; j++) {
+                line(src, vertices[j], vertices[(j + 1) % 4], kColorList[i], 3);
+            }
+        }
+    }
 }
 
 void FishEyeWidget::on_Update()
@@ -261,12 +325,15 @@ void FishEyeWidget::on_Update()
 void FishEyeWidget::on_ChildMousePress(const QPoint& point)
 {
     cv::Point srcPoint = cv::Point(point.x(), point.y());
-    if (m_eSetupType == FECSetupType::Top) {
+    if (m_eSetupType == FECSetupType::Ceiling) {
         srcPoint = GetSymmetricPoint(srcPoint, m_pMainChildWidget->GetContentCenter());
     }
-    srcPoint = cv::Point(srcPoint.x, srcPoint.y + m_pFishEyeCorrection->GetUnwrapCircular()->GetCropRows());
+    cv::Point originPoint = srcPoint;
+    if (m_eShowType >= FECShowType::Panoramic360With1PTZ && m_eShowType <= FECShowType::Panoramic360With8PTZ) {
+        srcPoint = cv::Point(srcPoint.x, srcPoint.y + m_pFishEyeCorrection->GetUnwrapCircular()->GetCropRect().top);
+        originPoint = m_pFishEyeCorrection->GetUnwrapCircular()->GetOriginPoint(srcPoint);
+    }
 
-    cv::Point originPoint = m_pFishEyeCorrection->GetUnwrapCircular()->GetOriginPoint(srcPoint);
     int selectedIndex = -1;
     for (size_t i = 0; i < m_listWidgets.size(); i++)
     {
@@ -285,7 +352,7 @@ void FishEyeWidget::on_ChildMouseMove(const QPoint& mouseMove)
     if (m_selectedIndex < 0)
         return;
     FishEyeChildWidget* pWidget = m_listWidgets[m_selectedIndex];
-    if (m_eSetupType == FECSetupType::Top) {
+    if (m_eSetupType == FECSetupType::Ceiling) {
         pWidget->UpdateRotatedRect(-mouseMove.x(), -mouseMove.y(), false);
     }
     else {
@@ -298,7 +365,7 @@ void FishEyeWidget::on_ChildMouseRelease(const QPoint& mouseMove)
     if (m_selectedIndex < 0)
         return;
     FishEyeChildWidget* pWidget = m_listWidgets[m_selectedIndex];
-    if (m_eSetupType == FECSetupType::Top) {
+    if (m_eSetupType == FECSetupType::Ceiling) {
         pWidget->UpdateRotatedRect(-mouseMove.x(), -mouseMove.y(), true);
     }
     else {

@@ -11,9 +11,9 @@
 enum class FECSetupType
 {
     None,
-    Top,    //顶装(法线向下）
-    Side,   //壁装（法线水平）
-    Bottom  //底装(法线向上）
+    Ceiling,  // 顶装方式        (法线向下)
+    Wall,     // 壁装方式        (法线水平)
+    Floor,    // 地面安装        (法线向上)
 };
 
 //Normal是原图
@@ -94,7 +94,7 @@ private:
     int m_curScrollOffset = 0;//图片拖拽滚动的值
 
     FishEyeCorrection* m_pFishEyeCorrection = nullptr;
-    FECSetupType m_eSetupType = FECSetupType::Top;
+    FECSetupType m_eSetupType = FECSetupType::Wall;
     FECShowType m_eShowType = FECShowType::Normal;
     QList<FishEyeChildWidget*> m_listWidgets;
     FishEyeChildWidget* m_pMainChildWidget = nullptr;

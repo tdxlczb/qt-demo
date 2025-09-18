@@ -21,5 +21,8 @@ cv::Mat GetLR2TBCroppingImage(const cv::Mat& src);
 //获取中心点对称坐标
 cv::Point GetSymmetricPoint(const cv::Point& src, const cv::Point& center);
 
+cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius);
+cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius);
+cv::Mat RewrapToCircularImage(const cv::Mat& unwrappedImage, cv::Size circularSize);
 
 #endif // CV_UTILS_H

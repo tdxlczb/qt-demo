@@ -4,25 +4,38 @@
 #include <opencv2/opencv.hpp>
 
 /*
+* 剪切的上下左右量
+* 0~width的数据保留left~(width-right)
+* 0~height的数据保留top~(height-bottom)
+*/
+struct CropRect
+{
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+};
+
+/*
 * 圆形展开类
 */
 class UnwrapCircular
 {
 public:
-	UnwrapCircular();
-	~UnwrapCircular();
+    UnwrapCircular();
+    ~UnwrapCircular();
 
-    //设置和获取需要剪裁的行数据大小
-    void SetCropRows(int cropRows);
-    int GetCropRows();
+    //设置和获取需要剪裁的数据大小
+    void SetCropRect(CropRect rect);
+    CropRect GetCropRect();
     ///
     /// \brief 获取展开后的图片数据
     /// \param src    图片数据，以图片中心为圆心坐标
     /// \param radius 半径
-    /// \param isCropRows 是否剪裁行数据
+    /// \param isCrop 是否剪裁数据
     /// \return 返回展开后的图片数据
     ///
-    cv::Mat GetUnwrapImage(const cv::Mat& src, int radius, bool isCropRows = false);
+    cv::Mat GetUnwrapImage(const cv::Mat& src, int radius, bool isCrop = false);
     ///
     /// \brief 获取展开前的点坐标
     /// \param point 输入坐标
@@ -40,11 +53,49 @@ private:
 private:
     cv::Point m_center;
     int m_radius = 0;
-    int m_cropRows = 0;
+    CropRect m_cropRect;
     cv::Mat m_mapX;//映射矩阵
     cv::Mat m_mapY;//映射矩阵
 };
 
+/*
+* 圆形拉伸类
+*/
+class StretchCircular
+{
+public:
+    StretchCircular();
+    ~StretchCircular();
+
+    //设置和获取需要剪裁的数据大小
+    void SetCropRect(CropRect rect);
+    CropRect GetCropRect();
+
+    ///
+    /// \brief 获取拉伸后的图片数据
+    /// \param src    图片数据，以图片中心为圆心坐标
+    /// \param radius 半径
+    /// \param isCrop 是否剪裁数据
+    /// \return 返回展开后的图片数据
+    ///
+    cv::Mat GetStretchImage(const cv::Mat& src, int radius, bool isCrop = false);
+
+private:
+    ///
+    /// \brief 创建圆形拉升的映射矩阵
+    /// \param center 圆心坐标
+    /// \param radius 半径
+    /// \param stretchMode 拉升方式：0沿x轴拉伸，1沿y轴拉伸，2沿矩形边拉伸，3沿圆形边拉伸
+    /// \return 
+    ///
+    void CreateMappingMatrix(const cv::Point& center, int radius, int stretchMode);
+private:
+    cv::Point m_center;
+    int m_radius = 0;
+    CropRect m_cropRect;
+    cv::Mat m_mapX;//映射矩阵
+    cv::Mat m_mapY;//映射矩阵
+};
 
 
 class FishEyeCorrection
@@ -54,6 +105,7 @@ public:
     ~FishEyeCorrection();
 
     UnwrapCircular* GetUnwrapCircular();
+    StretchCircular* GetStretchCircular();
     ///
     /// \brief 截取图片旋转矩形区域的数据
     /// \param src   源图片数据
@@ -73,10 +125,9 @@ private:
 
 
 private:
-    UnwrapCircular* pUnwrapCircular = nullptr;
+    UnwrapCircular* m_pUnwrapCircular = nullptr;
+    StretchCircular* m_pStretchCircular = nullptr;
 };
 
-cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius);
-cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius);
 
 #endif // FISHEYE_CORRECTION_H

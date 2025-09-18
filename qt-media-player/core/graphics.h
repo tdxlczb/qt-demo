@@ -9,7 +9,7 @@
 */
 class CircularSector {
 public:
-    CircularSector();
+    CircularSector(){};
     // 支持普通扇形和圆环扇形
     CircularSector(cv::Point center, float startAngle, float endAngle, int outerRadius, int innerRadius = 0);
     ~CircularSector();
@@ -44,7 +44,7 @@ private:
 */
 class RotatedRectangle {
 public:
-    RotatedRectangle();
+    RotatedRectangle(){};
     ///
     /// \brief 构造函数
     /// \param center 环绕的中心点
@@ -55,6 +55,41 @@ public:
     ///
     RotatedRectangle(cv::Point center, cv::Size size, int radius, float angle);
     ~RotatedRectangle();
+
+    // 绘制边框
+    void DrawBorder(cv::Mat& image, const cv::Scalar& color, int thickness = 2) const;
+
+    // 绘制填充
+    void DrawFilled(cv::Mat& image, const cv::Scalar& fillColor, const cv::Scalar& borderColor = cv::Scalar(0, 0, 0), int borderThickness = 1) const;
+
+    // 判断点是否在区域内
+    bool IsPointInRegion(const cv::Point& point) const;
+private:
+    void CreateRotatedRect(cv::Size size);
+private:
+    cv::Point m_center;//环绕的中心点
+    int m_radius = 0;//环绕的半径
+    float m_angle = 0.0f;//环绕的角度，和RotatedRect中的角度不一致，应该是垂直关系
+    cv::RotatedRect m_rotatedRect;
+};
+
+
+/*
+* 自定义多边形
+*/
+class CustomPolygon {
+public:
+    CustomPolygon() {};
+    ///
+    /// \brief 构造函数
+    /// \param center 环绕的中心点
+    /// \param size   矩形大小
+    /// \param radius 环绕半径，如果环绕半径为0，则环绕角度为矩形的旋转角度
+    /// \param angle  环绕角度(90，180)
+    /// \return 返回展开后的图片数据
+    ///
+    CustomPolygon(cv::Point center, cv::Size size, int radius, float angle);
+    ~CustomPolygon();
 
     // 绘制边框
     void DrawBorder(cv::Mat& image, const cv::Scalar& color, int thickness = 2) const;

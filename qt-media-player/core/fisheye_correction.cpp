@@ -9,17 +9,17 @@ UnwrapCircular::~UnwrapCircular()
 {
 }
 
-void UnwrapCircular::SetCropRows(int cropRows)
+void UnwrapCircular::SetCropRect(CropRect rect)
 {
-    m_cropRows = cropRows;
+    m_cropRect = rect;
 }
 
-int UnwrapCircular::GetCropRows()
+CropRect UnwrapCircular::GetCropRect()
 {
-    return m_cropRows;
+    return m_cropRect;
 }
 
-cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius, bool isCropRows)
+cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius, bool isCrop)
 {
     int R = (radius > 0) ? radius : std::min(src.cols, src.rows) / 2;
     cv::Point center(src.cols / 2, src.rows / 2);
@@ -27,13 +27,14 @@ cv::Mat UnwrapCircular::GetUnwrapImage(const cv::Mat& src, int radius, bool isCr
         CreateMappingMatrix(center, R);
     }
 
-    cv::Mat unwrappedImage;
-    remap(src, unwrappedImage, m_mapX, m_mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+    cv::Mat dstImage;
+    remap(src, dstImage, m_mapX, m_mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
-    if (isCropRows && m_cropRows > 0 && m_cropRows < unwrappedImage.rows) {
-        return unwrappedImage(cv::Rect(0, m_cropRows, unwrappedImage.cols, unwrappedImage.rows - m_cropRows));//移除顶部的数据，因为顶部的数据畸变非常严重
+    if (isCrop) {
+        //剪裁边缘数据，因为边缘的数据畸变非常严重
+        return dstImage(cv::Rect(m_cropRect.left, m_cropRect.top, dstImage.cols - m_cropRect.right - m_cropRect.left, dstImage.rows - m_cropRect.bottom - m_cropRect.top));
     }
-    return unwrappedImage;
+    return dstImage;
 }
 
 cv::Point2f UnwrapCircular::GetOriginPoint(const cv::Point2f& point)
@@ -73,21 +74,138 @@ void UnwrapCircular::CreateMappingMatrix(const cv::Point& center, int radius)
     m_mapY = map_y;
 }
 
+
+StretchCircular::StretchCircular()
+{
+    cv::Rect rc;
+
+}
+
+StretchCircular::~StretchCircular()
+{
+}
+
+void StretchCircular::SetCropRect(CropRect rect)
+{
+    m_cropRect = rect;
+}
+
+CropRect StretchCircular::GetCropRect()
+{
+    return m_cropRect;
+}
+
+cv::Mat StretchCircular::GetStretchImage(const cv::Mat& src, int radius, bool isCrop)
+{
+    int R = (radius > 0) ? radius : std::min(src.cols, src.rows) / 2;
+    cv::Point center(src.cols / 2, src.rows / 2);
+    if (m_center != center || m_radius != R) {
+        CreateMappingMatrix(center, R, 0);
+    }
+
+    cv::Mat dstImage;
+    remap(src, dstImage, m_mapX, m_mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+
+    if (isCrop) {
+        //剪裁边缘数据，因为边缘的数据畸变非常严重
+        return dstImage(cv::Rect(m_cropRect.left, m_cropRect.top, dstImage.cols - m_cropRect.right - m_cropRect.left, dstImage.rows - m_cropRect.bottom - m_cropRect.top));
+    }
+    return dstImage;
+}
+
+void StretchCircular::CreateMappingMatrix(const cv::Point& center, int radius, int stretchMode)
+{
+    m_center = center;
+    m_radius = radius;
+
+    int width = radius * 2;
+    int height = radius * 2;
+    // 创建映射矩阵
+    //cv::Mat map_x = cv::Mat::zeros(cv::Size(width, height), CV_32F);
+    //cv::Mat map_y = cv::Mat::zeros(cv::Size(width, height), CV_32F);
+    cv::Mat map_x(height, width, CV_32F);
+    cv::Mat map_y(height, width, CV_32F);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float dx = x - center.x;
+            float dy = y - center.y;
+            float distance = sqrt(dx * dx + dy * dy); // 当前点到中心的距离
+
+            auto func = [](float x) ->float {
+                //return x;
+                return std::pow(x, 0.8f);
+                //return std::sin(CV_PI / 2 * x);
+                //return std::sqrt(1 - (x - 1) * (x - 1));
+                //return std::asin(x) * 2 / CV_PI;
+                //return -std::cos(CV_PI / 2 * (x + 1.0f));
+                //return -std::acos(-x) / (CV_PI / 2) - 1.0f;
+                };
+
+            if (stretchMode == 0) {
+                float scale = std::sqrt(radius * radius - dy * dy) / center.x;
+                map_x.at<float>(y, x) = center.x + func(scale) * dx;
+                map_y.at<float>(y, x) = y;
+            }
+            else if (stretchMode == 1) {
+                float scale = std::sqrt(radius * radius - dx * dx) / center.y;
+                map_x.at<float>(y, x) = x;
+                map_y.at<float>(y, x) = center.y + func(scale) * dy;
+            }
+            else if (stretchMode == 2) {
+                float theta = std::atan2(dy, dx); // 当前点的角度
+                // 计算沿当前点方向上与矩形边交叉的点到中心的距离
+                double cos_val = std::abs(std::cos(theta));
+                double sin_val = std::abs(std::sin(theta));
+                // 距离公式：r = a / max(|cosθ|, |sinθ|)
+                float rectDistance = radius / std::max(cos_val, sin_val);
+                float scale = distance / rectDistance;
+
+                map_x.at<float>(y, x) = center.x + func(scale) * radius * cos(theta);
+                map_y.at<float>(y, x) = center.x + func(scale) * radius * sin(theta);
+            }
+            else if (stretchMode == 3) {
+                // 如果点在鱼眼半径内
+                if (distance <= radius) {
+                    float theta = std::atan2(dy, dx); // 当前点的角度
+                    float scale = distance / radius;
+                    map_x.at<float>(y, x) = center.x + func(scale) * radius * cos(theta);
+                    map_y.at<float>(y, x) = center.y + func(scale) * radius * sin(theta);
+                }
+                else {
+                    // 保持原样
+                    map_x.at<float>(y, x) = x;
+                    map_y.at<float>(y, x) = y;
+                }
+            }
+        }
+    }
+
+    m_mapX = map_x;
+    m_mapY = map_y;
+}
+
 FishEyeCorrection::FishEyeCorrection()
-    : pUnwrapCircular(new UnwrapCircular())
+    : m_pUnwrapCircular(new UnwrapCircular())
+    , m_pStretchCircular(new StretchCircular())
 {
 }
 
 FishEyeCorrection::~FishEyeCorrection()
 {
-    delete pUnwrapCircular;
+    delete m_pUnwrapCircular;
+    delete m_pStretchCircular;
 }
 
 UnwrapCircular* FishEyeCorrection::GetUnwrapCircular()
 {
-    return pUnwrapCircular;
+    return m_pUnwrapCircular;
 }
 
+StretchCircular* FishEyeCorrection::GetStretchCircular()
+{
+    return m_pStretchCircular;
+}
 
 cv::Mat FishEyeCorrection::ExtractRotatedRegionROI(const cv::Mat& src, const cv::RotatedRect& rotatedRect)
 {
@@ -147,67 +265,4 @@ bool FishEyeCorrection::IsPointInRotatedRectTransform(const cv::Point2f& point, 
     float half_height = rect.size.height / 2.0f;
 
     return (std::abs(local_x) <= half_width) && (std::abs(local_y) <= half_height);
-}
-
-// 将圆形图像展开成矩形
-cv::Mat UnwrapCircularImage(const cv::Mat& circularImage, int radius = -1)
-{
-    // 确定圆的半径（如果未指定，使用图像的最小边长的一半）
-    int R = (radius > 0) ? radius : std::min(circularImage.cols, circularImage.rows) / 2;
-
-    // 圆心坐标
-    cv::Point center(circularImage.cols / 2, circularImage.rows / 2);
-
-    // 创建展开后的矩形图像：宽度为圆周长 2πR，高度为半径 R
-    int rectWidth = round(2 * CV_PI * R);
-    int rectHeight = R;
-    cv::Mat unwrappedImage(rectHeight, rectWidth, circularImage.type(), cv::Scalar(0));
-
-    // 遍历矩形图像的每个像素
-    for (int y = 0; y < rectHeight; y++) {
-        for (int x = 0; x < rectWidth; x++) {
-            // 将矩形坐标转换为极坐标
-            double theta = (2 * CV_PI * x) / rectWidth;  // 角度 [0, 2π]
-            double r = y;                                // 半径 [0, R]
-
-            // 将极坐标转换为原图像中的笛卡尔坐标
-            int srcX = center.x - r * cos(theta);
-            int srcY = center.y + r * sin(theta);
-
-            // 确保坐标在原始图像范围内
-            if (srcX >= 0 && srcX < circularImage.cols &&
-                srcY >= 0 && srcY < circularImage.rows) {
-                unwrappedImage.at<cv::Vec3b>(y, x) = circularImage.at<cv::Vec3b>(srcY, srcX);
-            }
-        }
-    }
-    return unwrappedImage;
-}
-
-cv::Mat UnwrapCircularImageOptimized(const cv::Mat& circularImage, int radius = -1)
-{
-    int R = (radius > 0) ? radius : std::min(circularImage.cols, circularImage.rows) / 2;
-    cv::Point center(circularImage.cols / 2, circularImage.rows / 2);
-
-    int rectWidth = round(2 * CV_PI * R);
-    int rectHeight = R;
-
-    // 创建映射矩阵
-    cv::Mat map_x(rectHeight, rectWidth, CV_32F);
-    cv::Mat map_y(rectHeight, rectWidth, CV_32F);
-
-    for (int y = 0; y < rectHeight; y++) {
-        for (int x = 0; x < rectWidth; x++) {
-            double theta = (2 * CV_PI * x) / rectWidth;
-            double r = y;
-
-            map_x.at<float>(y, x) = center.x + r * cos(theta);
-            map_y.at<float>(y, x) = center.y + r * sin(theta);
-        }
-    }
-
-    cv::Mat unwrappedImage;
-    remap(circularImage, unwrappedImage, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-
-    return unwrappedImage;
 }

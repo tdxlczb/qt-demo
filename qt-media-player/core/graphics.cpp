@@ -1,10 +1,6 @@
 #include "graphics.h"
 #include "cv_utils.h"
 
-CircularSector::CircularSector()
-{
-}
-
 // 构造函数：支持普通扇形和圆环扇形
 CircularSector::CircularSector(cv::Point center, float startAngle, float endAngle, int outerRadius, int innerRadius)
     : m_center(center)
@@ -177,10 +173,6 @@ float CircularSector::CalculateArea() const {
 
 
 
-RotatedRectangle::RotatedRectangle()
-{
-}
-
 RotatedRectangle::RotatedRectangle(cv::Point center, cv::Size size, int radius, float angle)
     : m_center(center)
     , m_radius(radius)
@@ -250,4 +242,31 @@ bool RotatedRectangle::IsPointInRegion(const cv::Point& point) const
     float half_height = m_rotatedRect.size.height / 2.0f;
 
     return (std::abs(local_x) <= half_width) && (std::abs(local_y) <= half_height);
+}
+
+
+CustomPolygon::CustomPolygon(cv::Point center, cv::Size size, int radius, float angle)
+{
+}
+
+CustomPolygon::~CustomPolygon()
+{
+}
+
+// 绘制边框
+void CustomPolygon::DrawBorder(cv::Mat& image, const cv::Scalar& color, int thickness) const
+{
+    
+}
+
+// 绘制填充
+void CustomPolygon::DrawFilled(cv::Mat& image, const cv::Scalar& fillColor, const cv::Scalar& borderColor, int borderThickness) const
+{
+
+}
+
+// 判断点是否在区域内
+bool CustomPolygon::IsPointInRegion(const cv::Point& point) const
+{
+    return false;
 }
