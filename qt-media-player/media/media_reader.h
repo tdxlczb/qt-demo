@@ -3,9 +3,6 @@
 
 #include <thread>
 #include <atomic>
-#include <queue>
-#include <condition_variable>
-#include "media_define.h"
 #include <opencv2/opencv.hpp>
 extern "C"
 {
@@ -19,28 +16,17 @@ extern "C"
 #include <libswresample/swresample.h>
 }
 
+#include "media_define.h"
+#include "media_play_event.h"
+#include "media_queue.h"
 
 /*
 * 为实现音画同步效果
 * 视频采用回调方式渲染
 * 音频采用主动获取方式渲染
+* 
+* 解码和取包不要在统一个线程，避免性能不足的时候可能会影响取包，导致网络包延迟累积
 */
-
-class FrameQueue
-{
-public:
-    FrameQueue(int16_t maxQueueSize = 5);
-    ~FrameQueue();
-
-    void Push(AVFrame* frame);
-    AVFrame* PopFront();
-    void Clear();
-private:
-    std::queue<AVFrame*> m_frameQueue;
-    const int16_t m_maxQueueSize = 0;
-    std::mutex m_frameQueueMutex;
-    std::condition_variable m_queueCV;
-};
 
 class VideoDisplay;
 class AudioDisplay;
@@ -51,9 +37,7 @@ public:
     MediaReader();
     ~MediaReader();
 
-    bool Init(const MediaParameter& param);
-    void UnInit();
-    bool Start();
+    bool Play(const MediaParameter& param);
     bool Stop();
     void UpdateDisplaySize(int width, int height);
     void SetPlayEvent(PlayEvent* playEvent);
@@ -64,12 +48,15 @@ public:
     //退出硬解码（在非本类代码内执行时可用）
     void QuitHwDecode();
 private:
+    bool StreamOpen();
+    void StreamClose();
+    
     void ReadThread();
+    void VideoThread();
+    void AudioThread();
     void VideoDecode(AVPacket* packet);
     void AudioDecode(AVPacket* packet);
 
-    void VideoThread();
-    void AudioThread();
     /*
     * 做音画同步时，直接使用av_sleep做延迟会由于精度问题无法准确同步
     * 可以使用有更高精度的sleep去做延迟，或者创建新线程，使用while循环比较时间，代替sleep
@@ -85,12 +72,11 @@ private:
     bool m_isInit = false;
     MediaParameter m_param;
     PlayEvent* m_playEvent = nullptr;
-    std::thread m_thFrameReader;
-    std::atomic_bool m_bFrameReaderRunning{ false }; //atomic在gcc编译器中不可使用=进行初始化
-    std::thread m_thVideoProcess;
-    std::atomic_bool m_bVideoProcessRunning{ false };
-    std::thread m_thAudioProcess;
-    std::atomic_bool m_bAudioProcessRunning{ false };
+    std::atomic_bool m_bThreadRun{ false }; //atomic在gcc编译器中不可使用=进行初始化
+    std::thread m_thReader;
+    std::thread m_thVideoDecoder;
+    std::thread m_thAudioDecoder;
+
     std::atomic_bool m_bStreamOver{ false };
 
     AVFormatContext* m_formatContext = nullptr;
@@ -112,8 +98,8 @@ private:
     double m_syncThreshold = 0.1;     //同步阈值
     double m_speed = 1.0;             //倍速播放
 
-    FrameQueue m_videoFrameQueue{ 10 };
-    FrameQueue m_audioFrameQueue{ 10 };
+    PacketQueue m_videoPacketQueue;
+    PacketQueue m_audioPacketQueue;
     DynamicJitterBuffer* m_audioBuffer = nullptr;
 };
 

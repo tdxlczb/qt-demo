@@ -79,17 +79,6 @@ struct MediaParameter
     AudioSpec outputAudioSpec;
 };
 
-class PlayEvent
-{
-public:
-    virtual ~PlayEvent() {};
-    // 视频帧(渲染)回调
-    virtual void onVideoFrame(const VideoFrame& frame) = 0;
-    virtual void onClose(const PlayError& error) = 0;
-private:
-
-};
-
 using VideoCallback = std::function<void(const VideoFrame& frame)>;
 using AudioCallback = std::function<void(const AudioFrame& frame)>;
 

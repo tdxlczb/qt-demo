@@ -5,6 +5,7 @@
 #include <QWidget>
 #include <QTextEdit>
 #include "media/media_define.h"
+#include "media/media_play_event.h"
 
 class VideoRender;
 class AudioRender;

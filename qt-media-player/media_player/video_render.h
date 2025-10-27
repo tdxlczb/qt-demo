@@ -125,6 +125,10 @@ private:
 */
 #include <QOpenGLWidget>
 #include <QOpenGLExtraFunctions>
+using RenderType = int;
+const int kRenderRGB = 0;
+const int kRenderYUV420 = 1;
+const int kRenderNV12 = 2;
 
 class OpenGLRenderWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions, public VideoRender
 {
@@ -151,10 +155,15 @@ protected:
     void resizeGL(int w, int h) override;
     void paintGL() override;
 private:
-    void initShaders();
-    void initTextures();
-    void render();
+    void initShaders(const char* vs, const char* fs);
+    void initTextures(int textureCount);
     void calculateViewport();
+
+    void initRenderRGB();
+    void renderRGB();
+
+    void initRenderNV12();
+    void renderNV12();
 
 private:
     GLuint m_shaderProgram = 0;
@@ -163,10 +172,10 @@ private:
 
     int m_nVideoW = 0; //视频分辨率宽
     int m_nVideoH = 0; //视频分辨率高
-    uint8_t* m_pBufYuv420p = nullptr;
-
     VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
+    RenderType m_renderType = kRenderNV12;
+
 };
 
 /*

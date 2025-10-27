@@ -12,8 +12,7 @@ void MediaReaderTest()
     auto reader = new MediaReader();
     MediaParameter param;
     param.url = "E:/code/media/BaiduSyncdisk.mp4";
-    reader->Init(param);
-    reader->Start();
+    reader->Play(param);
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -105,4 +104,35 @@ void FindEncoders()
 
     qDebug() << "========================================";
     qDebug() << "Available encoders end";
+}
+
+void FindHWDeviceDecoders()
+{
+    AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
+    qInfo() << "Supported hwaccels:";
+    while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+        qInfo() << av_hwdevice_get_type_name(type);
+
+
+    {
+        qInfo() << "Supported H264 hwdecoders:";
+        const AVCodec* codec = nullptr;
+        void* i = nullptr;
+        while ((codec = av_codec_iterate(&i))) {
+            if (codec->type == AVMEDIA_TYPE_VIDEO && codec->id == AV_CODEC_ID_H264 && (codec->capabilities & AV_CODEC_CAP_HARDWARE)) {
+                qInfo() << codec->name;
+            }
+        }
+    }
+
+    {
+        qInfo() << "Supported H265 hwdecoders:";
+        const AVCodec* codec = nullptr;
+        void* i = nullptr;
+        while ((codec = av_codec_iterate(&i))) {
+            if (codec->type == AVMEDIA_TYPE_VIDEO && codec->id == AV_CODEC_ID_H265 && (codec->capabilities & AV_CODEC_CAP_HARDWARE)) {
+                qInfo() << codec->name;
+            }
+        }
+    }
 }

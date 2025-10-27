@@ -13,15 +13,7 @@ extern "C"
 #include <libswresample/swresample.h>
 }
 
-//获取最大公约数
-static int GetGCD(int a, int b) {
-    while (b != 0) {
-        int temp = b;
-        b = a % b;
-        a = temp;
-    }
-    return a;
-}
+#include "media/media_utils.h"
 
 VideoDisplay::VideoDisplay(int displayId, const VideoSpec& dstSpec)
     : m_displayId(displayId)
@@ -38,7 +30,6 @@ VideoDisplay::~VideoDisplay()
     }
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst[0]);
-        av_frame_unref(m_pFrameDst);
         av_frame_free(&m_pFrameDst);
     }
 }
@@ -74,7 +65,6 @@ PlayError VideoDisplay::InitDstFrame()
 {
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst[0]);
-        av_frame_unref(m_pFrameDst);
         av_frame_free(&m_pFrameDst);
     }
 
@@ -216,7 +206,6 @@ void VideoDisplay::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
     }
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst[0]);
-        av_frame_unref(m_pFrameDst);
         av_frame_free(&m_pFrameDst);
         m_pFrameDst = nullptr;
     }
@@ -237,7 +226,6 @@ AudioDisplay::~AudioDisplay()
         m_pSwrCxtAudio = nullptr;
     }
     if (m_pFrameDst) {
-        av_frame_unref(m_pFrameDst);
         av_frame_free(&m_pFrameDst);
     }
 }
@@ -279,7 +267,6 @@ PlayError AudioDisplay::InitDstFrame()
 {
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst[0]);
-        av_frame_unref(m_pFrameDst);
         av_frame_free(&m_pFrameDst);
     }
 
@@ -344,6 +331,7 @@ PlayError AudioDisplay::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
         int max_out_nb_samples = av_rescale_rnd(pFrame->nb_samples, m_dstSpec.sampleRate, pFrame->sample_rate, AV_ROUND_UP);
         m_pFrameDst->nb_samples = max_out_nb_samples;
         int ret = swr_convert_frame(m_pSwrCxtAudio, m_pFrameDst, pFrame);
+        //int ret = swr_convert(m_pSwrCxtAudio, m_pFrameDst->data, max_out_nb_samples, (const uint8_t**)pFrame->data, pFrame->nb_samples);
         if (ret < 0) {
             qDebug() << "DisplayId:" << m_displayId << "swr_convert err," << QString("%1").arg(ret);
             return PlayError{ PlayErrorCode::kConverteFailed,"" };

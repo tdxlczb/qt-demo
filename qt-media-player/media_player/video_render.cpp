@@ -500,7 +500,6 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
     }
     memcpy(m_frame.data, frame.data, frame.size);
 
-    m_pBufYuv420p = m_frame.data;
     m_nVideoW = m_frame.spec.width;
     m_nVideoH = m_frame.spec.height;
 
@@ -526,8 +525,28 @@ void OpenGLRenderWidget::initializeGL()
     initializeOpenGLFunctions();
     //glEnable(GL_DEPTH_TEST);
 
-    initShaders();
-    initTextures();
+    switch (m_renderType)
+    {
+    case kRenderRGB:
+    {
+        initRenderRGB();
+        break;
+    }
+    case kRenderYUV420:
+    {
+        break;
+    }
+    case kRenderNV12:
+    {
+        initRenderNV12();
+        break;
+    }
+    default:
+    {
+        initRenderRGB();
+        break;
+    }
+    }
 }
 
 void OpenGLRenderWidget::resizeGL(int w, int h)
@@ -557,46 +576,39 @@ void OpenGLRenderWidget::resizeGL(int w, int h)
 
 void OpenGLRenderWidget::paintGL()
 {
-    render();
+    switch (m_renderType)
+    {
+    case kRenderRGB:
+    {
+        renderRGB();
+        break;
+    }
+    case kRenderYUV420:
+    {
+        break;
+    }
+    case kRenderNV12:
+    {
+        renderNV12();
+        break;
+    }
+    default:
+    {
+        renderRGB();
+        break;
+    }
+    }
 }
 
-void OpenGLRenderWidget::initShaders()
+void OpenGLRenderWidget::initShaders(const char* vs, const char* fs)
 {
-    //顶点着色器源码
-    const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
-
-out vec2 TexCoord;
-
-void main()
-{
-	gl_Position = vec4(aPos, 1.0);
-	TexCoord = vec2(aTexCoord.x, aTexCoord.y);
-}
-)";
-
-    const char* fragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-
-in vec2 TexCoord;
-uniform sampler2D texture;
-
-void main()
-{
-	FragColor = texture(texture, TexCoord);
-}
-)";
-
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glShaderSource(vertexShader, 1, &vs, NULL);
     glCompileShader(vertexShader);
 
     // fragment shader
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glShaderSource(fragmentShader, 1, &fs, NULL);
     glCompileShader(fragmentShader);
 
     // link shaders
@@ -611,7 +623,7 @@ void main()
     glUseProgram(m_shaderProgram);
 }
 
-void OpenGLRenderWidget::initTextures()
+void OpenGLRenderWidget::initTextures(int textureCount)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
@@ -649,27 +661,69 @@ void OpenGLRenderWidget::initTextures()
     glEnableVertexAttribArray(1);
 
     glGenTextures(1, m_textures);
-    glActiveTexture(GL_TEXTURE0); // 在绑定纹理之前先激活纹理单元
-    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-    // 为当前绑定的纹理对象设置环绕、过滤方式
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    for (size_t i = 0; i < textureCount; i++)
+    {
+        glActiveTexture(GL_TEXTURE0 + i); // 在绑定纹理之前先激活纹理单元
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        // 为当前绑定的纹理对象设置环绕、过滤方式
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+}
+
+void OpenGLRenderWidget::calculateViewport()
+{
+}
+
+void OpenGLRenderWidget::initRenderRGB()
+{
+    const char* vertexShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoord;
+    
+    out vec2 TexCoord;
+    
+    void main()
+    {
+        gl_Position = vec4(aPos, 1.0);
+        TexCoord = vec2(aTexCoord.x, aTexCoord.y);
+    }
+)";
+
+    const char* fragmentShaderSource = R"(
+    #version 330 core
+    out vec4 FragColor;
+    
+    in vec2 TexCoord;
+    uniform sampler2D texture;
+    
+    void main()
+    {
+        FragColor = texture(texture, TexCoord);
+    }
+)";
+
+    initShaders(vertexShaderSource, fragmentShaderSource);
+    initTextures(1);
 
     glUseProgram(m_shaderProgram);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "texture"), 0);
 }
 
-void OpenGLRenderWidget::render()
+void OpenGLRenderWidget::renderRGB()
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    if (!m_frame.data)
+        return;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_textures[0]);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_nVideoW, m_nVideoH, 0, GL_RGB, GL_UNSIGNED_BYTE, m_pBufYuv420p);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_nVideoW, m_nVideoH, 0, GL_RGB, GL_UNSIGNED_BYTE, m_frame.data);
     //glGenerateMipmap(GL_TEXTURE_2D);
 
     glUseProgram(m_shaderProgram);
@@ -677,9 +731,121 @@ void OpenGLRenderWidget::render()
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
-void OpenGLRenderWidget::calculateViewport()
+void OpenGLRenderWidget::initRenderNV12()
 {
+    //const char* fsrc =
+    //    "varying mediump vec4 textureOut;\n"
+    //    "uniform sampler2D textureY;\n"
+    //    "uniform sampler2D textureUV;\n"
+    //    "void main(void)\n"
+    //    "{\n"
+    //    "vec3 yuv; \n"
+    //    "vec3 rgb; \n"
+    //    "yuv.x = texture2D(textureY, textureOut.st).r - 0.0625; \n"
+    //    "yuv.y = texture2D(textureUV, textureOut.st).r - 0.5; \n"
+    //    "yuv.z = texture2D(textureUV, textureOut.st).g - 0.5; \n"
+    //    "rgb = mat3( 1,       1,         1, \n"
+    //    "0,       -0.39465,  2.03211, \n"
+    //    "1.13983, -0.58060,  0) * yuv; \n"
+    //    "gl_FragColor = vec4(rgb, 1); \n"
+    //    "}\n";
+
+
+    const char* vertexShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoord;
+    out vec2 TexCoord;
+    void main() {
+        gl_Position = vec4(aPos, 1.0);
+        TexCoord = aTexCoord;
+    }
+)";
+
+    //const char* fragmentShaderSource =
+    //    "varying mediump vec4 textureOut;\n"
+    //    "uniform sampler2D textureY;\n"
+    //    "uniform sampler2D textureUV;\n"
+    //    "void main(void)\n"
+    //    "{\n"
+    //    "vec3 yuv; \n"
+    //    "vec3 rgb; \n"
+    //    "yuv.x = texture2D(textureY, textureOut.st).r - 0.0625; \n"
+    //    "yuv.y = texture2D(textureUV, textureOut.st).r - 0.5; \n"
+    //    "yuv.z = texture2D(textureUV, textureOut.st).g - 0.5; \n"
+    //    "rgb = mat3( 1,       1,         1, \n"
+    //    "0,       -0.39465,  2.03211, \n"
+    //    "1.13983, -0.58060,  0) * yuv; \n"
+    //    "gl_FragColor = vec4(rgb, 1); \n"
+    //    "}\n";
+
+/*
+// 转换矩阵
+const mat4 yuv2rgb = mat4(
+    1.16438,  0.00000,  1.79274, -0.97295,
+    1.16438, -0.21325, -0.53291,  0.30148,
+    1.16438,  2.11240,  0.00000, -1.13340,
+    0.00000,  0.00000,  0.00000,  1.00000
+);
+*/
+    const char* fragmentShaderSource = R"(
+    #version 330 core
+    in vec2 TexCoord;
+    out vec4 FragColor;
+    uniform sampler2D tex_y;
+    uniform sampler2D tex_uv;
+            
+    void main() {
+        float y = texture(tex_y, TexCoord).r;
+        float u = texture(tex_uv, TexCoord).r;
+        float v = texture(tex_uv, TexCoord).g;
+                
+        // 调整范围并转换
+        y = (y - 0.062745) * 1.16438;
+        u = u - 0.5;
+        v = v - 0.5;
+                
+        float r = y + 1.402 * v;
+        float g = y - 0.344 * u - 0.714 * v;
+        float b = y + 1.772 * u;
+                
+        FragColor = vec4(r, g, b, 1.0);
+    }
+)";
+
+    initShaders(vertexShaderSource, fragmentShaderSource);
+    initTextures(2);
+
+    glUseProgram(m_shaderProgram);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "tex_y"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "tex_uv"), 1);
 }
+
+void OpenGLRenderWidget::renderNV12()
+{
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!m_frame.data) return;
+
+    glUseProgram(m_shaderProgram);
+    glBindVertexArray(m_VAO);
+
+    // 更新Y纹理
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, m_frame.data);
+
+    // 更新UV纹理 (从Y数据之后开始)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RG, GL_UNSIGNED_BYTE, m_frame.data + m_nVideoW * m_nVideoH);
+
+    // 渲染
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
+
 
 /*
 * ====================================================

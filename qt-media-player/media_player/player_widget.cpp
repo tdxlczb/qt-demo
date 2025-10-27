@@ -25,6 +25,7 @@ PlayerWidget::PlayerWidget(QWidget* parent)
     this->setPalette(palette);
 
     //auto VideoRender = new VideoRGBRender(this);
+    //auto VideoRender = new PlayGLWidget(this);
     auto VideoRender = new OpenGLRenderWidget(this);
     //auto VideoRender = new SDLRenderWidget(this);
     m_pVideoRender = VideoRender;
@@ -69,8 +70,9 @@ void PlayerWidget::StartPlay(const QString& url)
     m_pTextEditUrl->setText(url);
     MediaParameter param;
     param.url = url.toStdString();
-    //param.hwDeviceName = "dxva2";
-    param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
+    param.hwDeviceName = "dxva2";
+    //param.hwDeviceName = "d3d11va";
+    param.outputVideoSpec = { 0, 0, AV_PIX_FMT_NONE };
     //param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
     param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
 
@@ -80,15 +82,14 @@ void PlayerWidget::StartPlay(const QString& url)
     //m_pAudioRender->Start(param.outputAudioSpec, 1024);
     //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
 
-    if (m_pMediaReader->Init(param)) {
-        m_pMediaReader->SetPlayEvent(this);
-        m_pMediaReader->Start();
+    m_pMediaReader->SetPlayEvent(this);
+    m_pMediaReader->Play(param);
 
-        m_pFishEyeWidget = new FishEyeWidget();
-        m_pFishEyeWidget->resize(1000, 800);
-        m_pFishEyeWidget->show();
-        m_pFishEyeWidget->SetFishEyeType(FECSetupType::None, FECShowType::Normal);
-    }
+    //m_pFishEyeWidget = new FishEyeWidget();
+    //m_pFishEyeWidget->resize(1000, 800);
+    //m_pFishEyeWidget->show();
+    //m_pFishEyeWidget->SetFishEyeType(FECSetupType::None, FECShowType::Normal);
+
 }
 
 void PlayerWidget::StopPlay()
@@ -97,6 +98,8 @@ void PlayerWidget::StopPlay()
     {
         m_pMediaReader->Stop();
     }
+    if (m_pVideoRender)
+        m_pVideoRender->ClearContent();
 }
 
 #include <chrono>
@@ -142,7 +145,9 @@ void PlayerWidget::on_pbPlayButton_clicked()
     QString playUrl = m_pTextEditUrl->toPlainText();
     if (playUrl.isEmpty())
     {
-        playUrl = "E:/code/media/BaiduSyncdisk.mp4";
+        //playUrl = "E:/code/media/BaiduSyncdisk.mp4";
+        playUrl = "rtsp://172.16.19.40:554/rtp/34020000001180000195_34020000001310000005_5?token=JqLYMtMRhIG7EIS4";
+
         //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
         //playUrl = "rtsp://172.16.19.69/live/test";
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
@@ -153,7 +158,7 @@ void PlayerWidget::on_pbPlayButton_clicked()
 
 void PlayerWidget::on_pbStopButton_clicked()
 {
-
+    StopPlay();
 }
 
 void PlayerWidget::resizeEvent(QResizeEvent* event)
