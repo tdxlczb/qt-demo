@@ -47,6 +47,11 @@ struct AudioSpec
     AudioFormat format = -1;  //对应ffmpeg中AVSampleFormat的值
 };
 
+using CopyFrameCallback = std::function<int(
+    uint8_t* dst_data[4], int dst_linesizes[4],
+    uint8_t* src_data[4], int src_linesizes[4],
+    int pix_fmt, int width, int height)>;
+
 /*
 * 视频帧
 */
@@ -54,6 +59,9 @@ struct VideoFrame
 {
     uint8_t*  data = nullptr;
     size_t    size = 0;
+    uint8_t*  linedata[8] = { 0 };
+    int       linesize[8] = { 0 };
+    CopyFrameCallback copycb;
     int64_t   pts = 0;
     double    timebase = 0.0;
     VideoSpec spec;
@@ -78,6 +86,12 @@ struct MediaParameter
     VideoSpec outputVideoSpec;
     AudioSpec outputAudioSpec;
 };
+
+const int kRenderFmtNONE = -1; //AV_PIX_FMT_NONE
+const int kRenderFmtRGB = 2; //AV_PIX_FMT_RGB24
+const int kRenderFmtYUV420P = 0; //AV_PIX_FMT_YUV420P
+const int kRenderFmtYUVJ420P = 12; //AV_PIX_FMT_YUVJ420P
+const int kRenderFmtNV12 = 23; //AV_PIX_FMT_NV12
 
 using VideoCallback = std::function<void(const VideoFrame& frame)>;
 using AudioCallback = std::function<void(const AudioFrame& frame)>;

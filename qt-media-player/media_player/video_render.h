@@ -125,10 +125,6 @@ private:
 */
 #include <QOpenGLWidget>
 #include <QOpenGLExtraFunctions>
-using RenderType = int;
-const int kRenderRGB = 0;
-const int kRenderYUV420 = 1;
-const int kRenderNV12 = 2;
 
 class OpenGLRenderWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions, public VideoRender
 {
@@ -157,25 +153,37 @@ protected:
 private:
     void initShaders(const char* vs, const char* fs);
     void initTextures(int textureCount);
+    void releaseGL();
     void calculateViewport();
 
-    void initRenderRGB();
+    void initGL();
+
+    void initRGB();
     void renderRGB();
 
-    void initRenderNV12();
+    void initYUV420();
+    void renderYUV420();
+
+    void initNV12();
     void renderNV12();
 
 private:
     GLuint m_shaderProgram = 0;
     GLuint m_VAO = 0;
-    GLuint m_textures[16];
+    GLuint m_textures[8] = { 0 }; //纹理数量对应AVFrame中data的数量
+    GLuint m_pbo1[2] = { 0 };
+    GLuint m_pbo2[2] = { 0 };
+    GLuint m_pbo3[2] = { 0 };
+    int    m_pboIdx = 0;
+    bool   m_reInitGL = false; //是否需要重新初始化，要先释放，再初始化
 
     int m_nVideoW = 0; //视频分辨率宽
     int m_nVideoH = 0; //视频分辨率高
     VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
-    RenderType m_renderType = kRenderNV12;
-
+    bool m_isInitGL = false;
+    bool m_isUseTexSubImage = true;
+    bool m_isUsePBO = true;
 };
 
 /*

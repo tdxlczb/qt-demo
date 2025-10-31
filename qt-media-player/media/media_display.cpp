@@ -132,13 +132,38 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
             qDebug() << "DisplayId:" << m_displayId << "sws_scale err:" << QString("%1").arg(ret);
             return PlayError{ PlayErrorCode::kConverteFailed,"" };
         }
+        buffer = m_pFrameDst->data[0];
+        bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
+        outFrame.data = buffer;
+        outFrame.size = bufferSize;
     }
     else {
         //将源帧的不连续内存数据拷贝到连续内存的帧，不连续内存后续不方便使用
-        av_image_copy(m_pFrameDst->data, m_pFrameDst->linesize, (const uint8_t**)pFrame->data, pFrame->linesize, (AVPixelFormat)pFrame->format, pFrame->width, pFrame->height);
+        //av_image_copy(m_pFrameDst->data, m_pFrameDst->linesize, (const uint8_t**)pFrame->data, pFrame->linesize, (AVPixelFormat)pFrame->format, pFrame->width, pFrame->height);
+        //buffer = m_pFrameDst->data[0];
+        //bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
+        //outFrame.data = buffer;
+        //outFrame.size = bufferSize;
+
+        outFrame.copycb = [](uint8_t* dst_data[4], int dst_linesizes[4],
+            uint8_t* src_data[4], int src_linesizes[4],
+            int pix_fmt, int width, int height) {
+                int      bufferSize = av_image_get_buffer_size((AVPixelFormat)pix_fmt, width, height, 1);
+                if (!dst_data[0]) {
+                    uint8_t* buffer = (uint8_t*)av_malloc(bufferSize * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
+                    av_image_fill_arrays(dst_data, dst_linesizes, buffer, (AVPixelFormat)pix_fmt, width, height, 1);
+                }
+                av_image_copy(dst_data, dst_linesizes, (const uint8_t**)src_data, src_linesizes, (AVPixelFormat)pix_fmt, width, height);
+                return bufferSize;
+            };
+
+        for (size_t i = 0; i < 8; i++)
+        {
+            outFrame.linedata[i] = pFrame->data[i];
+            outFrame.linesize[i] = pFrame->linesize[i];
+        }
     }
-    buffer = m_pFrameDst->data[0];
-    bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
+
     
     int tryBufferSize = m_dstSpec.width * m_dstSpec.height * 1.5;
     if (bufferSize != tryBufferSize) {
@@ -147,8 +172,7 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
         int nv = m_pFrameDst->linesize[2] * ((m_pFrameDst->height + 2 - 1) / 2);//必须向上取整
         //重采样后动态大小的yuv帧可能存在数据对齐问题，使用av_image_get_buffer_size等于ny + nu + nv
     }
-    outFrame.data = buffer;
-    outFrame.size = bufferSize;
+
     outFrame.spec = m_dstSpec;
     if (m_pCallback)
     {

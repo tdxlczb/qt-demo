@@ -479,30 +479,66 @@ VideoFrame OpenGLRenderWidget::GetContent()
 
 void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
 {
-    if (frame.spec.width <= 0 || frame.spec.height <= 0 || !frame.data || frame.size <= 0) {
+    if (frame.spec.width <= 0
+        || frame.spec.height <= 0
+        || ((!frame.data || frame.size <= 0) && (!frame.linedata[0] || frame.linesize[0] <= 0))) {
         qDebug() << "frame is err";
         return;
     }
 
     QMutexLocker locker(&m_frameMutex);
-    if (!m_frame.data) {
-        m_frame.data = new uint8_t[frame.size];
-        m_frame.size = frame.size;
+    bool reInitData = false;
+    if (m_frame.spec.width != frame.spec.width || m_frame.spec.height != frame.spec.height || m_frame.spec.format != frame.spec.format) {
+        qDebug() << "old width:" << m_frame.spec.width << ",height:" << m_frame.spec.height << ",format:" << m_frame.spec.height;
+        qDebug() << "new width:" << frame.spec.width << ",height:" << frame.spec.height << ",format:" << frame.spec.height;
+        reInitData = true;
+        m_reInitGL = true;
     }
-    else if (m_frame.size < frame.size) {
-        delete[] m_frame.data;
-        m_frame.data = new uint8_t[frame.size];
-        m_frame.size = frame.size;
-    }
-    m_frame.spec = frame.spec;
-    if (m_nVideoW != m_frame.spec.width || m_nVideoH != m_frame.spec.height) {
-        qDebug() << "width:" << m_frame.spec.width << ",height:" << m_frame.spec.height;
-    }
-    memcpy(m_frame.data, frame.data, frame.size);
 
+    if (frame.data && frame.size > 0) {
+        if (!m_frame.data) {
+            m_frame.data = new uint8_t[frame.size];
+            m_frame.size = frame.size;
+        }
+        else if (m_frame.size < frame.size) {
+            delete[] m_frame.data;
+            m_frame.data = new uint8_t[frame.size];
+            m_frame.size = frame.size;
+        }
+        memcpy(m_frame.data, frame.data, frame.size);
+    }
+    else if (frame.linedata[0] && frame.linesize[0] > 0) {
+        uint8_t* src_data[8] = { 0 };
+        int      src_linesizes[8] = { 0 };
+        for (size_t i = 0; i < 8; i++)
+        {
+            src_data[i] = frame.linedata[i];
+            src_linesizes[i] = frame.linesize[i];
+        }
+        if (reInitData) {
+            delete[] m_frame.data;
+            m_frame.data = nullptr;
+            for (size_t i = 0; i < 8; i++)
+            {
+                m_frame.linedata[i] = nullptr;
+                m_frame.linesize[i] = 0;
+            }
+        }
+
+        //这里拷贝数据到一块连续内存
+        m_frame.size = frame.copycb(m_frame.linedata, m_frame.linesize, src_data, src_linesizes, frame.spec.format, frame.spec.width, frame.spec.height);
+        m_frame.data = m_frame.linedata[0];
+
+        //for (size_t i = 0; i < 8; i++)
+        //{
+        //    m_frame.linedata[i] = frame.linedata[i];
+        //    m_frame.linesize[i] = frame.linesize[i];
+        //}
+    }
+
+    m_frame.spec = frame.spec;
     m_nVideoW = m_frame.spec.width;
     m_nVideoH = m_frame.spec.height;
-
     emit sig_Update();
 }
 
@@ -523,30 +559,8 @@ void OpenGLRenderWidget::on_Update()
 void OpenGLRenderWidget::initializeGL()
 {
     initializeOpenGLFunctions();
-    //glEnable(GL_DEPTH_TEST);
-
-    switch (m_renderType)
-    {
-    case kRenderRGB:
-    {
-        initRenderRGB();
-        break;
-    }
-    case kRenderYUV420:
-    {
-        break;
-    }
-    case kRenderNV12:
-    {
-        initRenderNV12();
-        break;
-    }
-    default:
-    {
-        initRenderRGB();
-        break;
-    }
-    }
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
 }
 
 void OpenGLRenderWidget::resizeGL(int w, int h)
@@ -556,38 +570,36 @@ void OpenGLRenderWidget::resizeGL(int w, int h)
         h = 1;// 将高设为1
     }
     //设置视口
-    //glViewport(0, 0, w, h);
-
-    //float aspectRatio = static_cast<float>(m_nVideoW) / m_nVideoH;
-    //int viewportWidth = w;
-    //int viewportHeight = static_cast<int>(w / aspectRatio);
-
-    //if (viewportHeight > h) {
-    //    viewportHeight = h;
-    //    viewportWidth = static_cast<int>(h * aspectRatio);
-    //}
-
-    //int viewportX = (w - viewportWidth) / 2;
-    //int viewportY = (h - viewportHeight) / 2;
-
-    //glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
-    //qDebug() << "width:" << w << ",height:" << h << ",vx:" << viewportX << ",vy:" << viewportY << ",vw:" << viewportWidth << ",vh:" << viewportHeight;
+    glViewport(0, 0, w, h);
 }
 
 void OpenGLRenderWidget::paintGL()
 {
-    switch (m_renderType)
+    QMutexLocker guard(&m_frameMutex);
+    //默认背景颜色为绿色，这里更改默认背景为灰色
+    if (!m_frame.data && !m_frame.linedata[0]) {
+        // 设置灰色背景
+        glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        return;
+    }
+    //初始化调用opengl的接口必须放到继承的GL函数中，否则会初始化异常
+    initGL();
+
+    switch (m_frame.spec.format)
     {
-    case kRenderRGB:
+    case kRenderFmtRGB:
     {
         renderRGB();
         break;
     }
-    case kRenderYUV420:
+    case kRenderFmtYUV420P:
+    case kRenderFmtYUVJ420P:
     {
+        renderYUV420();
         break;
     }
-    case kRenderNV12:
+    case kRenderFmtNV12:
     {
         renderNV12();
         break;
@@ -660,7 +672,7 @@ void OpenGLRenderWidget::initTextures(int textureCount)
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    glGenTextures(1, m_textures);
+    glGenTextures(textureCount, m_textures);
     for (size_t i = 0; i < textureCount; i++)
     {
         glActiveTexture(GL_TEXTURE0 + i); // 在绑定纹理之前先激活纹理单元
@@ -673,35 +685,84 @@ void OpenGLRenderWidget::initTextures(int textureCount)
     }
 }
 
+void OpenGLRenderWidget::releaseGL()
+{
+    if (m_shaderProgram) {
+        glDeleteProgram(m_shaderProgram);
+        m_shaderProgram = 0;
+    }
+    glDeleteTextures(8, m_textures);
+    memset(m_textures, 0, sizeof(m_textures));
+
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glDeleteBuffers(2, m_pbo1);
+    glDeleteBuffers(2, m_pbo2);
+    glDeleteBuffers(2, m_pbo3);
+    memset(m_pbo1, 0, sizeof(m_pbo1));
+    memset(m_pbo2, 0, sizeof(m_pbo2));
+    memset(m_pbo3, 0, sizeof(m_pbo3));
+
+    m_isInitGL = false;
+}
+
 void OpenGLRenderWidget::calculateViewport()
 {
 }
 
-void OpenGLRenderWidget::initRenderRGB()
+void OpenGLRenderWidget::initGL()
+{
+    if (m_reInitGL) {
+        releaseGL();
+        m_reInitGL = false;
+    }
+    if (m_isInitGL)
+        return;
+    switch (m_frame.spec.format)
+    {
+    case kRenderFmtRGB:
+    {
+        initRGB();
+        break;
+    }
+    case kRenderFmtYUV420P:
+    case kRenderFmtYUVJ420P:
+    {
+        initYUV420();
+        break;
+    }
+    case kRenderFmtNV12:
+    {
+        initNV12();
+        break;
+    }
+    default:
+    {
+        initRGB();
+        break;
+    }
+    }
+    m_isInitGL = true;
+}
+
+void OpenGLRenderWidget::initRGB()
 {
     const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aTexCoord;
-    
     out vec2 TexCoord;
-    
-    void main()
-    {
+    void main() {
         gl_Position = vec4(aPos, 1.0);
-        TexCoord = vec2(aTexCoord.x, aTexCoord.y);
+        TexCoord = aTexCoord;
     }
 )";
 
     const char* fragmentShaderSource = R"(
     #version 330 core
-    out vec4 FragColor;
-    
     in vec2 TexCoord;
+    out vec4 FragColor;
     uniform sampler2D texture;
-    
-    void main()
-    {
+    void main() {
         FragColor = texture(texture, TexCoord);
     }
 )";
@@ -715,15 +776,10 @@ void OpenGLRenderWidget::initRenderRGB()
 
 void OpenGLRenderWidget::renderRGB()
 {
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    if (!m_frame.data)
-        return;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_textures[0]);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_nVideoW, m_nVideoH, 0, GL_RGB, GL_UNSIGNED_BYTE, m_frame.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, m_nVideoW, m_nVideoH, 0, GL_RGB, GL_UNSIGNED_BYTE, m_frame.data);
     //glGenerateMipmap(GL_TEXTURE_2D);
 
     glUseProgram(m_shaderProgram);
@@ -731,26 +787,8 @@ void OpenGLRenderWidget::renderRGB()
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
-void OpenGLRenderWidget::initRenderNV12()
+void OpenGLRenderWidget::initYUV420()
 {
-    //const char* fsrc =
-    //    "varying mediump vec4 textureOut;\n"
-    //    "uniform sampler2D textureY;\n"
-    //    "uniform sampler2D textureUV;\n"
-    //    "void main(void)\n"
-    //    "{\n"
-    //    "vec3 yuv; \n"
-    //    "vec3 rgb; \n"
-    //    "yuv.x = texture2D(textureY, textureOut.st).r - 0.0625; \n"
-    //    "yuv.y = texture2D(textureUV, textureOut.st).r - 0.5; \n"
-    //    "yuv.z = texture2D(textureUV, textureOut.st).g - 0.5; \n"
-    //    "rgb = mat3( 1,       1,         1, \n"
-    //    "0,       -0.39465,  2.03211, \n"
-    //    "1.13983, -0.58060,  0) * yuv; \n"
-    //    "gl_FragColor = vec4(rgb, 1); \n"
-    //    "}\n";
-
-
     const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
@@ -762,43 +800,208 @@ void OpenGLRenderWidget::initRenderNV12()
     }
 )";
 
-    //const char* fragmentShaderSource =
-    //    "varying mediump vec4 textureOut;\n"
-    //    "uniform sampler2D textureY;\n"
-    //    "uniform sampler2D textureUV;\n"
-    //    "void main(void)\n"
-    //    "{\n"
-    //    "vec3 yuv; \n"
-    //    "vec3 rgb; \n"
-    //    "yuv.x = texture2D(textureY, textureOut.st).r - 0.0625; \n"
-    //    "yuv.y = texture2D(textureUV, textureOut.st).r - 0.5; \n"
-    //    "yuv.z = texture2D(textureUV, textureOut.st).g - 0.5; \n"
-    //    "rgb = mat3( 1,       1,         1, \n"
-    //    "0,       -0.39465,  2.03211, \n"
-    //    "1.13983, -0.58060,  0) * yuv; \n"
-    //    "gl_FragColor = vec4(rgb, 1); \n"
-    //    "}\n";
-
-/*
-// 转换矩阵
-const mat4 yuv2rgb = mat4(
-    1.16438,  0.00000,  1.79274, -0.97295,
-    1.16438, -0.21325, -0.53291,  0.30148,
-    1.16438,  2.11240,  0.00000, -1.13340,
-    0.00000,  0.00000,  0.00000,  1.00000
-);
-*/
     const char* fragmentShaderSource = R"(
     #version 330 core
     in vec2 TexCoord;
     out vec4 FragColor;
-    uniform sampler2D tex_y;
-    uniform sampler2D tex_uv;
+    uniform sampler2D texY;
+    uniform sampler2D texU;
+    uniform sampler2D texV;
+    uniform mat3 yuv2rgb = mat3(
+        1,       1,         1, 
+        0,       -0.39465,  2.03211, 
+        1.13983, -0.58060,  0);
+       
+    void main() {         
+        vec3 yuv; 
+        vec3 rgb; 
+        yuv.x = texture(texY, TexCoord).r; 
+        yuv.y = texture(texU, TexCoord).r - 0.5; 
+        yuv.z = texture(texV, TexCoord).r - 0.5; 
+        rgb = yuv2rgb * yuv; 
+        gl_FragColor = vec4(rgb, 1); 
+    }
+)";
+
+    initShaders(vertexShaderSource, fragmentShaderSource);
+    initTextures(3);
+
+    if (m_isUseTexSubImage) {
+        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+
+        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+
+        glBindTexture(GL_TEXTURE_2D, m_textures[2]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+    }
+
+    if (m_isUsePBO) {
+        auto makePBO = [this](GLuint* pbo, int size) {
+            glGenBuffers(2, pbo);
+            for (int i = 0; i < 2; ++i) {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
+                glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_STREAM_DRAW);
+            }
+            };
+        makePBO(m_pbo1, m_nVideoW * m_nVideoH);
+        makePBO(m_pbo2, m_nVideoW * m_nVideoH / 4);
+        makePBO(m_pbo3, m_nVideoW * m_nVideoH / 4);
+    }
+    glUseProgram(m_shaderProgram);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texY"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texU"), 1);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texV"), 2);
+}
+
+void OpenGLRenderWidget::renderYUV420()
+{
+    int nY = m_nVideoW * m_nVideoH;
+    int nU = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
+    int nV = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
+    void* pY = m_frame.data;
+    void* pU = m_frame.data + nY;
+    void* pV = m_frame.data + nY + nU;
+
+    // 1. 先取行宽
+    int yStride = m_frame.linesize[0];
+    int uStride = m_frame.linesize[1];
+    int vStride = m_frame.linesize[2];
+
+    if (!m_frame.data) {
+        pY = m_frame.linedata[0];
+        pU = m_frame.linedata[1];
+        pV = m_frame.linedata[2];
+    }
+
+    if (m_isInitGL && m_isUsePBO) {
+        // 映射
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        if (dstY) {
+            for (int i = 0; i < m_nVideoH; ++i)
+                memcpy(dstY + i * m_nVideoW, m_frame.linedata[0] + i * m_frame.linesize[0], m_nVideoW);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        }
+
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        uint8_t* dstU = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH / 4, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        if (dstU) {
+            for (int i = 0; i < m_nVideoH / 2; ++i)
+                memcpy(dstU + i * m_nVideoW / 2, m_frame.linedata[1] + i * m_frame.linesize[1], m_nVideoW / 2);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        }
+
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo3[m_pboIdx]);
+        uint8_t* dstV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH / 4, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        if (dstV) {
+            for (int i = 0; i < m_nVideoH / 2; ++i)
+                memcpy(dstV + i * m_nVideoW / 2, m_frame.linedata[2] + i * m_frame.linesize[2], m_nVideoW / 2);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        }
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
+
+        pY = nullptr;
+        pU = nullptr;
+        pV = nullptr;
+    }
+
+    glUseProgram(m_shaderProgram);
+    glBindVertexArray(m_VAO);
+
+    if (m_isUseTexSubImage) {
+        /* Y 平面  full size  R8 */
+        glActiveTexture(GL_TEXTURE0);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, yStride);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW, m_nVideoH, GL_RED, GL_UNSIGNED_BYTE, pY);
+
+        /* U 平面  half size  R8 */
+        glActiveTexture(GL_TEXTURE0 + 1);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, uStride);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW / 2, m_nVideoH / 2, GL_RED, GL_UNSIGNED_BYTE, pU);
+
+        /* V 平面  half size  R8 */
+        glActiveTexture(GL_TEXTURE0 + 2);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo3[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[2]);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, vStride);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW / 2, m_nVideoH / 2, GL_RED, GL_UNSIGNED_BYTE, pV);
+
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        }
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
+    }
+    else {
+        // 更新Y纹理
+        glActiveTexture(GL_TEXTURE0);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, pY);
+
+        // 更新U纹理
+        glActiveTexture(GL_TEXTURE0 + 1);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, pU);
+
+        // 更新V纹理
+        glActiveTexture(GL_TEXTURE0 + 2);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo3[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[2]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, pV);
+
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        }
+    }
+    // 渲染
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
+
+void OpenGLRenderWidget::initNV12()
+{
+    const char* vertexShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoord;
+    out vec2 TexCoord;
+    void main() {
+        gl_Position = vec4(aPos, 1.0);
+        TexCoord = aTexCoord;
+    }
+)";
+
+    const char* fragmentShaderSource = R"(
+    #version 330 core
+    in vec2 TexCoord;
+    out vec4 FragColor;
+    uniform sampler2D texY;
+    uniform sampler2D texUV;
             
     void main() {
-        float y = texture(tex_y, TexCoord).r;
-        float u = texture(tex_uv, TexCoord).r;
-        float v = texture(tex_uv, TexCoord).g;
+        float y = texture(texY, TexCoord).r;
+        float u = texture(texUV, TexCoord).r;
+        float v = texture(texUV, TexCoord).g;
                 
         // 调整范围并转换
         y = (y - 0.062745) * 1.16438;
@@ -816,31 +1019,117 @@ const mat4 yuv2rgb = mat4(
     initShaders(vertexShaderSource, fragmentShaderSource);
     initTextures(2);
 
+    if (m_isUseTexSubImage) {
+        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+
+        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
+    }
+    if (m_isUsePBO) {
+        auto makePBO = [this](GLuint* pbo, int size) {
+            glGenBuffers(2, pbo);
+            for (int i = 0; i < 2; ++i) {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
+                glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_STREAM_DRAW);
+            }
+            };
+        makePBO(m_pbo1, m_nVideoW * m_nVideoH);
+        makePBO(m_pbo2, m_nVideoW * m_nVideoH / 2);
+    }
     glUseProgram(m_shaderProgram);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "tex_y"), 0);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "tex_uv"), 1);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texY"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "texUV"), 1);
 }
 
 void OpenGLRenderWidget::renderNV12()
 {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    int nY = m_nVideoW * m_nVideoH;
+    void* pY = m_frame.data;
+    void* pUV = m_frame.data + m_nVideoW * m_nVideoH;
 
-    if (!m_frame.data) return;
+    // 1. 先取行宽
+    int yStride = m_frame.linesize[0];
+    int uvStride = m_frame.linesize[1];
+
+    if (!m_frame.data) {
+        pY = m_frame.linedata[0];
+        pUV = m_frame.linedata[1];
+    }
+
+    if (m_isInitGL && m_isUsePBO) {
+        // 映射
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        if (dstY) {
+            for (int i = 0; i < m_nVideoH; ++i)
+                memcpy(dstY + i * m_nVideoW, m_frame.linedata[0] + i * m_frame.linesize[0], m_nVideoW);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        }
+
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        uint8_t* dstUV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH / 2, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        if (dstUV) {
+            for (int i = 0; i < m_nVideoH / 2; ++i)
+                memcpy(dstUV + i * m_nVideoW, m_frame.linedata[1] + i * m_frame.linesize[1], m_nVideoW);   // 一行里 UV 交错
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        }
+
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        pY = nullptr;
+        pUV = nullptr;
+    }
 
     glUseProgram(m_shaderProgram);
     glBindVertexArray(m_VAO);
 
-    // 更新Y纹理
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, m_frame.data);
+    if (m_isUseTexSubImage) {
+        // 更新Y纹理
+        glActiveTexture(GL_TEXTURE0);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, yStride);   // Y 平面
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW, m_nVideoH, GL_RED, GL_UNSIGNED_BYTE, pY);
 
-    // 更新UV纹理 (从Y数据之后开始)
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RG, GL_UNSIGNED_BYTE, m_frame.data + m_nVideoW * m_nVideoH);
+        // 更新UV纹理 (从Y数据之后开始)
+        glActiveTexture(GL_TEXTURE0 + 1);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, uvStride / 2);  // UV 平面
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW / 2, m_nVideoH / 2, GL_RG, GL_UNSIGNED_BYTE, pUV);
 
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        }
+        // 3. 用完重置（避免影响后续纹理）
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    }
+    else {
+        // 更新Y纹理
+        glActiveTexture(GL_TEXTURE0);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, pY);
+
+        // 更新UV纹理 (从Y数据之后开始)
+        glActiveTexture(GL_TEXTURE0 + 1);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RG, GL_UNSIGNED_BYTE, pUV);
+
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        }
+    }
+    m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
     // 渲染
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
