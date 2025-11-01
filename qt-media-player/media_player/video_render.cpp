@@ -1,5 +1,7 @@
 #include "video_render.h"
 #include <QPainter>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 VideoRGBRender::VideoRGBRender(QWidget* parent) : QWidget(parent)
 {
@@ -20,6 +22,11 @@ VideoFrame VideoRGBRender::GetContent()
 {
     QMutexLocker guard(&m_frameMutex);
     return m_frame;
+}
+
+cv::Mat VideoRGBRender::GetRGBContent()
+{
+    return cv::Mat();
 }
 
 void VideoRGBRender::UpdateContent(const VideoFrame& frame)
@@ -119,6 +126,11 @@ VideoFrame PlayGLWidget::GetContent()
 {
     QMutexLocker guard(&m_frameMutex);
     return m_frame;
+}
+
+cv::Mat PlayGLWidget::GetRGBContent()
+{
+    return cv::Mat();
 }
 
 void PlayGLWidget::UpdateContent(const VideoFrame& frame)
@@ -459,6 +471,19 @@ void PlayGLWidget::cropI420p(int nSrcWidth, int nSrcHeight, int nLeft, int nTop,
 * ====================================================
 */
 
+namespace {
+    const char* kVertexShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoord;
+    out vec2 TexCoord;
+    void main() {
+        gl_Position = vec4(aPos, 1.0);
+        TexCoord = aTexCoord;
+    }
+)";
+}
+
 OpenGLRenderWidget::OpenGLRenderWidget(QWidget* parent) :QOpenGLWidget(parent)
 {
     connect(this, &OpenGLRenderWidget::sig_Update, this, &OpenGLRenderWidget::on_Update, Qt::QueuedConnection);
@@ -477,6 +502,38 @@ VideoFrame OpenGLRenderWidget::GetContent()
     return m_frame;
 }
 
+cv::Mat OpenGLRenderWidget::GetRGBContent()
+{
+    QMutexLocker guard(&m_frameMutex);
+    cv::Mat rgbMat;
+    switch (m_frame.spec.format)
+    {
+    case kRenderFmtRGB:
+    {
+        rgbMat = cv::Mat(m_frame.spec.height, m_frame.spec.width, CV_8UC3, m_frame.data).clone();
+        break;
+    }
+    case kRenderFmtYUV420P:
+    case kRenderFmtYUVJ420P:
+    {
+        cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, m_frame.data);;
+        cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_I420);
+        break;
+    }
+    case kRenderFmtNV12:
+    {
+        cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, m_frame.data);;
+        cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_NV12);
+        break;
+    }
+    default:
+    {
+        break;
+    }
+    }
+    return rgbMat;
+}
+
 void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
 {
     if (frame.spec.width <= 0
@@ -492,7 +549,7 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
         qDebug() << "old width:" << m_frame.spec.width << ",height:" << m_frame.spec.height << ",format:" << m_frame.spec.height;
         qDebug() << "new width:" << frame.spec.width << ",height:" << frame.spec.height << ",format:" << frame.spec.height;
         reInitData = true;
-        m_reInitGL = true;
+        m_isInitGL = false;
     }
 
     if (frame.data && frame.size > 0) {
@@ -539,6 +596,8 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
     m_frame.spec = frame.spec;
     m_nVideoW = m_frame.spec.width;
     m_nVideoH = m_frame.spec.height;
+    updatePlaneInfo(m_frame.spec.width, m_frame.spec.height, m_frame.spec.format);
+
     emit sig_Update();
 }
 
@@ -586,6 +645,8 @@ void OpenGLRenderWidget::paintGL()
     //初始化调用opengl的接口必须放到继承的GL函数中，否则会初始化异常
     initGL();
 
+    glUseProgram(m_shaderProgram);
+    glBindVertexArray(m_VAO);
     switch (m_frame.spec.format)
     {
     case kRenderFmtRGB:
@@ -610,6 +671,11 @@ void OpenGLRenderWidget::paintGL()
         break;
     }
     }
+    m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
+    // 渲染
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+
 }
 
 void OpenGLRenderWidget::initShaders(const char* vs, const char* fs)
@@ -685,38 +751,51 @@ void OpenGLRenderWidget::initTextures(int textureCount)
     }
 }
 
-void OpenGLRenderWidget::releaseGL()
-{
-    if (m_shaderProgram) {
-        glDeleteProgram(m_shaderProgram);
-        m_shaderProgram = 0;
-    }
-    glDeleteTextures(8, m_textures);
-    memset(m_textures, 0, sizeof(m_textures));
-
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    glDeleteBuffers(2, m_pbo1);
-    glDeleteBuffers(2, m_pbo2);
-    glDeleteBuffers(2, m_pbo3);
-    memset(m_pbo1, 0, sizeof(m_pbo1));
-    memset(m_pbo2, 0, sizeof(m_pbo2));
-    memset(m_pbo3, 0, sizeof(m_pbo3));
-
-    m_isInitGL = false;
-}
-
 void OpenGLRenderWidget::calculateViewport()
 {
 }
 
+void OpenGLRenderWidget::updatePlaneInfo(int w, int h, int format)
+{
+    switch (m_frame.spec.format)
+    {
+    case kRenderFmtRGB:
+    {
+        m_plane[0] = { w,h,w * h * 3 };
+        m_planeSize = 1;
+        break;
+    }
+    case kRenderFmtYUV420P:
+    case kRenderFmtYUVJ420P:
+    {
+        m_plane[0] = { w,h,w * h };
+        m_plane[1] = { w / 2,h / 2,w * h / 4 };
+        m_plane[2] = { w / 2,h / 2,w * h / 4 };
+        m_planeSize = 3;
+        break;
+    }
+    case kRenderFmtNV12:
+    {
+        m_plane[0] = { w,h,w * h };
+        m_plane[1] = { w / 2,h / 2,w * h / 2 };
+        m_planeSize = 2;
+        break;
+    }
+    default:
+    {
+        m_plane[0] = { w,h,w * h * 3 };
+        m_planeSize = 1;
+        break;
+    }
+    }
+}
+
 void OpenGLRenderWidget::initGL()
 {
-    if (m_reInitGL) {
-        releaseGL();
-        m_reInitGL = false;
-    }
     if (m_isInitGL)
         return;
+
+    releaseGL();
     switch (m_frame.spec.format)
     {
     case kRenderFmtRGB:
@@ -744,19 +823,26 @@ void OpenGLRenderWidget::initGL()
     m_isInitGL = true;
 }
 
+void OpenGLRenderWidget::releaseGL()
+{
+    m_isInitGL = false;
+    if (m_shaderProgram) {
+        glDeleteProgram(m_shaderProgram);
+        m_shaderProgram = 0;
+    }
+    glDeleteTextures(kMaxTextures, m_textures);
+    memset(m_textures, 0, sizeof(m_textures));
+
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    for (size_t i = 0; i < kMaxTextures; i++)
+    {
+        glDeleteBuffers(2, m_pbo[i]);
+        memset(m_pbo[i], 0, sizeof(m_pbo[i]));
+    }
+}
+
 void OpenGLRenderWidget::initRGB()
 {
-    const char* vertexShaderSource = R"(
-    #version 330 core
-    layout (location = 0) in vec3 aPos;
-    layout (location = 1) in vec2 aTexCoord;
-    out vec2 TexCoord;
-    void main() {
-        gl_Position = vec4(aPos, 1.0);
-        TexCoord = aTexCoord;
-    }
-)";
-
     const char* fragmentShaderSource = R"(
     #version 330 core
     in vec2 TexCoord;
@@ -767,7 +853,7 @@ void OpenGLRenderWidget::initRGB()
     }
 )";
 
-    initShaders(vertexShaderSource, fragmentShaderSource);
+    initShaders(kVertexShaderSource, fragmentShaderSource);
     initTextures(1);
 
     glUseProgram(m_shaderProgram);
@@ -779,27 +865,12 @@ void OpenGLRenderWidget::renderRGB()
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_textures[0]);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, m_nVideoW, m_nVideoH, 0, GL_RGB, GL_UNSIGNED_BYTE, m_frame.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, m_plane[0].width, m_plane[0].height, 0, GL_RGB, GL_UNSIGNED_BYTE, m_frame.data);
     //glGenerateMipmap(GL_TEXTURE_2D);
-
-    glUseProgram(m_shaderProgram);
-    glBindVertexArray(m_VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
 void OpenGLRenderWidget::initYUV420()
 {
-    const char* vertexShaderSource = R"(
-    #version 330 core
-    layout (location = 0) in vec3 aPos;
-    layout (location = 1) in vec2 aTexCoord;
-    out vec2 TexCoord;
-    void main() {
-        gl_Position = vec4(aPos, 1.0);
-        TexCoord = aTexCoord;
-    }
-)";
-
     const char* fragmentShaderSource = R"(
     #version 330 core
     in vec2 TexCoord;
@@ -823,31 +894,32 @@ void OpenGLRenderWidget::initYUV420()
     }
 )";
 
-    initShaders(vertexShaderSource, fragmentShaderSource);
-    initTextures(3);
+    initShaders(kVertexShaderSource, fragmentShaderSource);
+    initTextures(m_planeSize);
 
     if (m_isUseTexSubImage) {
-        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-
-        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-
-        glBindTexture(GL_TEXTURE_2D, m_textures[2]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[i].width, m_plane[i].height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        }
     }
 
     if (m_isUsePBO) {
-        auto makePBO = [this](GLuint* pbo, int size) {
-            glGenBuffers(2, pbo);
-            for (int i = 0; i < 2; ++i) {
+        auto makePBO = [this](GLuint* pbo, void** mapped, int size) {
+            glGenBuffers(kPBONum, pbo);
+            for (int i = 0; i < kPBONum; ++i) {
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
                 glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_STREAM_DRAW);
+                //// 映射到客户端地址，永久有效
+                //mapped[i] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+                //glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             }
             };
-        makePBO(m_pbo1, m_nVideoW * m_nVideoH);
-        makePBO(m_pbo2, m_nVideoW * m_nVideoH / 4);
-        makePBO(m_pbo3, m_nVideoW * m_nVideoH / 4);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            makePBO(m_pbo[i], m_mapped[i], m_plane[i].size);
+        }
     }
     glUseProgram(m_shaderProgram);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "texY"), 0);
@@ -857,140 +929,69 @@ void OpenGLRenderWidget::initYUV420()
 
 void OpenGLRenderWidget::renderYUV420()
 {
-    int nY = m_nVideoW * m_nVideoH;
-    int nU = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
-    int nV = ((m_nVideoW + 2 - 1) / 2) * ((m_nVideoH + 2 - 1) / 2);//向上取整
-    void* pY = m_frame.data;
-    void* pU = m_frame.data + nY;
-    void* pV = m_frame.data + nY + nU;
-
-    // 1. 先取行宽
-    int yStride = m_frame.linesize[0];
-    int uStride = m_frame.linesize[1];
-    int vStride = m_frame.linesize[2];
-
-    if (!m_frame.data) {
-        pY = m_frame.linedata[0];
-        pU = m_frame.linedata[1];
-        pV = m_frame.linedata[2];
+    if (!m_frame.linedata[0] || m_frame.linesize[0] <= 0)
+        return;
+    uint8_t* pData[3] = { nullptr };
+    int stride[3] = { 0 };
+    for (size_t i = 0; i < 3; i++)
+    {
+        pData[i] = m_frame.linedata[i];
+        stride[i] = m_frame.linesize[i];
     }
 
     if (m_isInitGL && m_isUsePBO) {
-        // 映射
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
-        uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-        if (dstY) {
-            for (int i = 0; i < m_nVideoH; ++i)
-                memcpy(dstY + i * m_nVideoW, m_frame.linedata[0] + i * m_frame.linesize[0], m_nVideoW);
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-        }
-
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
-        uint8_t* dstU = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH / 4, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-        if (dstU) {
-            for (int i = 0; i < m_nVideoH / 2; ++i)
-                memcpy(dstU + i * m_nVideoW / 2, m_frame.linedata[1] + i * m_frame.linesize[1], m_nVideoW / 2);
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-        }
-
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo3[m_pboIdx]);
-        uint8_t* dstV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH / 4, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-        if (dstV) {
-            for (int i = 0; i < m_nVideoH / 2; ++i)
-                memcpy(dstV + i * m_nVideoW / 2, m_frame.linedata[2] + i * m_frame.linesize[2], m_nVideoW / 2);
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        for (size_t pi = 0; pi < m_planeSize; pi++)
+        {
+            // 映射
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[pi][m_pboIdx]);
+            uint8_t* dst = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[pi].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+            if (dst) {
+                for (int i = 0; i < m_plane[pi].height; ++i)
+                    memcpy(dst + i * m_plane[pi].width, pData[pi] + i * stride[pi], m_plane[pi].width);
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+            }
         }
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
-
-        pY = nullptr;
-        pU = nullptr;
-        pV = nullptr;
+        pData[0] = nullptr;
+        pData[1] = nullptr;
+        pData[2] = nullptr;
     }
 
-    glUseProgram(m_shaderProgram);
-    glBindVertexArray(m_VAO);
-
     if (m_isUseTexSubImage) {
-        /* Y 平面  full size  R8 */
-        glActiveTexture(GL_TEXTURE0);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            glActiveTexture(GL_TEXTURE0 + i);
+            if (m_isUsePBO) {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            }
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
         }
-        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, yStride);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW, m_nVideoH, GL_RED, GL_UNSIGNED_BYTE, pY);
-
-        /* U 平面  half size  R8 */
-        glActiveTexture(GL_TEXTURE0 + 1);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, uStride);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW / 2, m_nVideoH / 2, GL_RED, GL_UNSIGNED_BYTE, pU);
-
-        /* V 平面  half size  R8 */
-        glActiveTexture(GL_TEXTURE0 + 2);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo3[m_pboIdx]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_textures[2]);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, vStride);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW / 2, m_nVideoH / 2, GL_RED, GL_UNSIGNED_BYTE, pV);
-
         if (m_isUsePBO) {
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         }
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
     }
     else {
-        // 更新Y纹理
-        glActiveTexture(GL_TEXTURE0);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            glActiveTexture(GL_TEXTURE0 + i);
+            if (m_isUsePBO) {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            }
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[i].width, m_plane[i].height, 0, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
         }
-        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, pY);
-
-        // 更新U纹理
-        glActiveTexture(GL_TEXTURE0 + 1);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, pU);
-
-        // 更新V纹理
-        glActiveTexture(GL_TEXTURE0 + 2);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo3[m_pboIdx]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_textures[2]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RED, GL_UNSIGNED_BYTE, pV);
 
         if (m_isUsePBO) {
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         }
     }
-    // 渲染
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
 }
 
 void OpenGLRenderWidget::initNV12()
 {
-    const char* vertexShaderSource = R"(
-    #version 330 core
-    layout (location = 0) in vec3 aPos;
-    layout (location = 1) in vec2 aTexCoord;
-    out vec2 TexCoord;
-    void main() {
-        gl_Position = vec4(aPos, 1.0);
-        TexCoord = aTexCoord;
-    }
-)";
-
     const char* fragmentShaderSource = R"(
     #version 330 core
     in vec2 TexCoord;
@@ -1016,26 +1017,31 @@ void OpenGLRenderWidget::initNV12()
     }
 )";
 
-    initShaders(vertexShaderSource, fragmentShaderSource);
-    initTextures(2);
+    initShaders(kVertexShaderSource, fragmentShaderSource);
+    initTextures(m_planeSize);
 
     if (m_isUseTexSubImage) {
         glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[0].width, m_plane[0].height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
 
         glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_plane[1].width, m_plane[1].height, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
     }
     if (m_isUsePBO) {
-        auto makePBO = [this](GLuint* pbo, int size) {
-            glGenBuffers(2, pbo);
-            for (int i = 0; i < 2; ++i) {
+        auto makePBO = [this](GLuint* pbo, void** mapped, int size) {
+            glGenBuffers(kPBONum, pbo);
+            for (int i = 0; i < kPBONum; ++i) {
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
                 glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_STREAM_DRAW);
+                //// 映射到客户端地址，永久有效
+                //mapped[i] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+                //glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             }
             };
-        makePBO(m_pbo1, m_nVideoW * m_nVideoH);
-        makePBO(m_pbo2, m_nVideoW * m_nVideoH / 2);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            makePBO(m_pbo[i], m_mapped[i], m_plane[i].size);
+        }
     }
     glUseProgram(m_shaderProgram);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "texY"), 0);
@@ -1044,95 +1050,82 @@ void OpenGLRenderWidget::initNV12()
 
 void OpenGLRenderWidget::renderNV12()
 {
-    int nY = m_nVideoW * m_nVideoH;
-    void* pY = m_frame.data;
-    void* pUV = m_frame.data + m_nVideoW * m_nVideoH;
-
-    // 1. 先取行宽
-    int yStride = m_frame.linesize[0];
-    int uvStride = m_frame.linesize[1];
-
-    if (!m_frame.data) {
-        pY = m_frame.linedata[0];
-        pUV = m_frame.linedata[1];
+    if (!m_frame.linedata[0] || m_frame.linesize[0] <= 0)
+        return;
+    uint8_t* pData[2] = { nullptr };
+    int stride[2] = { 0 };
+    for (size_t i = 0; i < 2; i++)
+    {
+        pData[i] = m_frame.linedata[i];
+        stride[i] = m_frame.linesize[i];
     }
 
     if (m_isInitGL && m_isUsePBO) {
         // 映射
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
-        uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[0][m_pboIdx]);
+        uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[0].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
         if (dstY) {
-            for (int i = 0; i < m_nVideoH; ++i)
-                memcpy(dstY + i * m_nVideoW, m_frame.linedata[0] + i * m_frame.linesize[0], m_nVideoW);
+            for (int i = 0; i < m_plane[0].height; ++i)
+                memcpy(dstY + i * m_plane[0].width, pData[0] + i * stride[0], m_plane[0].width);
             glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
         }
 
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
-        uint8_t* dstUV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_nVideoW * m_nVideoH / 2, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[1][m_pboIdx]);
+        uint8_t* dstUV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[1].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
         if (dstUV) {
-            for (int i = 0; i < m_nVideoH / 2; ++i)
-                memcpy(dstUV + i * m_nVideoW, m_frame.linedata[1] + i * m_frame.linesize[1], m_nVideoW);   // 一行里 UV 交错
+            for (int i = 0; i < m_plane[1].height; ++i)
+                memcpy(dstUV + i * m_plane[1].width * 2, pData[1] + i * stride[1], m_plane[1].width * 2);   // 一行里 UV 交错
             glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
         }
 
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        pY = nullptr;
-        pUV = nullptr;
+        pData[0] = nullptr;
+        pData[1] = nullptr;
     }
-
-    glUseProgram(m_shaderProgram);
-    glBindVertexArray(m_VAO);
 
     if (m_isUseTexSubImage) {
-        // 更新Y纹理
-        glActiveTexture(GL_TEXTURE0);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, yStride);   // Y 平面
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW, m_nVideoH, GL_RED, GL_UNSIGNED_BYTE, pY);
 
-        // 更新UV纹理 (从Y数据之后开始)
-        glActiveTexture(GL_TEXTURE0 + 1);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            glActiveTexture(GL_TEXTURE0 + i);
+            if (m_isUsePBO) {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            }
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            if (i == 0) {//Y
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
+            }
+            else if (i == 1) {//UV
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]/2);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RG, GL_UNSIGNED_BYTE, pData[i]);
+            }
         }
-        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, uvStride / 2);  // UV 平面
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_nVideoW / 2, m_nVideoH / 2, GL_RG, GL_UNSIGNED_BYTE, pUV);
-
         if (m_isUsePBO) {
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         }
-        // 3. 用完重置（避免影响后续纹理）
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
     }
     else {
-        // 更新Y纹理
-        glActiveTexture(GL_TEXTURE0);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo1[m_pboIdx]);
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            glActiveTexture(GL_TEXTURE0 + i);
+            if (m_isUsePBO) {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            }
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            if (i == 0) {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[i].width, m_plane[i].height, 0, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
+            }
+            else if (i == 1) {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_plane[i].width, m_plane[i].height, 0, GL_RG, GL_UNSIGNED_BYTE, pData[i]);
+            }
         }
-        glBindTexture(GL_TEXTURE_2D, m_textures[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_nVideoW, m_nVideoH, 0, GL_RED, GL_UNSIGNED_BYTE, pY);
-
-        // 更新UV纹理 (从Y数据之后开始)
-        glActiveTexture(GL_TEXTURE0 + 1);
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo2[m_pboIdx]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_textures[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_nVideoW / 2, m_nVideoH / 2, 0, GL_RG, GL_UNSIGNED_BYTE, pUV);
 
         if (m_isUsePBO) {
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         }
     }
-    m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
-    // 渲染
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
 }
 
 
@@ -1336,3 +1329,146 @@ void SDLRenderWidget::paintEvent(QPaintEvent* event)
 {
     //QWidget::paintEvent(event);
 }
+
+
+/*
+* 
+constexpr int KB = 3;          // Y/U/V 三组
+constexpr int DB = 2;          // 双缓冲
+
+struct Plane {
+    int w, h, sz;
+};
+static Plane pl[KB] = {                       // 420 尺寸
+    {W,     H,     W*H},        // Y
+    {W/2,   H/2,   W*H/4},      // U
+    {W/2,   H/2,   W*H/4}       // V
+};
+
+struct FrameToken {
+    int pboIdx[KB];   // 本次用的 Y/U/V 三 PBO 索引
+};
+
+std::mutex              g_mtx;
+std::condition_variable g_cv;
+std::queue<FrameToken>  g_q;
+
+// 下面 4 个数组**只在渲染线程**读写
+GLuint g_pbo[KB][DB] = {};
+void*  g_map[KB][DB] = {};
+GLsync g_fence[KB][DB] = {};   // 每 plane 每 buffer 一个 fence
+
+
+void initYUV420Pbo() {
+    for (int c = 0; c < KB; ++c) {
+        glGenBuffers(DB, g_pbo[c]);
+        for (int b = 0; b < DB; ++b) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, g_pbo[c][b]);
+            glBufferData(GL_PIXEL_UNPACK_BUFFER, pl[c].sz, nullptr, GL_STREAM_DRAW);
+            g_map[c][b] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, pl[c].sz,
+                                            GL_MAP_WRITE_BIT |
+                                            GL_MAP_PERSISTENT_BIT |
+                                            GL_MAP_COHERENT_BIT);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        }
+    }
+
+    // 生成 3 张 R8 纹理
+    glGenTextures(KB, g_tex);
+    for (int c = 0; c < KB; ++c) {
+        glBindTexture(GL_TEXTURE_2D, g_tex[c]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, pl[c].w, pl[c].h, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+}
+
+
+void decodeThread() {
+    int idx = 0;
+    while (av_read_frame(fmt, pkt) >= 0) {
+        avcodec_send_packet(codec, pkt);
+        while (avcodec_receive_frame(codec, frame) == 0) {
+
+            FrameToken tok;
+            for (int c = 0; c < KB; ++c) tok.pboIdx[c] = idx % DB;
+
+            // 1. 等渲染线程用完这组 PBO 
+            std::unique_lock<std::mutex> lk(g_mtx);
+            g_cv.wait(lk, [&] {
+                for (int c = 0; c < KB; ++c)
+                    if (g_fence[c][tok.pboIdx[c]]) return false;
+                return true;
+                });
+
+            // 2. 逐 plane 拷贝原始 YUV 数据 
+            for (int c = 0; c < KB; ++c) {
+                uint8_t* dst = static_cast<uint8_t*>(g_map[c][tok.pboIdx[c]]);
+                int srcStride = frame->linesize[c];
+                int dstStride = pl[c].w;          // 我们要求纹理无 padding
+                int h = pl[c].h;
+                if (srcStride == dstStride)       // 快路径
+                    memcpy(dst, frame->data[c], h * srcStride);
+                else                              // 行拷贝
+                    for (int y = 0; y < h; ++y)
+                        memcpy(dst + y * dstStride, frame->data[c] + y * srcStride, dstStride);
+            }
+
+            // 3. 通知渲染线程
+            g_q.push(tok);
+            lk.unlock();
+            g_cv.notify_one();
+            idx++;
+        }
+        av_packet_unref(pkt);
+    }
+}
+
+
+void renderFrame() {
+    std::unique_lock<std::mutex> lk(g_mtx);
+    while (!g_q.empty()) {
+        FrameToken tok = g_q.front(); g_q.pop();
+        lk.unlock();
+
+        for (int c = 0; c < KB; ++c) {
+            int b = tok.pboIdx[c];
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, g_pbo[c][b]);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);          // 提交数据
+            glBindTexture(GL_TEXTURE_2D, g_tex[c]);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0,0, pl[c].w,pl[c].h,
+                             GL_RED, GL_UNSIGNED_BYTE, nullptr);
+            g_map[c][b] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, pl[c].sz,
+                                            GL_MAP_WRITE_BIT |
+                                            GL_MAP_PERSISTENT_BIT |
+                                            GL_MAP_COHERENT_BIT);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+            // fence 标记“GPU 已用完”
+            g_fence[c][b] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        }
+
+        // 异步等待 fence 完成（非阻塞）
+        for (int c = 0; c < KB; ++c) {
+            int b = tok.pboIdx[c];
+            glClientWaitSync(g_fence[c][b], GL_SYNC_FLUSH_COMMANDS_BIT, 0);
+            glDeleteSync(g_fence[c][b]);
+            g_fence[c][b] = nullptr;   // 解码线程看见 nullptr 即可继续写
+        }
+        lk.lock();
+    }
+    lk.unlock();
+
+    // 正常绘制
+    glUseProgram(prog);
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, g_tex[0]);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, g_tex[1]);
+    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, g_tex[2]);
+    glUniform1i(glGetUniformLocation(prog, "texY"), 0);
+    glUniform1i(glGetUniformLocation(prog, "texU"), 1);
+    glUniform1i(glGetUniformLocation(prog, "texV"), 2);
+    ...
+}
+
+* 
+*/

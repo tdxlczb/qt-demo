@@ -19,6 +19,7 @@ public:
     virtual ~VideoRender() {};
 
     virtual VideoFrame GetContent() = 0;
+    virtual cv::Mat GetRGBContent() = 0;
     virtual void UpdateContent(const VideoFrame& frame) = 0;
     virtual void ClearContent() = 0;
     //virtual void SetAspectRatioMode(AspectRatioMode mode) = 0;
@@ -35,6 +36,7 @@ public:
     ~VideoRGBRender();
 
     VideoFrame GetContent() override;
+    cv::Mat GetRGBContent() override;
     void UpdateContent(const VideoFrame& frame) override;
     void ClearContent() override;
 
@@ -74,6 +76,7 @@ public:
 
     //获取画面
     VideoFrame GetContent() override;
+    cv::Mat GetRGBContent() override;
     //以新传入的Mat作为数据来源以显示该画面
     void UpdateContent(const VideoFrame& frame) override;
     //清空画面
@@ -126,6 +129,15 @@ private:
 #include <QOpenGLWidget>
 #include <QOpenGLExtraFunctions>
 
+constexpr int kMaxTextures = 8; // 纹理数量，对应YUV420格式的Y/U/V三组，NV12格式的Y/UV两组，RGB格式的RGB一组
+constexpr int kPBONum = 2;      // 双缓冲
+
+struct Plane {
+    int width = 0;
+    int height = 0;
+    int size = 0;
+};
+
 class OpenGLRenderWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions, public VideoRender
 {
     Q_OBJECT
@@ -135,6 +147,7 @@ public:
 
     //获取画面
     VideoFrame GetContent() override;
+    cv::Mat GetRGBContent() override;
     //以新传入的Mat作为数据来源以显示该画面
     void UpdateContent(const VideoFrame& frame) override;
     //清空画面
@@ -153,10 +166,12 @@ protected:
 private:
     void initShaders(const char* vs, const char* fs);
     void initTextures(int textureCount);
-    void releaseGL();
+
     void calculateViewport();
+    void updatePlaneInfo(int w, int h, int format);
 
     void initGL();
+    void releaseGL();
 
     void initRGB();
     void renderRGB();
@@ -170,12 +185,13 @@ private:
 private:
     GLuint m_shaderProgram = 0;
     GLuint m_VAO = 0;
-    GLuint m_textures[8] = { 0 }; //纹理数量对应AVFrame中data的数量
-    GLuint m_pbo1[2] = { 0 };
-    GLuint m_pbo2[2] = { 0 };
-    GLuint m_pbo3[2] = { 0 };
+    GLuint m_textures[kMaxTextures] = { 0 }; //纹理数量对应AVFrame中data的数量
+    GLuint m_pbo[kMaxTextures][kPBONum] = { 0 };
+    void* m_mapped[kMaxTextures][kPBONum] = { 0 };
     int    m_pboIdx = 0;
-    bool   m_reInitGL = false; //是否需要重新初始化，要先释放，再初始化
+
+    Plane  m_plane[kMaxTextures] = { 0 };
+    int    m_planeSize = 0;//当前使用的平面数量，YUV420为3，NV12为2，RGB为1
 
     int m_nVideoW = 0; //视频分辨率宽
     int m_nVideoH = 0; //视频分辨率高

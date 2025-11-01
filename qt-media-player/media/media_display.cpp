@@ -123,19 +123,38 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
         }
     }
 
+    //内存拷贝回调
+    outFrame.copycb = [](uint8_t* dst_data[4], int dst_linesizes[4],
+        uint8_t* src_data[4], int src_linesizes[4],
+        int pix_fmt, int width, int height) {
+            int      bufferSize = av_image_get_buffer_size((AVPixelFormat)pix_fmt, width, height, 1);
+            if (!dst_data[0]) {
+                uint8_t* buffer = (uint8_t*)av_malloc(bufferSize * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
+                av_image_fill_arrays(dst_data, dst_linesizes, buffer, (AVPixelFormat)pix_fmt, width, height, 1);
+            }
+            av_image_copy(dst_data, dst_linesizes, (const uint8_t**)src_data, src_linesizes, (AVPixelFormat)pix_fmt, width, height);
+            return bufferSize;
+        };
+
     uint8_t* buffer = nullptr;
     size_t bufferSize = 0;
     if (needSwsScale) {
         int ret = sws_scale(m_pSwsCxtVideo, (const uint8_t* const*)pFrame->data, pFrame->linesize, 0, pFrame->height
             , m_pFrameDst->data, m_pFrameDst->linesize);
         if (ret <= 0) {
-            qDebug() << "DisplayId:" << m_displayId << "sws_scale err:" << QString("%1").arg(ret);
+            qCritical() << "DisplayId:" << m_displayId << "sws_scale err:" << QString("%1").arg(ret);
             return PlayError{ PlayErrorCode::kConverteFailed,"" };
         }
-        buffer = m_pFrameDst->data[0];
-        bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
-        outFrame.data = buffer;
-        outFrame.size = bufferSize;
+        //buffer = m_pFrameDst->data[0];
+        //bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
+        //outFrame.data = buffer;
+        //outFrame.size = bufferSize;
+
+        for (size_t i = 0; i < 8; i++)
+        {
+            outFrame.linedata[i] = m_pFrameDst->data[i];
+            outFrame.linesize[i] = m_pFrameDst->linesize[i];
+        }
     }
     else {
         //将源帧的不连续内存数据拷贝到连续内存的帧，不连续内存后续不方便使用
@@ -145,18 +164,6 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
         //outFrame.data = buffer;
         //outFrame.size = bufferSize;
 
-        outFrame.copycb = [](uint8_t* dst_data[4], int dst_linesizes[4],
-            uint8_t* src_data[4], int src_linesizes[4],
-            int pix_fmt, int width, int height) {
-                int      bufferSize = av_image_get_buffer_size((AVPixelFormat)pix_fmt, width, height, 1);
-                if (!dst_data[0]) {
-                    uint8_t* buffer = (uint8_t*)av_malloc(bufferSize * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
-                    av_image_fill_arrays(dst_data, dst_linesizes, buffer, (AVPixelFormat)pix_fmt, width, height, 1);
-                }
-                av_image_copy(dst_data, dst_linesizes, (const uint8_t**)src_data, src_linesizes, (AVPixelFormat)pix_fmt, width, height);
-                return bufferSize;
-            };
-
         for (size_t i = 0; i < 8; i++)
         {
             outFrame.linedata[i] = pFrame->data[i];
@@ -164,7 +171,6 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
         }
     }
 
-    
     int tryBufferSize = m_dstSpec.width * m_dstSpec.height * 1.5;
     if (bufferSize != tryBufferSize) {
         int ny = m_pFrameDst->linesize[0] * m_pFrameDst->height;
