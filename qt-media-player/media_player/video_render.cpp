@@ -550,6 +550,7 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
         qDebug() << "new width:" << frame.spec.width << ",height:" << frame.spec.height << ",format:" << frame.spec.height;
         reInitData = true;
         m_isInitGL = false;
+        m_frameIndex = 0;
     }
 
     if (frame.data && frame.size > 0) {
@@ -565,32 +566,35 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
         memcpy(m_frame.data, frame.data, frame.size);
     }
     else if (frame.linedata[0] && frame.linesize[0] > 0) {
-        uint8_t* src_data[8] = { 0 };
-        int      src_linesizes[8] = { 0 };
-        for (size_t i = 0; i < 8; i++)
-        {
-            src_data[i] = frame.linedata[i];
-            src_linesizes[i] = frame.linesize[i];
-        }
-        if (reInitData) {
-            delete[] m_frame.data;
-            m_frame.data = nullptr;
+        if (m_isCopyData) {
+            uint8_t* src_data[8] = { 0 };
+            int      src_linesizes[8] = { 0 };
             for (size_t i = 0; i < 8; i++)
             {
-                m_frame.linedata[i] = nullptr;
-                m_frame.linesize[i] = 0;
+                src_data[i] = frame.linedata[i];
+                src_linesizes[i] = frame.linesize[i];
+            }
+            if (reInitData) {
+                delete[] m_frame.data;
+                m_frame.data = nullptr;
+                for (size_t i = 0; i < 8; i++)
+                {
+                    m_frame.linedata[i] = nullptr;
+                    m_frame.linesize[i] = 0;
+                }
+            }
+
+            //这里拷贝数据到一块连续内存
+            m_frame.size = frame.copycb(m_frame.linedata, m_frame.linesize, src_data, src_linesizes, frame.spec.format, frame.spec.width, frame.spec.height);
+            m_frame.data = m_frame.linedata[0];
+        }
+        else {
+            for (size_t i = 0; i < 8; i++)
+            {
+                m_frame.linedata[i] = frame.linedata[i];
+                m_frame.linesize[i] = frame.linesize[i];
             }
         }
-
-        //这里拷贝数据到一块连续内存
-        m_frame.size = frame.copycb(m_frame.linedata, m_frame.linesize, src_data, src_linesizes, frame.spec.format, frame.spec.width, frame.spec.height);
-        m_frame.data = m_frame.linedata[0];
-
-        //for (size_t i = 0; i < 8; i++)
-        //{
-        //    m_frame.linedata[i] = frame.linedata[i];
-        //    m_frame.linesize[i] = frame.linesize[i];
-        //}
     }
 
     m_frame.spec = frame.spec;
@@ -598,6 +602,9 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
     m_nVideoH = m_frame.spec.height;
     updatePlaneInfo(m_frame.spec.width, m_frame.spec.height, m_frame.spec.format);
 
+    if (m_isInitGL && m_isUsePBO && !reInitData) {
+        uploadPBOData();
+    }
     emit sig_Update();
 }
 
@@ -644,6 +651,12 @@ void OpenGLRenderWidget::paintGL()
     }
     //初始化调用opengl的接口必须放到继承的GL函数中，否则会初始化异常
     initGL();
+
+    //初始化的第一帧没有更新数据，需要更新一下
+    if (m_isInitGL && m_isUsePBO && m_frameIndex == 0) {
+        uploadPBOData();
+    }
+
 
     glUseProgram(m_shaderProgram);
     glBindVertexArray(m_VAO);
@@ -761,33 +774,79 @@ void OpenGLRenderWidget::updatePlaneInfo(int w, int h, int format)
     {
     case kRenderFmtRGB:
     {
-        m_plane[0] = { w,h,w * h * 3 };
+        m_plane[0] = { w,h,w * 3,w * h * 3 };
         m_planeSize = 1;
         break;
     }
     case kRenderFmtYUV420P:
     case kRenderFmtYUVJ420P:
     {
-        m_plane[0] = { w,h,w * h };
-        m_plane[1] = { w / 2,h / 2,w * h / 4 };
-        m_plane[2] = { w / 2,h / 2,w * h / 4 };
+        m_plane[0] = { w,h,w,w * h };
+        m_plane[1] = { w / 2,h / 2,w / 2,w * h / 4 };
+        m_plane[2] = { w / 2,h / 2,w / 2,w * h / 4 };
         m_planeSize = 3;
         break;
     }
     case kRenderFmtNV12:
     {
-        m_plane[0] = { w,h,w * h };
-        m_plane[1] = { w / 2,h / 2,w * h / 2 };
+        m_plane[0] = { w,h,w,w * h };
+        m_plane[1] = { w / 2,h / 2,w,w * h / 2 };
         m_planeSize = 2;
         break;
     }
     default:
     {
-        m_plane[0] = { w,h,w * h * 3 };
+        m_plane[0] = { w,h,w * 3,w * h * 3 };
         m_planeSize = 1;
         break;
     }
     }
+}
+
+void OpenGLRenderWidget::uploadPBOData()
+{
+    if (!m_isUsePBOCrossThread)
+        return;
+
+    if (m_frame.spec.format == kRenderFmtYUV420P || m_frame.spec.format == kRenderFmtYUVJ420P) {
+
+        for (size_t i = 0; i < m_planeSize; i++)
+        {
+            uint8_t* dst = static_cast<uint8_t*>(m_mapped[i][m_pboIdx]);
+            int srcStride = m_frame.linesize[i];
+            int dstStride = m_plane[i].stride;          // 我们要求纹理无 padding
+            int h = m_plane[i].height;
+            if (srcStride == dstStride)       // 快路径
+                memcpy(dst, m_frame.linedata[i], h * srcStride);
+            else                              // 行拷贝
+                for (int y = 0; y < h; ++y)
+                    memcpy(dst + y * dstStride, m_frame.linedata[i] + y * srcStride, dstStride);
+        }
+    }
+    else if (m_frame.spec.format == kRenderFmtNV12) {
+        /* 只改拷贝部分，其余令牌逻辑不变 */
+        uint8_t* dstY = static_cast<uint8_t*>(m_mapped[0][m_pboIdx]);
+        uint8_t* dstUV = static_cast<uint8_t*>(m_mapped[1][m_pboIdx]);
+
+        // Y 平面
+        int srcStrideY = m_frame.linesize[0];
+        int dstStrideY = m_plane[0].stride;
+        if (srcStrideY == dstStrideY)
+            memcpy(dstY, m_frame.linedata[0], m_plane[0].size);
+        else
+            for (int y = 0; y < m_plane[0].height; ++y)
+                memcpy(dstY + y * dstStrideY, m_frame.linedata[0] + y * srcStrideY, dstStrideY);
+
+        // UV 平面（data[1] 已经是交错 UV）
+        int srcStrideUV = m_frame.linesize[1];
+        int dstStrideUV = m_plane[1].stride;   // 每像素 2 字节
+        if (srcStrideUV == dstStrideUV)
+            memcpy(dstUV, m_frame.linedata[1], m_plane[1].size);
+        else
+            for (int y = 0; y < m_plane[1].height; ++y)
+                memcpy(dstUV + y * dstStrideUV, m_frame.linedata[1] + y * srcStrideUV, dstStrideUV);
+    }
+    m_frameIndex++;
 }
 
 void OpenGLRenderWidget::initGL()
@@ -911,9 +970,11 @@ void OpenGLRenderWidget::initYUV420()
             for (int i = 0; i < kPBONum; ++i) {
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
                 glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_STREAM_DRAW);
-                //// 映射到客户端地址，永久有效
-                //mapped[i] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-                //glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                if (m_isUsePBOCrossThread) {
+                    // 映射到客户端地址，永久有效
+                    mapped[i] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+                    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                }
             }
             };
         for (size_t i = 0; i < m_planeSize; i++)
@@ -940,54 +1001,51 @@ void OpenGLRenderWidget::renderYUV420()
     }
 
     if (m_isInitGL && m_isUsePBO) {
-        for (size_t pi = 0; pi < m_planeSize; pi++)
+        if (!m_isUsePBOCrossThread) {
+            for (size_t pi = 0; pi < m_planeSize; pi++)
+            {
+                // 映射
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[pi][m_pboIdx]);
+                uint8_t* dst = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[pi].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+                if (dst) {
+                    for (int i = 0; i < m_plane[pi].height; ++i)
+                        memcpy(dst + i * m_plane[pi].width, pData[pi] + i * stride[pi], m_plane[pi].width);
+                    glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+                }
+            }
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        }
+        for (size_t i = 0; i < 3; i++)
         {
-            // 映射
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[pi][m_pboIdx]);
-            uint8_t* dst = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[pi].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-            if (dst) {
-                for (int i = 0; i < m_plane[pi].height; ++i)
-                    memcpy(dst + i * m_plane[pi].width, pData[pi] + i * stride[pi], m_plane[pi].width);
+            pData[i] = nullptr;
+            stride[i] = m_plane[i].stride;
+        }
+    }
+
+    for (size_t i = 0; i < m_planeSize; i++)
+    {
+        glActiveTexture(GL_TEXTURE0 + i);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            if (m_isUsePBOCrossThread) {
                 glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
             }
         }
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        pData[0] = nullptr;
-        pData[1] = nullptr;
-        pData[2] = nullptr;
-    }
-
-    if (m_isUseTexSubImage) {
-        for (size_t i = 0; i < m_planeSize; i++)
-        {
-            glActiveTexture(GL_TEXTURE0 + i);
-            if (m_isUsePBO) {
-                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
-            }
-            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]);
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        //如果linedata出现数据对齐的情况，即大于width，需要使用glPixelStorei设置数据跨度，设置为linesize的大小
+        //例如2880数据对齐的linesize为2944，如果直接使用linedata指针，则stride值使用linesize即2944，如果linedata经过内存拷贝，则使用拷贝后的平面大小，一般为2880
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]);
+        if (m_isUseTexSubImage) {
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
         }
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        }
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
-    }
-    else {
-        for (size_t i = 0; i < m_planeSize; i++)
-        {
-            glActiveTexture(GL_TEXTURE0 + i);
-            if (m_isUsePBO) {
-                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
-            }
-            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        else {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[i].width, m_plane[i].height, 0, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
         }
-
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        }
     }
+    if (m_isUsePBO) {
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
 }
 
 void OpenGLRenderWidget::initNV12()
@@ -1033,9 +1091,11 @@ void OpenGLRenderWidget::initNV12()
             for (int i = 0; i < kPBONum; ++i) {
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
                 glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_STREAM_DRAW);
-                //// 映射到客户端地址，永久有效
-                //mapped[i] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-                //glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                if (m_isUsePBOCrossThread) {
+                    // 映射到客户端地址，永久有效
+                    mapped[i] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+                    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                }
             }
             };
         for (size_t i = 0; i < m_planeSize; i++)
@@ -1061,71 +1121,64 @@ void OpenGLRenderWidget::renderNV12()
     }
 
     if (m_isInitGL && m_isUsePBO) {
-        // 映射
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[0][m_pboIdx]);
-        uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[0].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-        if (dstY) {
-            for (int i = 0; i < m_plane[0].height; ++i)
-                memcpy(dstY + i * m_plane[0].width, pData[0] + i * stride[0], m_plane[0].width);
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-        }
-
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[1][m_pboIdx]);
-        uint8_t* dstUV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[1].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-        if (dstUV) {
-            for (int i = 0; i < m_plane[1].height; ++i)
-                memcpy(dstUV + i * m_plane[1].width * 2, pData[1] + i * stride[1], m_plane[1].width * 2);   // 一行里 UV 交错
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-        }
-
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        pData[0] = nullptr;
-        pData[1] = nullptr;
-    }
-
-    if (m_isUseTexSubImage) {
-
-        for (size_t i = 0; i < m_planeSize; i++)
-        {
-            glActiveTexture(GL_TEXTURE0 + i);
-            if (m_isUsePBO) {
-                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+        if (!m_isUsePBOCrossThread) {
+            // 映射
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[0][m_pboIdx]);
+            uint8_t* dstY = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[0].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+            if (dstY) {
+                for (int i = 0; i < m_plane[0].height; ++i)
+                    memcpy(dstY + i * m_plane[0].width, pData[0] + i * stride[0], m_plane[0].width);
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
             }
-            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-            if (i == 0) {//Y
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[1][m_pboIdx]);
+            uint8_t* dstUV = (uint8_t*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[1].size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+            if (dstUV) {
+                for (int i = 0; i < m_plane[1].height; ++i)
+                    memcpy(dstUV + i * m_plane[1].width * 2, pData[1] + i * stride[1], m_plane[1].width * 2);   // 一行里 UV 交错
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
             }
-            else if (i == 1) {//UV
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]/2);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RG, GL_UNSIGNED_BYTE, pData[i]);
-            }
-        }
-        if (m_isUsePBO) {
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         }
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
-    }
-    else {
-        for (size_t i = 0; i < m_planeSize; i++)
+        for (size_t i = 0; i < 2; i++)
         {
-            glActiveTexture(GL_TEXTURE0 + i);
-            if (m_isUsePBO) {
-                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            pData[i] = nullptr;
+            stride[i] = m_plane[i].stride;
+        }
+    }
+
+    for (size_t i = 0; i < m_planeSize; i++)
+    {
+        glActiveTexture(GL_TEXTURE0 + i);
+        if (m_isUsePBO) {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[i][m_pboIdx]);
+            if (m_isUsePBOCrossThread) {
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
             }
-            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-            if (i == 0) {
+        }
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        if (i == 0) {//Y
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i]);
+            if (m_isUseTexSubImage) {
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
+            }
+            else {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[i].width, m_plane[i].height, 0, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
             }
-            else if (i == 1) {
+        }
+        else if (i == 1) {//UV
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, stride[i] / 2);
+            if (m_isUseTexSubImage) {
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[i].width, m_plane[i].height, GL_RG, GL_UNSIGNED_BYTE, pData[i]);
+            }
+            else {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_plane[i].width, m_plane[i].height, 0, GL_RG, GL_UNSIGNED_BYTE, pData[i]);
             }
         }
-
-        if (m_isUsePBO) {
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        }
     }
+    if (m_isUsePBO) {
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // 还原
 }
 
 

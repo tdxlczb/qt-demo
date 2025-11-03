@@ -135,6 +135,7 @@ constexpr int kPBONum = 2;      // 双缓冲
 struct Plane {
     int width = 0;
     int height = 0;
+    int stride = 0;//对应linesize的值
     int size = 0;
 };
 
@@ -169,6 +170,7 @@ private:
 
     void calculateViewport();
     void updatePlaneInfo(int w, int h, int format);
+    void uploadPBOData();
 
     void initGL();
     void releaseGL();
@@ -197,9 +199,12 @@ private:
     int m_nVideoH = 0; //视频分辨率高
     VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
+    int64_t m_frameIndex = 0;
     bool m_isInitGL = false;
+    bool m_isCopyData = false;
     bool m_isUseTexSubImage = true;
     bool m_isUsePBO = true;
+    bool m_isUsePBOCrossThread = true;//跨线程使用pbo
 };
 
 /*
