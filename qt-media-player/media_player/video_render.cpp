@@ -703,9 +703,11 @@ void OpenGLRenderWidget::paintGL()
 
     //初始化的第一帧没有更新数据，需要更新一下
     if (m_isInitGL && m_isUsePBO && m_frameIndex == 0) {
-        uploadPBOData();
+        //如果没有数据拷贝，且不使用opengl同步机制，即m_isCopyData=fals&&m_isUseFence=false，这里更新pbo数据存在风险，有可能在拷贝pbo数据时，源数据被释放导致崩溃
+        if (!(!m_isCopyData && !m_isUseFence)) {
+            uploadPBOData();
+        }
     }
-
 
     glUseProgram(m_shaderProgram);
     glBindVertexArray(m_VAO);
@@ -733,7 +735,6 @@ void OpenGLRenderWidget::paintGL()
         break;
     }
     }
-    m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
     // 渲染
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
@@ -808,8 +809,14 @@ void OpenGLRenderWidget::initTextures(int textureCount)
         // 为当前绑定的纹理对象设置环绕、过滤方式
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        if (m_isUseMipMap) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
+        else {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        }
     }
 }
 
@@ -892,7 +899,7 @@ void OpenGLRenderWidget::uploadPBOData()
         m_frameIndex++;
         return;
     }
-
+    m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
     if (m_frame.spec.format == kRenderFmtYUV420P || m_frame.spec.format == kRenderFmtYUVJ420P) {
 
         for (size_t i = 0; i < m_planeSize; i++)
@@ -1010,7 +1017,9 @@ void OpenGLRenderWidget::renderRGB()
     glBindTexture(GL_TEXTURE_2D, m_textures[0]);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, m_plane[0].width, m_plane[0].height, 0, GL_RGB, GL_UNSIGNED_BYTE, m_frame.data);
-    //glGenerateMipmap(GL_TEXTURE_2D);
+    if (m_isUseMipMap) {
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
 }
 
 void OpenGLRenderWidget::initYUV420()
@@ -1159,6 +1168,9 @@ void OpenGLRenderWidget::renderYUV420()
         else {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_plane[i].width, m_plane[i].height, 0, GL_RED, GL_UNSIGNED_BYTE, pData[i]);
         }
+        if (m_isUseMipMap) {
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
     }
     if (m_isUsePBO) {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
@@ -1291,6 +1303,9 @@ void OpenGLRenderWidget::renderNV12()
             else {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, m_plane[i].width, m_plane[i].height, 0, GL_RG, GL_UNSIGNED_BYTE, pData[i]);
             }
+        }
+        if (m_isUseMipMap) {
+            glGenerateMipmap(GL_TEXTURE_2D);
         }
     }
     if (m_isUsePBO) {

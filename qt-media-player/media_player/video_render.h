@@ -211,6 +211,7 @@ private:
     bool m_isUseTexSubImage = true;
     bool m_isUsePBO = true;
     bool m_isUsePBOCrossThread = true;//跨线程使用pbo
+    bool m_isUseMipMap = false;
     QTimer m_updateTimer;//使用定时器定时刷新视频帧，代替更新数据时刷新
 
     bool m_isUseFence = false;//使用opengl的同步机制的话，渲染的时候有可能会比较耗时，导致帧率降低卡顿
