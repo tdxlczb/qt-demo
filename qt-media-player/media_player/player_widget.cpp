@@ -68,22 +68,25 @@ void PlayerWidget::StartPlay(const QString& url)
 {
     m_playUrl = url;
     m_pTextEditUrl->setText(url);
-    MediaParameter param;
-    param.url = url.toStdString();
-    param.hwDeviceName = "dxva2";
-    //param.hwDeviceName = "d3d11va";
-    param.outputVideoSpec = { 0, 0, AV_PIX_FMT_NONE };
-    //param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
-    param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
+    //MediaParameter param;
+    //param.url = url.toStdString();
+    //param.hwDeviceName = "dxva2";
+    ////param.hwDeviceName = "d3d11va";
+    //param.outputVideoSpec = { 0, 0, AV_PIX_FMT_NONE };
+    ////param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
+    //param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
+
+    PlayOptions opt;
+    opt.hwdevice = "dxva2";
 
     if (!m_pMediaReader)
-        m_pMediaReader = new MediaReader();
+        m_pMediaReader = new MediaReader(0);
 
     //m_pAudioRender->Start(param.outputAudioSpec, 1024);
     //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
 
     m_pMediaReader->SetPlayEvent(this);
-    m_pMediaReader->Play(param);
+    m_pMediaReader->Play(url.toStdString(), opt);
 
     //m_pFishEyeWidget = new FishEyeWidget();
     //m_pFishEyeWidget->resize(1000, 800);
@@ -146,7 +149,8 @@ void PlayerWidget::on_pbPlayButton_clicked()
     if (playUrl.isEmpty())
     {
         //playUrl = "E:/code/media/BaiduSyncdisk.mp4";
-        playUrl = "rtsp://172.16.19.40:554/rtp/34020000001180000195_34020000001310000005_5?token=JqLYMtMRhIG7EIS4";
+        //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
+        playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
 
         //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
         //playUrl = "rtsp://172.16.19.69/live/test";
@@ -173,6 +177,6 @@ void PlayerWidget::resizeEvent(QResizeEvent* event)
     //    m_pVideoRender->resize(rc.width() - 40, rc.height() - 150);
     //    m_pVideoRender->move(10, 10);
     //}
-    if (m_pMediaReader)
-        m_pMediaReader->UpdateDisplaySize(event->size().width(), event->size().height());
+    //if (m_pMediaReader)
+    //    m_pMediaReader->UpdateDisplaySize(event->size().width(), event->size().height());
 }

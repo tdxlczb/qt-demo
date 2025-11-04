@@ -9,10 +9,11 @@
 
 void MediaReaderTest()
 {
-    auto reader = new MediaReader();
-    MediaParameter param;
-    param.url = "E:/code/media/BaiduSyncdisk.mp4";
-    reader->Play(param);
+    auto reader = new MediaReader(0);
+    std::string url = "E:/code/media/BaiduSyncdisk.mp4";
+    PlayOptions opt;
+    opt.hwdevice = "";
+    reader->Play(url, opt);
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));

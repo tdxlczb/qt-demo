@@ -1,4 +1,4 @@
-#ifndef MEDIA_READER_H
+﻿#ifndef MEDIA_READER_H
 #define MEDIA_READER_H
 
 #include <thread>
@@ -28,29 +28,21 @@ extern "C"
 * 解码和取包不要在统一个线程，避免性能不足的时候可能会影响取包，导致网络包延迟累积
 */
 
-class VideoDisplay;
-class AudioDisplay;
-class DynamicJitterBuffer;
 class MediaReader
 {
 public:
-    MediaReader();
+    MediaReader(int index);
     ~MediaReader();
 
-    bool Play(const MediaParameter& param);
-    bool Stop();
-    void UpdateDisplaySize(int width, int height);
+    void Play(const std::string& url, const PlayOptions& options);
+    void Stop();
     void SetPlayEvent(PlayEvent* playEvent);
-    size_t GetAudioFrame(uint8_t* buffer, size_t len);
 
     //获取当前硬解码的图像格式(仅硬解码时有效)
     const AVPixelFormat& GetHwPixFmt() const;
     //退出硬解码（在非本类代码内执行时可用）
     void QuitHwDecode();
 private:
-    bool StreamOpen();
-    void StreamClose();
-    
     void ReadThread();
     void VideoThread();
     void AudioThread();
@@ -62,22 +54,24 @@ private:
     * 可以使用有更高精度的sleep去做延迟，或者创建新线程，使用while循环比较时间，代替sleep
     */
     void DisplayThread();
+    void DisplayVideo(AVFrame* frame);
 
-    void DisplayVideo(const VideoFrame& frame);
+    bool StreamOpen();
+    void StreamClose();
+
     void FrameReaderSync();
 
-    //判断是否是灰帧
-    bool IsGrayFrame(AVFrame* frame);
 private:
-    bool m_isInit = false;
-    MediaParameter m_param;
+    int m_playIndex = 0;
+    std::string m_url;
+    PlayOptions m_options;
     PlayEvent* m_playEvent = nullptr;
-    std::atomic_bool m_bThreadRun{ false }; //atomic在gcc编译器中不可使用=进行初始化
+    std::atomic_bool m_isThreadRun{ false }; //atomic在gcc编译器中不可使用=进行初始化
     std::thread m_thReader;
     std::thread m_thVideoDecoder;
     std::thread m_thAudioDecoder;
-
-    std::atomic_bool m_bStreamOver{ false };
+    std::thread m_thVideoDisplay;
+    std::atomic_bool m_isStreamOver{ false };
 
     AVFormatContext* m_formatContext = nullptr;
     int m_videoStreamIndex = -1;
@@ -86,21 +80,18 @@ private:
     AVCodecContext* m_audioCodecContext = nullptr;
     enum AVHWDeviceType m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;//硬解码类型
     enum AVPixelFormat m_hwPixFmt = AV_PIX_FMT_NONE;//硬解码的格式
+    PacketQueue m_videoPacketQueue;
+    PacketQueue m_audioPacketQueue;
 
-    VideoDisplay* m_pGrayFrameDisplay = nullptr;
-    VideoDisplay* m_pVideoDisplay = nullptr;
-    AudioDisplay* m_pAudioDisplay = nullptr;
-
+    int64_t m_videoFrameIndex = 0;
+    int64_t m_audioFrameIndex = 0;
+    int64_t m_iLastCountTime = 0;
     double m_lastFrameRenderTime = 0; //上一帧的播放时刻av_gettime_relative，不能使用系统时间，系统时间是可以任意时刻更改的
     double m_lastDelayDelta = 0; //上一帧delay和实际delay的间隔时间，由于av_sleep有精度问题，需要记录这个差距，下次进行调整
     int64_t m_lastVideoFramePts = 0;  
     double m_masterClock = 0.0;       //主时钟
     double m_syncThreshold = 0.1;     //同步阈值
     double m_speed = 1.0;             //倍速播放
-
-    PacketQueue m_videoPacketQueue;
-    PacketQueue m_audioPacketQueue;
-    DynamicJitterBuffer* m_audioBuffer = nullptr;
 };
 
 #endif // MEDIA_READER_H

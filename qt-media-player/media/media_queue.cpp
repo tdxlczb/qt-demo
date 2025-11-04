@@ -1,5 +1,9 @@
 #include "media_queue.h"
-#include <QDebug>
+#include "log.h"
+extern "C"
+{
+#include <libavcodec/avcodec.h>
+}
 
 PacketQueue::PacketQueue(int16_t maxQueueSize)
     : m_maxQueueSize(maxQueueSize)
@@ -23,17 +27,17 @@ void PacketQueue::Push(AVPacket* pkt)
         m_packetQueue.push(pktNew);
     }
     else {
-        qInfo() << "packet 队列已满，准备清空";
-        //这里清空队列要释放内存
-        auto packetSize = m_packetQueue.size();
+        LOG_INFO << "packet 队列已满，准备清空";
+        //这里清空队列要释放内存，清理一半
+        auto packetSize = m_packetQueue.size() / 2;
         for (size_t i = 0; i < packetSize; i++)
         {
             AVPacket* packet = m_packetQueue.front();
             if (i == 0) {
-                qInfo() << "start pop packet pts:" << packet->pts;
+                LOG_INFO << "start pop packet pts:" << packet->pts;
             }
             if (i == packetSize - 1) {
-                qInfo() << "end pop packet pts:" << packet->pts;
+                LOG_INFO << "end pop packet pts:" << packet->pts;
             }
             m_packetQueue.pop();
             av_packet_free(&packet);

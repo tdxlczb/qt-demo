@@ -1,9 +1,8 @@
-#ifndef MEDIA_DEFINE_H
+﻿#ifndef MEDIA_DEFINE_H
 #define MEDIA_DEFINE_H
 
 #include <string>
 #include <functional>
-
 
 enum class PlayErrorCode
 {
@@ -30,20 +29,19 @@ using AudioFormat = int;//对应ffmpeg中AVSampleFormat的值
 */
 struct VideoSpec
 {
-    uint16_t width = 0; //宽
-    uint16_t height = 0;//高
+    int width = 0; //宽
+    int height = 0;//高
     VideoFormat format = -1;//对应ffmpeg中AVPixelFormat的值
 };
-
 
 /*
 * 音频规格
 */
 struct AudioSpec
 {
-    uint16_t sampleRate = 0;  //采样率:8000,16000,44100等
-    uint16_t bitPerSample = 0;//位深:8,16,32等
-    uint16_t channels = 0;    //通道数:1,2等
+    int sampleRate = 0;  //采样率:8000,16000,44100等
+    int bitPerSample = 0;//位深:8,16,32等
+    int channels = 0;    //通道数:1,2等
     AudioFormat format = -1;  //对应ffmpeg中AVSampleFormat的值
 };
 
@@ -79,12 +77,9 @@ struct AudioFrame
     AudioSpec spec;
 };
 
-struct MediaParameter
+struct PlayOptions
 {
-    std::string url;
-    std::string hwDeviceName;
-    VideoSpec outputVideoSpec;
-    AudioSpec outputAudioSpec;
+    std::string hwdevice;
 };
 
 const int kRenderFmtNONE = -1; //AV_PIX_FMT_NONE
@@ -95,5 +90,6 @@ const int kRenderFmtNV12 = 23; //AV_PIX_FMT_NV12
 
 using VideoCallback = std::function<void(const VideoFrame& frame)>;
 using AudioCallback = std::function<void(const AudioFrame& frame)>;
+
 
 #endif // MEDIA_DEFINE_H

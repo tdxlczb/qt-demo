@@ -3,15 +3,10 @@
 
 #include <queue>
 #include <condition_variable>
-
-extern "C"
-{
-#include <libavcodec/avcodec.h>
-}
-
 #include "media_define.h"
 
-
+struct AVPacket;
+struct AVFrame;
 class PacketQueue
 {
 public:

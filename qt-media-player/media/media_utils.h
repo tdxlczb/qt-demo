@@ -2,13 +2,12 @@
 #define MEDIA_UTILS_H
 
 #include <string>
-#include <QString>
 
 int GetGCD(int a, int b);
 
-
 std::string av_error_string(int errnum);
 
-QString av_error_qstring(int errnum);
+std::string string_format(const char* fmt, ...);
+
 
 #endif // MEDIA_QUEUE_H

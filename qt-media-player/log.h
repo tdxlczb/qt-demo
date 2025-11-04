@@ -22,61 +22,49 @@ void UnInstallLog(bool isErrExit = false);
 
 }//namespace qlog
 
-#include <iostream>
 #include <sstream>
-#include <memory>
-
-class AutoNewlineLogger {
+#include <QDebug>
+class QSStream {
 public:
-    // 构造函数
-    AutoNewlineLogger(std::ostream& os = std::cout) : output_stream(&os) {}
-
-    // 析构函数 - 确保最后的输出会被刷新
-    ~AutoNewlineLogger() {
-        if (buffer && !buffer->str().empty()) {
-            flush();
-        }
-    }
-
-    // 主输出操作符
-    template <typename T>
-    AutoNewlineLogger& operator<<(const T& value) {
-        if (!buffer) {
-            buffer = std::make_unique<std::ostringstream>();
-        }
-        *buffer << value;
+    template<typename T>
+    QSStream& operator<<(const T& t) {
+        oss << t;
         return *this;
     }
-
-    // 处理std::endl等特殊操作
-    AutoNewlineLogger& operator<<(std::ostream& (*manip)(std::ostream&)) {
-        if (manip == static_cast<std::ostream & (*)(std::ostream&)>(std::endl)) {
-            flush();
-        }
-        else if (buffer) {
-            *buffer << manip;
-        }
+    // 支持 std::string
+    QSStream& operator<<(const std::string& s) {
+        oss << s.c_str();
         return *this;
     }
-
-    // 设置输出流
-    void set_output(std::ostream& os) {
-        output_stream = &os;
+    QSStream(int lv) :level(lv) {
     }
+    ~QSStream() {
+        switch (level)
+        {
+        case 1:
+            qInfo() << oss.str().c_str();   // 使用分类
+            break;
+        case 2:
+            qWarning() << oss.str().c_str();   // 使用分类
+            break;
+        case 3:
+            qCritical() << oss.str().c_str();   // 使用分类
+            break;
+        default:
+            qDebug() << oss.str().c_str();   // 使用分类
+            break;
+        }
 
+    }
 private:
-    std::unique_ptr<std::ostringstream> buffer;
-    std::ostream* output_stream;
-
-    void flush() {
-        if (buffer && !buffer->str().empty()) {
-            *output_stream << buffer->str() << std::endl;
-            buffer.reset();
-        }
-    }
+    std::ostringstream oss;
+    int level = 0;
 };
 
-// 定义宏实现语句结束自动换行
-#define LOG AutoNewlineLogger()
+#define LOG_DEBUG   QSStream(0)
+#define LOG_INFO    QSStream(1)
+#define LOG_WARN    QSStream(2)
+#define LOG_ERROR   QSStream(3)
+//qFatal不支持<<
 
 #endif // LOG_H
