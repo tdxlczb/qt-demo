@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QMutex>
 #include <QImage>
+#include <QTimer>
 #include <opencv2/core.hpp>
 #include "media/media_define.h"
 
@@ -128,6 +129,7 @@ private:
 */
 #include <QOpenGLWidget>
 #include <QOpenGLExtraFunctions>
+#include <queue>
 
 constexpr int kMaxTextures = 8; // 纹理数量，对应YUV420格式的Y/U/V三组，NV12格式的Y/UV两组，RGB格式的RGB一组
 constexpr int kPBONum = 2;      // 双缓冲
@@ -137,6 +139,10 @@ struct Plane {
     int height = 0;
     int stride = 0;//对应linesize的值
     int size = 0;
+};
+
+struct FrameToken {
+    int pboIdx[kMaxTextures];   // 纹理对应的索引
 };
 
 class OpenGLRenderWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions, public VideoRender
@@ -205,12 +211,18 @@ private:
     bool m_isUseTexSubImage = true;
     bool m_isUsePBO = true;
     bool m_isUsePBOCrossThread = true;//跨线程使用pbo
+    QTimer m_updateTimer;//使用定时器定时刷新视频帧，代替更新数据时刷新
+
+    bool m_isUseFence = false;//使用opengl的同步机制的话，渲染的时候有可能会比较耗时，导致帧率降低卡顿
+    std::mutex              m_mtx;
+    std::condition_variable m_cv;
+    std::queue<FrameToken>  m_queue;
+    GLsync m_fence[kMaxTextures][kPBONum] = {};   // 每 plane 每 buffer 一个 fence
 };
 
 /*
 * ====================================================
 */
-#include <QTimer>
 #include "SDL2/SDL.h"
 
 class SDLRenderWidget : public QWidget, public VideoRender

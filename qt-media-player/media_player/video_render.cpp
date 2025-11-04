@@ -487,10 +487,12 @@ namespace {
 OpenGLRenderWidget::OpenGLRenderWidget(QWidget* parent) :QOpenGLWidget(parent)
 {
     connect(this, &OpenGLRenderWidget::sig_Update, this, &OpenGLRenderWidget::on_Update, Qt::QueuedConnection);
+    connect(&m_updateTimer, &QTimer::timeout, this, QOverload<>::of(&QOpenGLWidget::update));
 }
 
 OpenGLRenderWidget::~OpenGLRenderWidget()
 {
+    m_updateTimer.stop();
     disconnect(this, &OpenGLRenderWidget::sig_Update, this, &OpenGLRenderWidget::on_Update);
     if (m_frame.data)
         delete[] m_frame.data;
@@ -506,30 +508,70 @@ cv::Mat OpenGLRenderWidget::GetRGBContent()
 {
     QMutexLocker guard(&m_frameMutex);
     cv::Mat rgbMat;
-    switch (m_frame.spec.format)
-    {
-    case kRenderFmtRGB:
-    {
-        rgbMat = cv::Mat(m_frame.spec.height, m_frame.spec.width, CV_8UC3, m_frame.data).clone();
-        break;
+    try {
+        switch (m_frame.spec.format)
+        {
+        case kRenderFmtRGB:
+        {
+            rgbMat = cv::Mat(m_frame.spec.height, m_frame.spec.width, CV_8UC3, m_frame.data).clone();
+            break;
+        }
+        case kRenderFmtYUV420P:
+        case kRenderFmtYUVJ420P:
+        {
+            //宽高为uint16_t时有风险，w*h会超过short最大值，要改成int
+            int size = m_frame.spec.height * m_frame.spec.width * 1.5;
+            uint8_t* data = new uint8_t[size];
+            int nY = m_frame.spec.height * m_frame.spec.width;
+            uint8_t* pY = static_cast<uint8_t*>(m_mapped[0][m_pboIdx]);
+            memcpy(data, pY, nY);
+
+            int nU = m_frame.spec.height * m_frame.spec.width / 4;
+            uint8_t* pU = static_cast<uint8_t*>(m_mapped[1][m_pboIdx]);
+            memcpy(data + nY, pU, nU);
+
+            int nV = m_frame.spec.height * m_frame.spec.width / 4;
+            uint8_t* pV = static_cast<uint8_t*>(m_mapped[2][m_pboIdx]);
+            memcpy(data + nY + nU, pV, nV);
+
+            cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, data);
+            cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_I420);
+            delete[] data;
+            break;
+        }
+        case kRenderFmtNV12:
+        {
+            int size = m_frame.spec.height * m_frame.spec.width * 1.5;
+            uint8_t* data = new uint8_t[size];
+            int nY = m_frame.spec.height * m_frame.spec.width;
+            uint8_t* pY = static_cast<uint8_t*>(m_mapped[0][m_pboIdx]);
+            memcpy(data, pY, nY);
+
+            int nUV = m_frame.spec.height * m_frame.spec.width / 2;
+            uint8_t* pUV = static_cast<uint8_t*>(m_mapped[1][m_pboIdx]);
+            memcpy(data + nY, pUV, nUV);
+
+            cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, data);
+            cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_NV12);
+            break;
+        }
+        default:
+        {
+            break;
+        }
+        }
     }
-    case kRenderFmtYUV420P:
-    case kRenderFmtYUVJ420P:
-    {
-        cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, m_frame.data);;
-        cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_I420);
-        break;
+    catch (const std::bad_alloc& e) {
+        // 捕获内存分配失败的异常
+        qCritical() << "Memory allocation failed: " << e.what();
     }
-    case kRenderFmtNV12:
-    {
-        cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, m_frame.data);;
-        cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_NV12);
-        break;
+    catch (const cv::Exception& e) {
+        // 捕获 OpenCV 相关的异常
+        qCritical() << "OpenCV error: " << e.what();
     }
-    default:
-    {
-        break;
-    }
+    catch (...) {
+        // 捕获其他类型的异常
+        qCritical() << "An unexpected error occurred.";
     }
     return rgbMat;
 }
@@ -619,7 +661,14 @@ void OpenGLRenderWidget::ClearContent()
 
 void OpenGLRenderWidget::on_Update()
 {
-    update();
+    if ((m_frame.data || m_frame.linedata[0]) && !m_updateTimer.isActive()) {
+        m_updateTimer.start(40);
+        update();
+    }
+    if ((!m_frame.data && !m_frame.linedata[0]) && m_updateTimer.isActive()) {
+        m_updateTimer.stop();
+        update();
+    }
 }
 
 void OpenGLRenderWidget::initializeGL()
@@ -808,6 +857,42 @@ void OpenGLRenderWidget::uploadPBOData()
     if (!m_isUsePBOCrossThread)
         return;
 
+    if (m_isUseFence)
+    {
+        FrameToken tok;
+        for (int c = 0; c < m_planeSize; ++c)
+            tok.pboIdx[c] = m_frameIndex % kPBONum;
+
+        /* 1. 等渲染线程用完这组 PBO */
+        std::unique_lock<std::mutex> lk(m_mtx);
+        m_cv.wait(lk, [&] {
+            for (int c = 0; c < m_planeSize; ++c)
+                if (m_fence[c][tok.pboIdx[c]]) return false;
+            return true;
+            });
+
+        /* 2. 逐 plane 拷贝原始 YUV 数据 */
+        for (int c = 0; c < m_planeSize; ++c) {
+            uint8_t* dst = static_cast<uint8_t*>(m_mapped[c][tok.pboIdx[c]]);
+            int srcStride = m_frame.linesize[c];
+            int dstStride = m_plane[c].width;          // 我们要求纹理无 padding
+            int h = m_plane[c].height;
+            if (srcStride == dstStride)       // 快路径
+                memcpy(dst, m_frame.linedata[c], h * srcStride);
+            else                              // 行拷贝
+                for (int y = 0; y < h; ++y)
+                    memcpy(dst + y * dstStride, m_frame.linedata[c] + y * srcStride, dstStride);
+        }
+
+        /* 3. 通知渲染线程 */
+        m_queue.push(tok);
+        lk.unlock();
+        m_cv.notify_one();
+
+        m_frameIndex++;
+        return;
+    }
+
     if (m_frame.spec.format == kRenderFmtYUV420P || m_frame.spec.format == kRenderFmtYUVJ420P) {
 
         for (size_t i = 0; i < m_planeSize; i++)
@@ -992,6 +1077,39 @@ void OpenGLRenderWidget::renderYUV420()
 {
     if (!m_frame.linedata[0] || m_frame.linesize[0] <= 0)
         return;
+
+    if (m_isUseFence) {
+        std::unique_lock<std::mutex> lk(m_mtx);
+        while (!m_queue.empty()) {
+            FrameToken tok = m_queue.front(); m_queue.pop();
+            lk.unlock();
+
+            for (int c = 0; c < m_planeSize; ++c) {
+                int b = tok.pboIdx[c];
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo[c][b]);
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);          // 提交数据
+                glBindTexture(GL_TEXTURE_2D, m_textures[c]);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_plane[c].width, m_plane[c].height, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+                m_mapped[c][b] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, m_plane[c].size, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+                // fence 标记“GPU 已用完”
+                m_fence[c][b] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            }
+
+            // 异步等待 fence 完成（非阻塞）
+            for (int c = 0; c < m_planeSize; ++c) {
+                int b = tok.pboIdx[c];
+                glClientWaitSync(m_fence[c][b], GL_SYNC_FLUSH_COMMANDS_BIT, 0);
+                glDeleteSync(m_fence[c][b]);
+                m_fence[c][b] = nullptr;   // 解码线程看见 nullptr 即可继续写
+            }
+            lk.lock();
+        }
+        lk.unlock();
+        return;
+    }
+
     uint8_t* pData[3] = { nullptr };
     int stride[3] = { 0 };
     for (size_t i = 0; i < 3; i++)
