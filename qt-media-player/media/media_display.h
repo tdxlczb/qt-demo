@@ -8,13 +8,13 @@ struct AVFrame;
 struct SwsContext;
 struct SwrContext;
 /*
-* 视频展示处理类，转格式
+* 视频格式转换器
 */
-class VideoDisplay
+class VideoConverter
 {
 public:
-    VideoDisplay(int displayId, const VideoSpec& dstSpec);
-    ~VideoDisplay();
+    VideoConverter(int converterId, const VideoSpec& dstSpec);
+    ~VideoConverter();
     /*
     * 设置回调函数
     */
@@ -24,6 +24,7 @@ public:
     * 返回的帧数据使用的是当前类的buffer地址，会被下一帧数据覆盖，使用data不安全，更多的是是使用其他信息
     */
     PlayError DisplayInput(AVFrame* pFrame, VideoFrame& outFrame);
+    PlayError DisplayInput(const VideoFrame& inFrame, VideoFrame& outFrame);
     /*
     * 重采样，并且调用回调函数
     */
@@ -36,7 +37,7 @@ private:
     PlayError InitSwsContext(const VideoSpec& srcSpec);
     PlayError InitDstFrame();
 private:
-    int m_displayId = 0;
+    int m_converterId = 0;
     VideoSpec m_srcSpec;
     VideoSpec m_dstSpec;
     VideoCallback m_pCallback;
@@ -47,13 +48,13 @@ private:
 };
 
 /*
-* 音频频展示处理类，转格式
+* 音频格式转换器
 */
-class AudioDisplay
+class AudioConverter
 {
 public:
-    AudioDisplay(int displayId, const AudioSpec& dstSpec);
-    ~AudioDisplay();
+    AudioConverter(int converterId, const AudioSpec& dstSpec);
+    ~AudioConverter();
     /*
     * 设置回调函数
     */
@@ -75,7 +76,7 @@ private:
     PlayError InitSwrContext(const AudioSpec& srcSpec);
     PlayError InitDstFrame();
 private:
-    int m_displayId = 0;
+    int m_converterId = 0;
     AudioSpec m_srcSpec;
     AudioSpec m_dstSpec;
     AudioCallback m_pCallback;

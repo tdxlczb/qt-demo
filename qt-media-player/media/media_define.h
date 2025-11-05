@@ -60,8 +60,7 @@ struct VideoFrame
     uint8_t*  linedata[8] = { 0 };
     int       linesize[8] = { 0 };
     CopyFrameCallback copycb;
-    int64_t   pts = 0;
-    double    timebase = 0.0;
+    double    pts = 0.0;//帧时间，转成秒
     VideoSpec spec;
 };
 

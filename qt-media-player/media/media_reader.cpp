@@ -24,7 +24,6 @@ static AVPixelFormat GetHwFormat(AVCodecContext* pCodecContext, const enum AVPix
     return AV_PIX_FMT_NONE;
 }
 
-
 MediaReader::MediaReader(int index)
     : m_playIndex(index)
 {
@@ -91,7 +90,7 @@ void MediaReader::ReadThread()
         if (!m_thVideoDecoder.joinable()) {
             m_thVideoDecoder = std::thread(&MediaReader::VideoThread, this);
         }
-        if (!m_thVideoDisplay.joinable()) {
+        if (m_isAsyncDisplay && !m_thVideoDisplay.joinable()) {
             m_thVideoDisplay = std::thread(&MediaReader::DisplayThread, this);
         }
     }
@@ -143,10 +142,11 @@ void MediaReader::VideoThread()
         return;
 
     AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
-    auto      timeBase = videoStream->time_base;
+    auto      timebase = videoStream->time_base;
     double    fps = av_q2d(videoStream->avg_frame_rate);
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;
+    m_timebase = av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base);
 
     int frameIndex = 0;
     while (m_isThreadRun.load() && !m_isStreamOver.load())
@@ -248,9 +248,13 @@ void MediaReader::VideoDecode(AVPacket* packet)
             LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex;
             m_iLastCountTime = curTime;
         }
-
-        DisplayVideo(frame);
-        av_frame_free(&frame);
+        if (m_isAsyncDisplay) {
+            m_videoFrameQueue.Push(frame);
+        }
+        else {
+            DisplayVideo(frame);
+            av_frame_free(&frame);
+        }
     }
 }
 
@@ -283,36 +287,46 @@ void MediaReader::AudioDecode(AVPacket* packet)
 
 void MediaReader::DisplayThread()
 {
+    while (m_isThreadRun.load() && !m_isStreamOver.load())
+    {
+        av_usleep(1000);
+        AVFrame* frame = m_videoFrameQueue.PopFront();
+        if (!frame)
+            continue;
 
+        DisplayVideo(frame);
+        av_frame_free(&frame);
+    }
 }
 
 void MediaReader::DisplayVideo(AVFrame* frame)
 {
-    double timebase = av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base);
-    double frameDelay = (frame->pts - m_lastVideoFramePts) * timebase;
-    double curTime = av_gettime_relative() / 1000000.0;
-    double usedTime = m_lastFrameRenderTime == 0 ? 0.0 : curTime - m_lastFrameRenderTime;
-    double actualDelay = frameDelay - usedTime - m_lastDelayDelta;
-    if (m_lastFrameRenderTime != 0) {
-        //double pts = frame->pts * av_q2d(videoStream->time_base);
-        //// 计算与音频时钟的差值
-        //double diff = pts - m_masterClock;
-        //// 同步阈值（可根据需要调整）
-        //if (diff > m_syncThreshold) {
-        //    // 视频落后，加快播放（减少延迟）
-        //    delay = delay * 0.9;
-        //}
-        //else if (diff < -m_syncThreshold) {
-        //    // 视频超前，减慢播放（增加延迟）
-        //    delay = delay * 1.1;
-        //}
-        //// 确保延迟在合理范围内
-        //delay = FFMAX(0.01, FFMIN(delay, 0.1));
-        if (actualDelay > 0) {
-            av_usleep(actualDelay * 1000000.0);
-        }
+    double pts = frame->pts == AV_NOPTS_VALUE ? 0.0 : frame->pts * m_timebase;
+    double now = av_gettime_relative() / 1000000.0;
+    if (m_clockStart <= 0.0) {
+        m_clockStart = now;
+        m_startPts = pts;
     }
-    auto displayTime = av_gettime_relative() / 1000000.0;
+    double elapsedPts = pts - m_startPts; // 相对 pts
+
+    /* ===== 时钟同步 ===== */
+    double diff = elapsedPts - (now - m_clockStart); // > 0 表示视频超前
+    double delay = diff;
+    if (diff > m_syncThreshold) {
+        // 视频超前，减慢播放（增加延迟）
+        //delay = delay * 1.1;
+    }
+    else if (diff < -m_syncThreshold) {
+        // 视频落后，加快播放（减少延迟）,或者丢帧
+        //delay = delay * 0.9;
+        return;
+    }
+    if (delay > 0) {
+        // 确保延迟在合理范围内
+        //delay = FFMAX(0.01, FFMIN(delay, 0.1));
+        av_usleep(delay * 1000000.0);
+    }
+
     if (m_playEvent) {
         VideoFrame outFrame;
         outFrame.copycb = [](uint8_t* dst_data[4], int dst_linesizes[4],
@@ -331,19 +345,12 @@ void MediaReader::DisplayVideo(AVFrame* frame)
             outFrame.linedata[i] = frame->data[i];
             outFrame.linesize[i] = frame->linesize[i];
         }
-        outFrame.pts = frame->pts < 0 ? 0 : frame->pts;
-        outFrame.timebase = timebase;
+        outFrame.pts = pts;
         outFrame.spec.width = frame->width;
         outFrame.spec.height = frame->height;
         outFrame.spec.format = frame->format;
         m_playEvent->onVideoFrame(outFrame);
     }
-    double delayDelta = displayTime - curTime - actualDelay;
-    //qDebug() << "display time:" << (displayTime - m_lastFrameRenderTime) << ", delta:" << delayDelta << ", usedTime:" << usedTime << ", frameDelay:" << frameDelay << ", actualDelay:" << actualDelay;
-
-    m_lastFrameRenderTime = displayTime;
-    m_lastVideoFramePts = frame->pts;
-    m_lastDelayDelta = delayDelta;
 }
 
 //复用同一个AVHWDeviceContext能减少大量cpu和gpu
@@ -542,7 +549,7 @@ void MediaReader::FrameReaderSync()
     if (!m_formatContext || m_videoStreamIndex < 0)
         return;
     AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
-    auto      timeBase = videoStream->time_base;
+    auto      timebase = videoStream->time_base;
     double    fps = av_q2d(videoStream->avg_frame_rate);
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;

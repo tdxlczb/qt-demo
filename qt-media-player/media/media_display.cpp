@@ -15,14 +15,14 @@ extern "C"
 #include "log.h"
 #include "media/media_utils.h"
 
-VideoDisplay::VideoDisplay(int displayId, const VideoSpec& dstSpec)
-    : m_displayId(displayId)
+VideoConverter::VideoConverter(int converterId, const VideoSpec& dstSpec)
+    : m_converterId(converterId)
     , m_dstSpec(dstSpec)
 {
 
 }
 
-VideoDisplay::~VideoDisplay()
+VideoConverter::~VideoConverter()
 {
     if (m_pSwsCxtVideo) {
         sws_freeContext(m_pSwsCxtVideo);
@@ -34,12 +34,12 @@ VideoDisplay::~VideoDisplay()
     }
 }
 
-void VideoDisplay::SetCallback(const VideoCallback& callback)
+void VideoConverter::SetCallback(const VideoCallback& callback)
 {
     m_pCallback = callback;
 }
 
-PlayError VideoDisplay::InitSwsContext(const VideoSpec& srcSpec)
+PlayError VideoConverter::InitSwsContext(const VideoSpec& srcSpec)
 {
     if (m_pSwsCxtVideo) {
         sws_freeContext(m_pSwsCxtVideo);
@@ -47,21 +47,21 @@ PlayError VideoDisplay::InitSwsContext(const VideoSpec& srcSpec)
     m_pSwsCxtVideo = sws_getContext(srcSpec.width, srcSpec.height, (AVPixelFormat)srcSpec.format,
         m_dstSpec.width, m_dstSpec.height, (AVPixelFormat)m_dstSpec.format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
     if (nullptr == m_pSwsCxtVideo) {
-        LOG_ERROR << "DisplayId:" << m_displayId << "m_pSwsCxtVideo create failed";
-        LOG_ERROR << "DisplayId:" << m_displayId << "src width:" << srcSpec.width;
-        LOG_ERROR << "DisplayId:" << m_displayId << "src height:" << srcSpec.height;
-        LOG_ERROR << "DisplayId:" << m_displayId << "src format:" << srcSpec.format;
-        LOG_ERROR << "DisplayId:" << m_displayId << "dst width:" << m_dstSpec.width;
-        LOG_ERROR << "DisplayId:" << m_displayId << "dst height:" << m_dstSpec.height;
-        LOG_ERROR << "DisplayId:" << m_displayId << "dst format:" << m_dstSpec.format;
+        LOG_ERROR << "converterId:" << m_converterId << " m_pSwsCxtVideo create failed";
+        LOG_ERROR << "converterId:" << m_converterId << " src width:" << srcSpec.width;
+        LOG_ERROR << "converterId:" << m_converterId << " src height:" << srcSpec.height;
+        LOG_ERROR << "converterId:" << m_converterId << " src format:" << srcSpec.format;
+        LOG_ERROR << "converterId:" << m_converterId << " dst width:" << m_dstSpec.width;
+        LOG_ERROR << "converterId:" << m_converterId << " dst height:" << m_dstSpec.height;
+        LOG_ERROR << "converterId:" << m_converterId << " dst format:" << m_dstSpec.format;
         return PlayError{ PlayErrorCode::kCreateConverterFailed,"" };
     }
 
-    LOG_INFO << "DisplayId:" << m_displayId << "video sws init ok";
+    LOG_INFO << "converterId:" << m_converterId << " video sws init ok";
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError VideoDisplay::InitDstFrame()
+PlayError VideoConverter::InitDstFrame()
 {
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst[0]);
@@ -70,7 +70,7 @@ PlayError VideoDisplay::InitDstFrame()
 
     m_pFrameDst = av_frame_alloc();
     if (nullptr == m_pFrameDst) {
-        LOG_ERROR << "DisplayId:" << m_displayId << "av_frame_alloc failed";
+        LOG_ERROR << "converterId:" << m_converterId << " av_frame_alloc failed";
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     m_pFrameDst->format = m_dstSpec.format;
@@ -78,13 +78,13 @@ PlayError VideoDisplay::InitDstFrame()
     m_pFrameDst->height = m_dstSpec.height;
     int iRet = av_image_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->width, m_pFrameDst->height, (AVPixelFormat)m_pFrameDst->format, 1);
     if (iRet <= 0) {
-        LOG_ERROR << "DisplayId:" << m_displayId << "av_image_alloc error:" << iRet;
+        LOG_ERROR << "converterId:" << m_converterId << " av_image_alloc error:" << iRet;
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
+PlayError VideoConverter::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
 {
     //重采样操作锁，避免同时更改
     std::lock_guard<std::mutex> lock(m_swsMutex);
@@ -142,13 +142,13 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
         int ret = sws_scale(m_pSwsCxtVideo, (const uint8_t* const*)pFrame->data, pFrame->linesize, 0, pFrame->height
             , m_pFrameDst->data, m_pFrameDst->linesize);
         if (ret <= 0) {
-            LOG_ERROR << "DisplayId:" << m_displayId << "sws_scale err:" << ret;
+            LOG_ERROR << "converterId:" << m_converterId << " sws_scale err:" << ret;
             return PlayError{ PlayErrorCode::kConverteFailed,"" };
         }
-        //buffer = m_pFrameDst->data[0];
-        //bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
-        //outFrame.data = buffer;
-        //outFrame.size = bufferSize;
+        buffer = m_pFrameDst->data[0];
+        bufferSize = av_image_get_buffer_size((AVPixelFormat)m_pFrameDst->format, m_pFrameDst->width, m_pFrameDst->height, 1);
+        outFrame.data = buffer;
+        outFrame.size = bufferSize;
 
         for (size_t i = 0; i < 8; i++)
         {
@@ -187,15 +187,31 @@ PlayError VideoDisplay::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError VideoDisplay::DisplayInput(AVFrame* pFrame)
+PlayError VideoConverter::DisplayInput(const VideoFrame& inFrame, VideoFrame& outFrame)
+{
+    AVFrame* pFrame = av_frame_alloc();
+    pFrame->width = inFrame.spec.width;
+    pFrame->height = inFrame.spec.height;
+    pFrame->format = inFrame.spec.format;
+    for (size_t i = 0; i < 8; i++)
+    {
+        pFrame->data[i] = inFrame.linedata[i];
+        pFrame->linesize[i] = inFrame.linesize[i];
+    }
+    auto ret = DisplayInput(pFrame, outFrame);
+    av_frame_free(&pFrame);
+    return ret;
+}
+
+PlayError VideoConverter::DisplayInput(AVFrame* pFrame)
 {
     VideoFrame outFrame;
     return DisplayInput(pFrame, outFrame);
 }
 
-void VideoDisplay::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
+void VideoConverter::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
 {
-    LOG_INFO << "update display size:" << iDisplayWidth << "," << iDisplayHeight;
+    LOG_INFO << "converterId:" << m_converterId << " update display size:" << iDisplayWidth << "," << iDisplayHeight;
     if (m_dstSpec.width == iDisplayWidth && m_dstSpec.height)
         return;
     int64_t curTime = av_gettime_relative();
@@ -241,14 +257,14 @@ void VideoDisplay::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
 }
 
 
-AudioDisplay::AudioDisplay(int displayId, const AudioSpec& dstSpec)
-    : m_displayId(displayId)
+AudioConverter::AudioConverter(int converterId, const AudioSpec& dstSpec)
+    : m_converterId(converterId)
     , m_dstSpec(dstSpec)
 {
 
 }
 
-AudioDisplay::~AudioDisplay()
+AudioConverter::~AudioConverter()
 {
     if (m_pSwrCxtAudio) {
         swr_free(&m_pSwrCxtAudio);
@@ -259,12 +275,12 @@ AudioDisplay::~AudioDisplay()
     }
 }
 
-void AudioDisplay::SetCallback(const AudioCallback& callback)
+void AudioConverter::SetCallback(const AudioCallback& callback)
 {
     m_pCallback = callback;
 }
 
-PlayError AudioDisplay::InitSwrContext(const AudioSpec& srcSpec)
+PlayError AudioConverter::InitSwrContext(const AudioSpec& srcSpec)
 {
     if (m_pSwrCxtAudio) {
         swr_free(&m_pSwrCxtAudio);
@@ -279,20 +295,20 @@ PlayError AudioDisplay::InitSwrContext(const AudioSpec& srcSpec)
         0, NULL);
     int ret = swr_init(m_pSwrCxtAudio);
     if (nullptr == m_pSwrCxtAudio || AVERROR(ret)) {
-        LOG_ERROR << "DisplayId:" << m_displayId << "m_pSwrCxtAudio create failed";
-        LOG_ERROR << "DisplayId:" << m_displayId << "src sample_rate:" << srcSpec.sampleRate;
-        LOG_ERROR << "DisplayId:" << m_displayId << "src channels:" << srcSpec.channels;
-        LOG_ERROR << "DisplayId:" << m_displayId << "src sample_fmt:" << srcSpec.format;
-        LOG_ERROR << "DisplayId:" << m_displayId << "dst sample_rate:" << m_dstSpec.sampleRate;
-        LOG_ERROR << "DisplayId:" << m_displayId << "dst channels:" << m_dstSpec.channels;
-        LOG_ERROR << "DisplayId:" << m_displayId << "dst sample_fmt:" << m_dstSpec.format;
+        LOG_ERROR << "converterId:" << m_converterId << " m_pSwrCxtAudio create failed";
+        LOG_ERROR << "converterId:" << m_converterId << " src sample_rate:" << srcSpec.sampleRate;
+        LOG_ERROR << "converterId:" << m_converterId << " src channels:" << srcSpec.channels;
+        LOG_ERROR << "converterId:" << m_converterId << " src sample_fmt:" << srcSpec.format;
+        LOG_ERROR << "converterId:" << m_converterId << " dst sample_rate:" << m_dstSpec.sampleRate;
+        LOG_ERROR << "converterId:" << m_converterId << " dst channels:" << m_dstSpec.channels;
+        LOG_ERROR << "converterId:" << m_converterId << " dst sample_fmt:" << m_dstSpec.format;
         return PlayError{ PlayErrorCode::kCreateConverterFailed,"" };
     }
-    LOG_INFO << "DisplayId:" << m_displayId << "audio swr init ok";
+    LOG_INFO << "converterId:" << m_converterId << " audio swr init ok";
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError AudioDisplay::InitDstFrame()
+PlayError AudioConverter::InitDstFrame()
 {
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst[0]);
@@ -301,7 +317,7 @@ PlayError AudioDisplay::InitDstFrame()
 
     m_pFrameDst = av_frame_alloc();
     if (nullptr == m_pFrameDst) {
-        LOG_ERROR << "DisplayId:" << m_displayId << "av_frame_alloc failed";
+        LOG_ERROR << "converterId:" << m_converterId << " av_frame_alloc failed";
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     m_pFrameDst->sample_rate = m_dstSpec.sampleRate;
@@ -311,13 +327,13 @@ PlayError AudioDisplay::InitDstFrame()
     m_pFrameDst->nb_samples = 1024;
     int iRet = av_frame_get_buffer(m_pFrameDst, 64);
     if (AVERROR(iRet)) {
-        LOG_ERROR << "DisplayId:" << m_displayId << "av_frame_get_buffer error:" << iRet;
+        LOG_ERROR << "converterId:" << m_converterId << " av_frame_get_buffer error:" << iRet;
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError AudioDisplay::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
+PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
 {
     if (m_dstSpec.sampleRate <= 0)
         m_dstSpec.sampleRate = pFrame->sample_rate;
@@ -362,7 +378,7 @@ PlayError AudioDisplay::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
         int ret = swr_convert_frame(m_pSwrCxtAudio, m_pFrameDst, pFrame);
         //int ret = swr_convert(m_pSwrCxtAudio, m_pFrameDst->data, max_out_nb_samples, (const uint8_t**)pFrame->data, pFrame->nb_samples);
         if (ret < 0) {
-            LOG_ERROR << "DisplayId:" << m_displayId << "swr_convert err," << ret;
+            LOG_ERROR << "converterId:" << m_converterId << " swr_convert err," << ret;
             return PlayError{ PlayErrorCode::kConverteFailed,"" };
         }
         buffer = m_pFrameDst->data[0];
@@ -383,13 +399,13 @@ PlayError AudioDisplay::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError AudioDisplay::DisplayInput(AVFrame* pFrame)
+PlayError AudioConverter::DisplayInput(AVFrame* pFrame)
 {
     AudioFrame outFrame;
     return DisplayInput(pFrame, outFrame);
 }
 
-PlayError AudioDisplay::GetDisplayEndFrame(AudioFrame& outFrame)
+PlayError AudioConverter::GetDisplayEndFrame(AudioFrame& outFrame)
 {
     uint8_t* buffer = nullptr;
     size_t bufferSize = 0;
@@ -398,7 +414,7 @@ PlayError AudioDisplay::GetDisplayEndFrame(AudioFrame& outFrame)
         m_pFrameDst->nb_samples = max_out_nb_samples;
         int ret = swr_convert_frame(m_pSwrCxtAudio, m_pFrameDst, nullptr);
         if (ret < 0) {
-            LOG_ERROR << "DisplayId:" << m_displayId << "swr_convert err," << ret;
+            LOG_ERROR << "converterId:" << m_converterId << " swr_convert err," << ret;
             return PlayError{ PlayErrorCode::kConverteFailed,"" };
         }
         buffer = m_pFrameDst->data[0];

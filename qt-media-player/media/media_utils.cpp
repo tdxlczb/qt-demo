@@ -4,7 +4,10 @@
 extern "C"
 {
 #include <libavutil/error.h>
+#include <libavutil/log.h>
 }
+
+#include "log.h"
 
 //获取最大公约数
 int GetGCD(int a, int b) {
@@ -42,4 +45,45 @@ std::string string_format(const char* fmt, ...)
 
     s.pop_back();                    // 去掉末尾 '\0'
     return s;
+}
+
+static void log_callback(void* ptr, int level, const char* fmt, va_list vl)
+{
+    /* Do we need to log ? */
+    if (level > av_log_get_level()) {
+        return;
+    }
+
+    /* Format log line */
+    char line[1024];
+    static int print_prefix = 1;
+
+    av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
+
+    /* Adapt it to Qt log format */
+    switch (level)
+    {
+    case AV_LOG_PANIC:
+    case AV_LOG_FATAL:
+    case AV_LOG_ERROR: {
+        LOG_ERROR << "[ffmpeg] " << line;
+    }break;
+
+    case AV_LOG_WARNING: {
+        LOG_WARN << "[ffmpeg] " << line;
+    }break;
+
+    case AV_LOG_INFO: {
+        LOG_INFO << "[ffmpeg] " << line;
+    }break;
+
+    default: {
+        LOG_DEBUG << "[ffmpeg] " << line;
+    }break;
+    }
+}
+
+void set_ffmpeg_log_callback()
+{
+    av_log_set_callback(log_callback);
 }

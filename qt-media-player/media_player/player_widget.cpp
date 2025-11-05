@@ -6,6 +6,7 @@
 #include "video_render.h"
 #include "audio_render.h"
 #include "media/media_reader.h"
+#include "media/media_display.h"
 #include "fisheye_widget.h"
 
 PlayerWidget::PlayerWidget(QWidget* parent)
@@ -81,14 +82,27 @@ void PlayerWidget::StopPlay()
 void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 {
     m_isVideoPlaying = true;
-    m_pVideoRender->UpdateContent(frame);
-    auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
-    if (m_pFishEyeWidget) {
-        cv::Mat matIn = cv::Mat(frame.spec.height, frame.spec.width, CV_8UC3, frame.data);//传递处理后的效果图
-        m_pFishEyeWidget->UpdateContent(matIn);
+
+    //if (!m_pVideoConverter) {
+    //    VideoSpec spec;
+    //    spec = { 0, 0, AV_PIX_FMT_RGB24 };
+    //    m_pVideoConverter = new VideoConverter(0, spec);
+    //}
+    if (m_pVideoConverter) {
+        VideoFrame outFrame;
+        m_pVideoConverter->DisplayInput(frame, outFrame);
+        m_pVideoRender->UpdateContent(outFrame);
     }
-    auto t2 = std::chrono::high_resolution_clock().now().time_since_epoch();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    else {
+        m_pVideoRender->UpdateContent(frame);
+    }
+    //auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
+    //if (m_pFishEyeWidget) {
+    //    cv::Mat matIn = cv::Mat(frame.spec.height, frame.spec.width, CV_8UC3, frame.data);//传递处理后的效果图
+    //    m_pFishEyeWidget->UpdateContent(matIn);
+    //}
+    //auto t2 = std::chrono::high_resolution_clock().now().time_since_epoch();
+    //auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
     //qDebug() << "delta time:" << duration;
 }
 

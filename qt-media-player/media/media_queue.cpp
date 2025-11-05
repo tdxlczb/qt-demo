@@ -3,6 +3,7 @@
 extern "C"
 {
 #include <libavcodec/avcodec.h>
+#include <libavutil/time.h>
 }
 
 PacketQueue::PacketQueue(int16_t maxQueueSize)
@@ -92,4 +93,74 @@ void FrameQueue::Clear()
     std::lock_guard<std::mutex> lock(m_frameQueueMutex);
     std::queue<AVFrame*> empty;
     std::swap(empty, m_frameQueue);
+}
+
+
+QueueClock::QueueClock(double v = 0.0)
+    : frameRate(v)
+{
+}
+
+QueueClock::~QueueClock()
+{
+}
+
+bool QueueClock::wait(bool shouldSync, double pts, double speed, double master)
+{
+    std::unique_lock<std::mutex> locker(m_mutex);
+    double delay = pts - prevPts;
+    if (isnan(delay) || delay <= 0 || delay > maxFrameDuration)
+        delay = frameRate;
+
+    if (master > 0) {
+        double diff = pts - master;
+        double sync_threshold = qMax(minThreshold, qMin(maxThreshold, delay));
+        if (!isnan(diff) && fabs(diff) < maxFrameDuration) {
+            if (diff <= -sync_threshold)
+                delay = qMax(0.0, delay + diff);
+            else if (diff >= sync_threshold && delay > frameDuplicationThreshold)
+                delay = delay + diff;
+            else if (diff >= sync_threshold)
+                delay = 2 * delay;
+        }
+    }
+
+    delay /= speed;
+    const double time = av_gettime_relative() / 1000000.0;
+    if (shouldSync) {
+        if (pts < prevPts)
+            return true;
+        if (time < frameTimer + delay) {
+            double remaining_time = qMin(frameTimer + delay - time, refreshRate);
+            locker.unlock();
+            av_usleep((int64_t)(remaining_time * 1000000.0));
+            return false;
+        }
+    }
+
+    prevPts = pts;
+    frameTimer += delay;
+    if ((delay > 0 && time - frameTimer > maxThreshold) || !shouldSync)
+        frameTimer = time;
+
+    return true;
+}
+
+double QueueClock::pts()
+{
+    std::lock_guard<std::mutex> locker(m_mutex);
+    return prevPts;
+}
+
+void QueueClock::clear()
+{
+    std::lock_guard<std::mutex> locker(m_mutex);
+    prevPts = 0;
+    frameTimer = 0;
+}
+
+void QueueClock::setFrameRate(double v)
+{
+    std::lock_guard<std::mutex> locker(m_mutex);
+    frameRate = v;
 }

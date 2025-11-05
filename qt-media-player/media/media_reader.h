@@ -83,14 +83,17 @@ private:
     PacketQueue m_videoPacketQueue;
     PacketQueue m_audioPacketQueue;
 
+    bool m_isAsyncDisplay = true;
+    FrameQueue m_videoFrameQueue;
+
     int64_t m_videoFrameIndex = 0;
     int64_t m_audioFrameIndex = 0;
     int64_t m_iLastCountTime = 0;
-    double m_lastFrameRenderTime = 0; //上一帧的播放时刻av_gettime_relative，不能使用系统时间，系统时间是可以任意时刻更改的
-    double m_lastDelayDelta = 0; //上一帧delay和实际delay的间隔时间，由于av_sleep有精度问题，需要记录这个差距，下次进行调整
-    int64_t m_lastVideoFramePts = 0;  
-    double m_masterClock = 0.0;       //主时钟
-    double m_syncThreshold = 0.1;     //同步阈值
+
+    double m_timebase = 0.0;
+    double m_clockStart = 0.0; //时钟开始时间
+    double m_startPts = 0.0; //帧开始时间
+    double m_syncThreshold = 0.02;    //同步阈值
     double m_speed = 1.0;             //倍速播放
 };
 
