@@ -8,6 +8,7 @@ CONFIG += c++11
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 DEFINES += QT_MESSAGELOGCONTEXT
+#DEFINES += QT_DEPRECATED_WARNINGS
 
 include(core/core.pri)
 include(media/media.pri)
@@ -139,6 +140,12 @@ contains(QT_ARCH, i386) {
     INCLUDEPATH += $$RTAUDIO_DIR/include
     DEPENDPATH += $$RTAUDIO_DIR/include
     LIBS += $$RTAUDIO_DIR/lib/x64/librtaudio.dll.a
+
+    #sdl
+    SDL_DIR = $$THIRDPARTY_DIR/sdl/sdl_2.30
+    INCLUDEPATH += $$SDL_DIR/include
+    DEPENDPATH += $$SDL_DIR/include
+    LIBS += $$SDL_DIR/lib/SDL2.lib
 }
 
 }

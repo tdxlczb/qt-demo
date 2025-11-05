@@ -553,6 +553,7 @@ cv::Mat OpenGLRenderWidget::GetRGBContent()
 
             cv::Mat mat = cv::Mat(m_frame.spec.height * 3 / 2, m_frame.spec.width, CV_8UC1, data);
             cv::cvtColor(mat, rgbMat, cv::COLOR_YUV2RGB_NV12);
+            delete[] data;
             break;
         }
         default:

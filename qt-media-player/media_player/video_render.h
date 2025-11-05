@@ -130,6 +130,8 @@ private:
 #include <QOpenGLWidget>
 #include <QOpenGLExtraFunctions>
 #include <queue>
+#include <condition_variable>
+#include <mutex>
 
 constexpr int kMaxTextures = 8; // 纹理数量，对应YUV420格式的Y/U/V三组，NV12格式的Y/UV两组，RGB格式的RGB一组
 constexpr int kPBONum = 2;      // 双缓冲

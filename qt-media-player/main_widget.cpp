@@ -4,6 +4,8 @@
 #include <QPushButton>
 #include <QDebug>
 #include "media_player/player_widget.h"
+#include "media_player/media_player.h"
+#include "media_player/video_manager.h"
 
 
 MainWidget::MainWidget(QWidget *parent) :
@@ -22,14 +24,17 @@ MainWidget::MainWidget(QWidget *parent) :
     vBoxLayout->addWidget(button01);
     vBoxLayout->addWidget(button02);
 
-    PlayerWidget* pPlayerWidget = new PlayerWidget(nullptr);
-    pPlayerWidget->show();
+    MediaPlayer* pMediaPlayer = new MediaPlayer(nullptr);
+    pMediaPlayer->show();
 
-    connect(button01,&QPushButton::clicked,[this, pPlayerWidget](){
+    //VideoManager* pVideoManager = new VideoManager(nullptr);
+    //pVideoManager->show();
+
+    connect(button01,&QPushButton::clicked,[this](){
         qDebug() << "button01 clicked";
     });
 
-    connect(button02,&QPushButton::clicked,[this, pPlayerWidget](){
+    connect(button02,&QPushButton::clicked,[this](){
         qDebug() << "button02 clicked";
     });
 

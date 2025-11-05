@@ -1,10 +1,6 @@
 #include "player_widget.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QPushButton>
-#include <QTextEdit>
-#include <QProgressBar>
-#include <QFileDialog>
 #include <QResizeEvent>
 #include <QDebug>
 #include "video_render.h"
@@ -16,11 +12,9 @@ PlayerWidget::PlayerWidget(QWidget* parent)
     : QWidget(parent)
     , m_pAudioRender(new AudioRender())
 {
-    this->setWindowTitle("PlayerWidget");
-    this->resize(850, 650);
     //设置主窗口背景颜色
     QPalette palette;
-    palette.setColor(QPalette::Window, QColor(50, 50, 50));
+    palette.setColor(QPalette::Window, QColor(200, 200, 200));
     //    palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
     this->setPalette(palette);
 
@@ -30,33 +24,13 @@ PlayerWidget::PlayerWidget(QWidget* parent)
     //auto VideoRender = new SDLRenderWidget(this);
     m_pVideoRender = VideoRender;
 
-    QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
-    vBoxLayout->setSpacing(10);//设置间距
-    vBoxLayout->setContentsMargins(10, 10, 10, 10);//设置边距
-    vBoxLayout->addWidget(VideoRender);
-    QProgressBar* progressBar = new QProgressBar(this);
-    progressBar->setFixedHeight(20);
-    vBoxLayout->addWidget(progressBar);
+    QVBoxLayout* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);  // 可选：去掉边距
+    layout->setSpacing(0);                   // 可选：去掉间距
+    layout->addWidget(VideoRender);
 
-    QHBoxLayout* hBoxLayoutUrl = new QHBoxLayout(this);
-    QPushButton* btnOpenFile = new QPushButton("打开", this);
-    btnOpenFile->setFixedHeight(30);
-    connect(btnOpenFile, &QPushButton::clicked, this, &PlayerWidget::on_pbOpenFileButton_clicked);
-    m_pTextEditUrl = new QTextEdit(this);
-    m_pTextEditUrl->setFixedHeight(30);
-    m_pTextEditUrl->setPlaceholderText("请输入音视频文件路径，或者音视频流地址");
-    hBoxLayoutUrl->addWidget(btnOpenFile);
-    hBoxLayoutUrl->addWidget(m_pTextEditUrl);
-    vBoxLayout->addLayout(hBoxLayoutUrl);
-
-    QHBoxLayout* hBoxLayoutPlayControl = new QHBoxLayout(this);
-    QPushButton* btnPlay = new QPushButton("播放", this);
-    QPushButton* btnStop = new QPushButton("停止", this);
-    connect(btnPlay, &QPushButton::clicked, this, &PlayerWidget::on_pbPlayButton_clicked);
-    connect(btnStop, &QPushButton::clicked, this, &PlayerWidget::on_pbStopButton_clicked);
-    hBoxLayoutPlayControl->addWidget(btnPlay);
-    hBoxLayoutPlayControl->addWidget(btnStop);
-    vBoxLayout->addLayout(hBoxLayoutPlayControl);
+    // 设置子 widget 样式（可选）
+    VideoRender->setStyleSheet("background-color: red;");
 }
 
 PlayerWidget::~PlayerWidget()
@@ -66,8 +40,6 @@ PlayerWidget::~PlayerWidget()
 
 void PlayerWidget::StartPlay(const QString& url)
 {
-    m_playUrl = url;
-    m_pTextEditUrl->setText(url);
     //MediaParameter param;
     //param.url = url.toStdString();
     //param.hwDeviceName = "dxva2";
@@ -123,46 +95,6 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 void PlayerWidget::onClose(const PlayError& error)
 {
 
-}
-
-void PlayerWidget::on_pbOpenFileButton_clicked()
-{
-    // 打开文件选择对话框
-    QString fileName = QFileDialog::getOpenFileName(
-        this,                       // 父窗口
-        tr("选择文件"),             // 对话框标题
-        QDir::homePath(),           // 默认打开的目录
-        tr("所有文件 (*);;视频文件 (*.mp4);;音频文件 (*.mp3 *.wav)") // 文件过滤器
-    );
-
-    if (fileName.isEmpty()) {
-        qDebug() << "未选择文件";
-        return;
-    }
-    m_pTextEditUrl->setText(fileName);
-    qDebug() << "选择的文件:" << fileName;
-}
-
-void PlayerWidget::on_pbPlayButton_clicked()
-{
-    QString playUrl = m_pTextEditUrl->toPlainText();
-    if (playUrl.isEmpty())
-    {
-        //playUrl = "E:/code/media/BaiduSyncdisk.mp4";
-        //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
-        playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
-
-        //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
-        //playUrl = "rtsp://172.16.19.69/live/test";
-        //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
-        //playUrl = "rtsp://172.16.19.40:554/rtp/34020000001110000001_34020000001320000001_3?token=xCO73xOfG5uekWf4";
-    }
-    StartPlay(playUrl);
-}
-
-void PlayerWidget::on_pbStopButton_clicked()
-{
-    StopPlay();
 }
 
 void PlayerWidget::resizeEvent(QResizeEvent* event)

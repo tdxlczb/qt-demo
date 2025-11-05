@@ -8,7 +8,7 @@
 #include "tests/media_reader_test.h"
 #include "tests/sdl_widget_test.h"
 
-
+#if defined(_MSC_VER)
 #include <iostream>
 #include <stdlib.h>
 #include <string>
@@ -60,6 +60,8 @@ void onNormalExit() {
     std::cerr << "exit." << std::endl;
 }
 
+#endif
+
 #include <cstdlib>
 #include <iostream>
 #include <thread>
@@ -93,10 +95,11 @@ int main(int argc, char *argv[])
     FindHWDeviceDecoders();
     MainWindow w;
     w.hide(); 
-
+#if defined(_MSC_VER)
     //注册异常捕获函数要放在后面，因为Qt内部默认会重置捕获函数
     SetUnhandledExceptionFilter(ExceptionFilter);
     std::set_terminate(TerminateHandler);
     std::atexit(onNormalExit);
+#endif
     return a.exec();
 }

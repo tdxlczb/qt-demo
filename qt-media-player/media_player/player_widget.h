@@ -3,7 +3,6 @@
 
 #include <atomic>
 #include <QWidget>
-#include <QTextEdit>
 #include "media/media_define.h"
 #include "media/media_play_event.h"
 
@@ -27,24 +26,16 @@ protected:
 
 signals:
 private:
-    void on_pbOpenFileButton_clicked();
-    void on_pbPlayButton_clicked();
-    void on_pbStopButton_clicked();
-
     void resizeEvent(QResizeEvent* event) override;
 
 private:
     VideoRender* m_pVideoRender = nullptr;
     AudioRender* m_pAudioRender = nullptr;
     MediaReader* m_pMediaReader = nullptr;
-
     FishEyeWidget* m_pFishEyeWidget = nullptr;
 
-    QString m_playUrl;
     std::atomic_bool m_isVideoPlaying = {false};
     std::atomic_bool m_isAudioPlaying = {false};
-
-    QTextEdit* m_pTextEditUrl = nullptr;
 };
 
 #endif // PLAYER_WIDGET_H
