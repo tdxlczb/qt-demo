@@ -15,7 +15,7 @@ class PlayerWidget : public QWidget, public PlayEvent
 {
     Q_OBJECT
 public:
-    explicit PlayerWidget(QWidget* parent = nullptr);
+    explicit PlayerWidget(QWidget* parent = nullptr, int winIndex = 0);
     ~PlayerWidget();
 
     void StartPlay(const QString& url);
@@ -26,10 +26,28 @@ protected:
     virtual void onClose(const PlayError& error) override;
 
 signals:
-private:
-    void resizeEvent(QResizeEvent* event) override;
+    //通知：该窗口被选中
+    void sig_Selected(PlayerWidget* pWidget);
 
 private:
+    void mousePressEvent(QMouseEvent* event) override;
+    //void mouseReleaseEvent(QMouseEvent* event) override;
+    //void mouseDoubleClickEvent(QMouseEvent* event) override;
+    //void mouseMoveEvent(QMouseEvent* event) override;
+    //void wheelEvent(QWheelEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    //void enterEvent(QEvent* event) override;
+    //void leaveEvent(QEvent* event) override;
+    //void showEvent(QShowEvent* event) override;
+    //void hideEvent(QHideEvent* event) override;
+    //void dragMoveEvent(QDragMoveEvent* event) override;
+    //void dragEnterEvent(QDragEnterEvent* event) override;
+    //void dropEvent(QDropEvent* event) override;
+    //void paintEvent(QPaintEvent* event) override;
+    //void moveEvent(QMoveEvent* event) override;
+
+private:
+    int m_winIndex = 0;
     VideoRender* m_pVideoRender = nullptr;
     AudioRender* m_pAudioRender = nullptr;
     MediaReader* m_pMediaReader = nullptr;

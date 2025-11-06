@@ -9,29 +9,31 @@
 #include "media/media_display.h"
 #include "fisheye_widget.h"
 
-PlayerWidget::PlayerWidget(QWidget* parent)
+PlayerWidget::PlayerWidget(QWidget* parent, int winIndex)
     : QWidget(parent)
+    , m_winIndex(winIndex)
     , m_pAudioRender(new AudioRender())
 {
-    //设置主窗口背景颜色
-    QPalette palette;
-    palette.setColor(QPalette::Window, QColor(200, 200, 200));
-    //    palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
-    this->setPalette(palette);
+    //this->setAutoFillBackground(true);
+    ////设置主窗口背景颜色
+    //QPalette palette;
+    //palette.setColor(QPalette::Window, QColor(200, 200, 200));
+    ////    palette.setColor(QPalette::Background, Qt::black);//设置背景黑色
+    //this->setPalette(palette);
+    this->setAttribute(Qt::WA_StyledBackground, true);
+    this->setStyleSheet("background-color: #F0F0F0;");
+    //this->setStyleSheet("border: 2px solid red; background-color: #F0F0F0;");
 
     //auto VideoRender = new VideoRGBRender(this);
     //auto VideoRender = new PlayGLWidget(this);
-    auto VideoRender = new OpenGLRenderWidget(this);
+    auto VideoRender = new OpenGLRenderWidget(this);//render背景颜色#808080
     //auto VideoRender = new SDLRenderWidget(this);
     m_pVideoRender = VideoRender;
 
     QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);  // 可选：去掉边距
+    layout->setContentsMargins(2, 2, 2, 2);  // 设置边距是为了选中时可以设置border
     layout->setSpacing(0);                   // 可选：去掉间距
     layout->addWidget(VideoRender);
-
-    // 设置子 widget 样式（可选）
-    VideoRender->setStyleSheet("background-color: red;");
 }
 
 PlayerWidget::~PlayerWidget()
@@ -51,9 +53,10 @@ void PlayerWidget::StartPlay(const QString& url)
 
     PlayOptions opt;
     opt.hwdevice = "dxva2";
+    //opt.hwdevice = "d3d11va";
 
     if (!m_pMediaReader)
-        m_pMediaReader = new MediaReader(0);
+        m_pMediaReader = new MediaReader(m_winIndex);
 
     //m_pAudioRender->Start(param.outputAudioSpec, 1024);
     //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
@@ -109,6 +112,14 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 void PlayerWidget::onClose(const PlayError& error)
 {
 
+}
+
+void PlayerWidget::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        emit sig_Selected(this);
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void PlayerWidget::resizeEvent(QResizeEvent* event)

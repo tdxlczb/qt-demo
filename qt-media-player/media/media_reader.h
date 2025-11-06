@@ -42,6 +42,7 @@ public:
     const AVPixelFormat& GetHwPixFmt() const;
     //退出硬解码（在非本类代码内执行时可用）
     void QuitHwDecode();
+    int  GetPlayIndex() const;
 private:
     void ReadThread();
     void VideoThread();
@@ -83,7 +84,7 @@ private:
     PacketQueue m_videoPacketQueue;
     PacketQueue m_audioPacketQueue;
 
-    bool m_isAsyncDisplay = true;
+    bool m_isAsyncDisplay = false;
     FrameQueue m_videoFrameQueue;
 
     int64_t m_videoFrameIndex = 0;
