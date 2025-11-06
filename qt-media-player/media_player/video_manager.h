@@ -6,8 +6,10 @@
 #include <QVBoxLayout>
 #include <QListWidget>
 #include <QPushButton>
+#include <QComboBox>
 #include <QLabel>
 #include <QGridLayout>
+#include <QList>
 
 namespace Ui {
 class VideoManager;
@@ -19,10 +21,12 @@ class VideoManager : public QWidget
     Q_OBJECT
 
 public:
-    explicit VideoManager(QWidget *parent = nullptr);
+    explicit VideoManager(QWidget* parent = nullptr);
     ~VideoManager();
 
 private slots:
+    void onPlayClicked();
+    void onStopClicked();
     void onPlayAllClicked();
     void onStopAllClicked();
     void onFileSelected(QListWidgetItem* item);
@@ -30,8 +34,12 @@ private slots:
     void on_Selected(PlayerWidget* pWidget);
 
 private:
+    QList<QString> readUrlList();
+    void saveUrlList(const QList<QString>& urlList);
     void setupUI();
     void setupLeftPanel();
+    void setupUrlList();
+    void setupUrlListControlPanel();
     void setupRightPanel();
     void setupVideoGrid();
     void setupControlPanel();
@@ -41,6 +49,7 @@ private:
     Ui::VideoManager* ui;
     // 左侧文件列表
     QWidget* leftPanel;
+    QVBoxLayout* leftLayout;
     QListWidget* fileListWidget;
 
     // 右侧主区域
@@ -54,9 +63,12 @@ private:
     PlayerWidget* m_pSelectWidget = nullptr;
 
     // 右侧下层 - 控制面板
-    QWidget* controlPanel;
-    QPushButton* playAllButton;
-    QPushButton* stopAllButton;
+    //QWidget* controlPanel;
+    //QPushButton* playButton;
+    //QPushButton* stopButton;
+    //QPushButton* playAllButton;
+    //QPushButton* stopAllButton;
+    QComboBox* comboBox;
 
     // 主布局
     QHBoxLayout* mainLayout;

@@ -41,7 +41,7 @@ PlayerWidget::~PlayerWidget()
 
 }
 
-void PlayerWidget::StartPlay(const QString& url)
+void PlayerWidget::StartPlay(const QString& url, int decodeType)
 {
     //MediaParameter param;
     //param.url = url.toStdString();
@@ -52,8 +52,12 @@ void PlayerWidget::StartPlay(const QString& url)
     //param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
 
     PlayOptions opt;
-    opt.hwdevice = "dxva2";
-    //opt.hwdevice = "d3d11va";
+    if (decodeType == 1) {
+        opt.hwdevice = "dxva2";
+    }
+    else if(decodeType == 2) {
+        opt.hwdevice = "d3d11va";
+    }
 
     if (!m_pMediaReader)
         m_pMediaReader = new MediaReader(m_winIndex);

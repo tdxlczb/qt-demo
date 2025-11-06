@@ -94,7 +94,7 @@ private:
     double m_timebase = 0.0;
     double m_clockStart = 0.0; //时钟开始时间
     double m_startPts = 0.0; //帧开始时间
-    double m_syncThreshold = 0.02;    //同步阈值
+    double m_syncThreshold = 0.1;    //同步阈值
     double m_speed = 1.0;             //倍速播放
 };
 

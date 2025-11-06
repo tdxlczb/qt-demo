@@ -37,6 +37,7 @@ MediaReader::~MediaReader()
 
 void MediaReader::Play(const std::string& url, const PlayOptions& options)
 {
+    Stop();
     m_url = url;
     m_options = options;
 
@@ -60,6 +61,9 @@ void MediaReader::Stop()
         m_thReader.join();
     }
     StreamClose();
+
+    m_clockStart = 0.0;
+    m_startPts = 0.0;
 }
 
 void MediaReader::SetPlayEvent(PlayEvent* playEvent)
@@ -204,6 +208,10 @@ void MediaReader::VideoDecode(AVPacket* packet)
         LOG_ERROR << m_playIndex << "avcodec_send_packet err," << ret << ":" << av_error_string(ret);
         return;
     }
+    if (t2 - t1 > 30000) {
+        LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex << ", avcodec_send_packet timeout " << (t2 - t1) / 1000;
+    }
+
     while (true)
     {
         AVFrame* frame = av_frame_alloc();
@@ -221,8 +229,8 @@ void MediaReader::VideoDecode(AVPacket* packet)
         }
 
         m_videoFrameIndex++;
-        if (t2 - t1 > 30000 || t4 - t3 > 30000) {
-            LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex << ", timeout " << (t2 - t1) / 1000 << " " << (t2 - t1) / 1000;
+        if (t4 - t3 > 10000) {
+            LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex << ", avcodec_receive_frame timeout " << (t4 - t3) / 1000;
         }
         if (frame->format == m_hwPixFmt) {
             // 从GPU内存下载到cpu内存
@@ -247,7 +255,6 @@ void MediaReader::VideoDecode(AVPacket* packet)
         }
 
         //LOG_DEBUG << m_playIndex << "decode video frame index:" << m_videoFrameIndex;
-
         int64_t curTime = av_gettime_relative();
         if (curTime - m_iLastCountTime > 4000000) {
             LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex;
@@ -315,7 +322,7 @@ void MediaReader::DisplayVideo(AVFrame* frame)
     double elapsedPts = pts - m_startPts; // 相对 pts
 
     /* ===== 时钟同步 ===== */
-    double diff = elapsedPts - (now - m_clockStart); // > 0 表示视频超前
+    double diff = elapsedPts - (now - m_clockStart) + 1.0; // > 0 表示视频超前, 增加1s延迟
     double delay = diff;
     if (diff > m_syncThreshold) {
         // 视频超前，减慢播放（增加延迟）

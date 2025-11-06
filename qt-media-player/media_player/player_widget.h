@@ -18,7 +18,7 @@ public:
     explicit PlayerWidget(QWidget* parent = nullptr, int winIndex = 0);
     ~PlayerWidget();
 
-    void StartPlay(const QString& url);
+    void StartPlay(const QString& url, int decodeType = 0);
     void StopPlay();
 
 protected:
