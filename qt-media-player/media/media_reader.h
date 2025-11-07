@@ -34,6 +34,10 @@ public:
     MediaReader(int index);
     ~MediaReader();
 
+    std::string GetId() const;
+    int  GetPlayIndex() const;
+    std::string GetPlayUrl() const;
+
     void Play(const std::string& url, const PlayOptions& options);
     void Stop();
     void SetPlayEvent(PlayEvent* playEvent);
@@ -42,7 +46,6 @@ public:
     const AVPixelFormat& GetHwPixFmt() const;
     //退出硬解码（在非本类代码内执行时可用）
     void QuitHwDecode();
-    int  GetPlayIndex() const;
 private:
     void ReadThread();
     void VideoThread();
@@ -63,7 +66,8 @@ private:
     void FrameReaderSync();
 
 private:
-    int m_playIndex = 0;
+    std::string m_uid; //类的唯一id
+    int m_playIndex = 0; //index主要用于绑定外部播放窗口，日志区分
     std::string m_url;
     PlayOptions m_options;
     PlayEvent* m_playEvent = nullptr;
@@ -87,6 +91,8 @@ private:
     bool m_isAsyncDisplay = false;
     FrameQueue m_videoFrameQueue;
 
+    int64_t m_videoPacketIndex = 0;
+    int64_t m_audioPacketIndex = 0;
     int64_t m_videoFrameIndex = 0;
     int64_t m_audioFrameIndex = 0;
     int64_t m_iLastCountTime = 0;

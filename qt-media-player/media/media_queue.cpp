@@ -56,6 +56,23 @@ AVPacket* PacketQueue::PopFront()
     return pkt;
 }
 
+size_t PacketQueue::Size()
+{
+    std::lock_guard<std::mutex> lock(m_packetQueueMutex);
+    return m_packetQueue.size();
+}
+
+void PacketQueue::Clear()
+{
+    std::lock_guard<std::mutex> lock(m_packetQueueMutex);
+    while (!m_packetQueue.empty())
+    {
+        AVPacket* packet = m_packetQueue.front();
+        m_packetQueue.pop();
+        av_packet_free(&packet);
+    }
+}
+
 FrameQueue::FrameQueue(int16_t maxQueueSize)
     : m_maxQueueSize(maxQueueSize)
 {
@@ -88,11 +105,23 @@ AVFrame* FrameQueue::PopFront()
     return frame;
 }
 
+size_t FrameQueue::Size()
+{
+    std::lock_guard<std::mutex> lock(m_frameQueueMutex);
+    return m_frameQueue.size();
+}
+
 void FrameQueue::Clear()
 {
     std::lock_guard<std::mutex> lock(m_frameQueueMutex);
-    std::queue<AVFrame*> empty;
-    std::swap(empty, m_frameQueue);
+    //std::queue<AVFrame*> empty;
+    //std::swap(empty, m_frameQueue);
+    while (!m_frameQueue.empty())
+    {
+        AVFrame* frame = m_frameQueue.front();
+        m_frameQueue.pop();
+        av_frame_free(&frame);
+    }
 }
 
 

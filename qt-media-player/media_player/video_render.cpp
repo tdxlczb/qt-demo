@@ -582,15 +582,17 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
     if (frame.spec.width <= 0
         || frame.spec.height <= 0
         || ((!frame.data || frame.size <= 0) && (!frame.linedata[0] || frame.linesize[0] <= 0))) {
-        qDebug() << "frame is err";
+        qCritical() << "frame is err";
         return;
     }
-
+    if (frame.index <= 1) {
+        qInfo() << "render index:" << frame.index;
+    }
     QMutexLocker locker(&m_frameMutex);
     bool reInitData = false;
     if (m_frame.spec.width != frame.spec.width || m_frame.spec.height != frame.spec.height || m_frame.spec.format != frame.spec.format) {
-        qDebug() << "old width:" << m_frame.spec.width << ",height:" << m_frame.spec.height << ",format:" << m_frame.spec.height;
-        qDebug() << "new width:" << frame.spec.width << ",height:" << frame.spec.height << ",format:" << frame.spec.height;
+        qInfo() << "old width:" << m_frame.spec.width << ",height:" << m_frame.spec.height << ",format:" << m_frame.spec.height;
+        qInfo() << "new width:" << frame.spec.width << ",height:" << frame.spec.height << ",format:" << frame.spec.height;
         reInitData = true;
         m_isInitGL = false;
         m_frameIndex = 0;
@@ -662,12 +664,17 @@ void OpenGLRenderWidget::ClearContent()
 
 void OpenGLRenderWidget::on_Update()
 {
-    if ((m_frame.data || m_frame.linedata[0]) && !m_updateTimer.isActive()) {
-        m_updateTimer.start(40);
-        update();
+    if (m_isUseTimer) {
+        if ((m_frame.data || m_frame.linedata[0]) && !m_updateTimer.isActive()) {
+            m_updateTimer.start(40);
+            update();
+        }
+        if ((!m_frame.data && !m_frame.linedata[0]) && m_updateTimer.isActive()) {
+            m_updateTimer.stop();
+            update();
+        }
     }
-    if ((!m_frame.data && !m_frame.linedata[0]) && m_updateTimer.isActive()) {
-        m_updateTimer.stop();
+    else {
         update();
     }
 }
@@ -702,11 +709,16 @@ void OpenGLRenderWidget::paintGL()
     //初始化调用opengl的接口必须放到继承的GL函数中，否则会初始化异常
     initGL();
 
-    //初始化的第一帧没有更新数据，需要更新一下
+    //初始化的第一帧没有更新数据，渲染为绿屏，需要更新一下，如果不更新数据，可以继续渲染为背景颜色
     if (m_isInitGL && m_isUsePBO && m_frameIndex == 0) {
         //如果没有数据拷贝，且不使用opengl同步机制，即m_isCopyData=fals&&m_isUseFence=false，这里更新pbo数据存在风险，有可能在拷贝pbo数据时，源数据被释放导致崩溃
         if (!(!m_isCopyData && !m_isUseFence)) {
             uploadPBOData();
+        }
+        else {
+            glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            return;
         }
     }
 

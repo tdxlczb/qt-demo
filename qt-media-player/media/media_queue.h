@@ -16,6 +16,8 @@ public:
 
     void Push(AVPacket* pkt);
     AVPacket* PopFront();
+    size_t Size();
+    void Clear();
 private:
     std::queue<AVPacket*> m_packetQueue;
     const int16_t m_maxQueueSize = 0;
@@ -31,6 +33,7 @@ public:
 
     void Push(AVFrame* frame);
     AVFrame* PopFront();
+    size_t Size();
     void Clear();
 private:
     std::queue<AVFrame*> m_frameQueue;

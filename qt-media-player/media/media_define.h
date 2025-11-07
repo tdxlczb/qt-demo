@@ -61,6 +61,7 @@ struct VideoFrame
     int       linesize[8] = { 0 };
     CopyFrameCallback copycb;
     double    pts = 0.0;//帧时间，转成秒
+    size_t    index = 0;
     VideoSpec spec;
 };
 

@@ -2,6 +2,7 @@
 #include "log.h"
 #include "media_utils.h"
 
+#define PLAYTAG  std::to_string(m_playIndex) + " "  
 /**
 * 较新版本的av_packet_free、av_frame_free内部都先执行了av_packet_unref、av_frame_unref，因此没必要再多调一次
 */
@@ -19,13 +20,14 @@ static AVPixelFormat GetHwFormat(AVCodecContext* pCodecContext, const enum AVPix
             return *pPixFmt;
         }
     }
-    LOG_WARN<< pReader->GetPlayIndex() << "HwPixFmt not found " << pReader->GetHwPixFmt();
+    LOG_WARN << pReader->GetPlayIndex() << " HwPixFmt not found " << pReader->GetHwPixFmt();
     pReader->QuitHwDecode();
     return AV_PIX_FMT_NONE;
 }
 
 MediaReader::MediaReader(int index)
-    : m_playIndex(index)
+    : m_uid(uuid32())
+    , m_playIndex(index)
 {
     avformat_network_init();
 }
@@ -33,6 +35,21 @@ MediaReader::MediaReader(int index)
 MediaReader::~MediaReader()
 {
     avformat_network_deinit();
+}
+
+std::string MediaReader::GetId() const
+{
+    return m_uid;
+}
+
+int MediaReader::GetPlayIndex() const
+{
+    return m_playIndex;
+}
+
+std::string MediaReader::GetPlayUrl() const
+{
+    return m_url;
 }
 
 void MediaReader::Play(const std::string& url, const PlayOptions& options)
@@ -50,7 +67,13 @@ void MediaReader::Play(const std::string& url, const PlayOptions& options)
 
 void MediaReader::Stop()
 {
+    m_url = "";
+    m_options = PlayOptions{};
+
     m_isThreadRun.store(false);
+    if (m_thVideoDisplay.joinable()) {
+        m_thVideoDisplay.join();
+    }
     if (m_thVideoDecoder.joinable()) {
         m_thVideoDecoder.join();
     }
@@ -62,6 +85,17 @@ void MediaReader::Stop()
     }
     StreamClose();
 
+    m_isStreamOver.store(false);
+    m_videoPacketQueue.Clear();
+    m_audioPacketQueue.Clear();
+    m_videoFrameQueue.Clear();
+
+    m_videoPacketIndex = 0;
+    m_audioPacketIndex = 0;
+    m_videoFrameIndex = 0;
+    m_audioFrameIndex = 0;
+    m_iLastCountTime = 0;
+    m_timebase = 0.0;
     m_clockStart = 0.0;
     m_startPts = 0.0;
 }
@@ -81,15 +115,10 @@ void MediaReader::QuitHwDecode()
     m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
 }
 
-int MediaReader::GetPlayIndex() const
-{
-    return m_playIndex;
-}
-
 void MediaReader::ReadThread()
 {
     if (!StreamOpen()) {
-        LOG_ERROR << m_playIndex << "stream open failed";
+        LOG_ERROR << PLAYTAG << "stream open failed";
         return;
     }
 
@@ -108,7 +137,7 @@ void MediaReader::ReadThread()
             m_thAudioDecoder = std::thread(&MediaReader::AudioThread, this);
         }
     }
-    LOG_INFO << m_playIndex << "FrameReader start";
+    LOG_INFO << PLAYTAG << "FrameReader start";
     AVPacket* packet = av_packet_alloc();
     while (m_isThreadRun.load() && !m_isStreamOver.load())
     {
@@ -116,11 +145,11 @@ void MediaReader::ReadThread()
         int ret = av_read_frame(m_formatContext, packet);
         if (ret < 0)
         {
-            LOG_ERROR << m_playIndex << "av_read_frame err," << ret << ":" << av_error_string(ret);
+            LOG_ERROR << PLAYTAG << "av_read_frame err," << ret << ":" << av_error_string(ret);
             if (ret == AVERROR_EOF)
             {
                 m_isStreamOver = true;
-                LOG_INFO << m_playIndex << "FrameReader stream over";
+                LOG_INFO << PLAYTAG << "FrameReader stream over";
             }
             else if (ret == AVERROR(EAGAIN))
             {//重试
@@ -139,10 +168,9 @@ void MediaReader::ReadThread()
         {
             m_audioPacketQueue.Push(packet);
         }
-
     }
     av_packet_free(&packet);
-    LOG_INFO << m_playIndex << "FrameReader end";
+    LOG_INFO << PLAYTAG << "FrameReader end";
 }
 
 void MediaReader::VideoThread()
@@ -165,6 +193,7 @@ void MediaReader::VideoThread()
         if (!packet)
             continue;
 
+        m_videoPacketIndex++;
         VideoDecode(packet);
         av_packet_free(&packet);
     }
@@ -189,6 +218,7 @@ void MediaReader::AudioThread()
         if (!packet)
             continue;
 
+        m_audioPacketIndex++;
         AudioDecode(packet);
         av_packet_free(&packet);
     }
@@ -205,11 +235,11 @@ void MediaReader::VideoDecode(AVPacket* packet)
     int64_t t2 = av_gettime_relative();
     if (ret < 0)
     {//错误处理
-        LOG_ERROR << m_playIndex << "avcodec_send_packet err," << ret << ":" << av_error_string(ret);
+        LOG_ERROR << PLAYTAG << "avcodec_send_packet err," << ret << ":" << av_error_string(ret);
         return;
     }
     if (t2 - t1 > 30000) {
-        LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex << ", avcodec_send_packet timeout " << (t2 - t1) / 1000;
+        LOG_INFO << PLAYTAG << "packet index:" << m_videoPacketIndex << ", avcodec_send_packet timeout " << (t2 - t1) / 1000;
     }
 
     while (true)
@@ -230,7 +260,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
 
         m_videoFrameIndex++;
         if (t4 - t3 > 10000) {
-            LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex << ", avcodec_receive_frame timeout " << (t4 - t3) / 1000;
+            LOG_INFO << PLAYTAG << "frame index:" << m_videoFrameIndex << ", avcodec_receive_frame timeout " << (t4 - t3) / 1000;
         }
         if (frame->format == m_hwPixFmt) {
             // 从GPU内存下载到cpu内存
@@ -241,7 +271,7 @@ void MediaReader::VideoDecode(AVPacket* packet)
             if (AVERROR(ret)) {
                 ret = av_hwframe_transfer_data(hwFrame, frame, 0);
                 if (AVERROR(ret)) {
-                    LOG_ERROR << m_playIndex << "av_hwframe_transfer_data err," << ret << ":" << av_error_string(ret);
+                    LOG_ERROR << PLAYTAG << "av_hwframe_transfer_data err," << ret << ":" << av_error_string(ret);
                     av_frame_free(&hwFrame);
                     av_frame_free(&frame);
                     break;
@@ -254,10 +284,10 @@ void MediaReader::VideoDecode(AVPacket* packet)
             frame = hwFrame;
         }
 
-        //LOG_DEBUG << m_playIndex << "decode video frame index:" << m_videoFrameIndex;
+        //LOG_DEBUG << PLAYTAG << "decode video frame index:" << m_videoFrameIndex;
         int64_t curTime = av_gettime_relative();
         if (curTime - m_iLastCountTime > 4000000) {
-            LOG_INFO << m_playIndex << " frame index:" << m_videoFrameIndex;
+            LOG_INFO << PLAYTAG << "frame index:" << m_videoFrameIndex;
             m_iLastCountTime = curTime;
         }
         if (m_isAsyncDisplay) {
@@ -279,7 +309,7 @@ void MediaReader::AudioDecode(AVPacket* packet)
     int ret = avcodec_send_packet(m_audioCodecContext, packet);
     if (ret < 0)
     {//错误处理
-        LOG_ERROR << m_playIndex << "avcodec_send_packet err," << ret << ":" << av_error_string(ret);
+        LOG_ERROR << PLAYTAG << "avcodec_send_packet err," << ret << ":" << av_error_string(ret);
         return;
     }
     while (true)
@@ -291,7 +321,7 @@ void MediaReader::AudioDecode(AVPacket* packet)
             av_frame_free(&frame);
             break;
         }
-        //LOG_DEBUG << m_playIndex << "decode audio frame index:" << m_audioFrameIndex;
+        //LOG_DEBUG << PLAYTAG << "decode audio frame index:" << m_audioFrameIndex;
         m_audioFrameIndex++;
         av_frame_free(&frame);
     }
@@ -313,16 +343,19 @@ void MediaReader::DisplayThread()
 
 void MediaReader::DisplayVideo(AVFrame* frame)
 {
-    double pts = frame->pts == AV_NOPTS_VALUE ? 0.0 : frame->pts * m_timebase;
+    int npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
+    //LOG_INFO << PLAYTAG << "frameIndex:" << m_videoFrameIndex << ",pts:" << npts;
+    double pts = npts * m_timebase;
     double now = av_gettime_relative() / 1000000.0;
     if (m_clockStart <= 0.0) {
         m_clockStart = now;
         m_startPts = pts;
+        LOG_INFO << PLAYTAG << "first pts:" << npts;
     }
+    //时钟同步
     double elapsedPts = pts - m_startPts; // 相对 pts
-
-    /* ===== 时钟同步 ===== */
-    double diff = elapsedPts - (now - m_clockStart) + 1.0; // > 0 表示视频超前, 增加1s延迟
+    double elapsedClock = now - m_clockStart; // 相对 clock
+    double diff = elapsedPts - elapsedClock;// +1.0; // > 0 表示视频超前, 增加1s延迟，会导致第一帧播放慢
     double delay = diff;
     if (diff > m_syncThreshold) {
         // 视频超前，减慢播放（增加延迟）
@@ -358,6 +391,7 @@ void MediaReader::DisplayVideo(AVFrame* frame)
             outFrame.linesize[i] = frame->linesize[i];
         }
         outFrame.pts = pts;
+        outFrame.index = m_videoFrameIndex;
         outFrame.spec.width = frame->width;
         outFrame.spec.height = frame->height;
         outFrame.spec.format = frame->format;
@@ -371,7 +405,7 @@ static AVBufferRef* g_dxva2_device = nullptr;
 
 bool MediaReader::StreamOpen()
 {
-    LOG_INFO << m_playIndex << "open url:" << m_url;
+    LOG_INFO << PLAYTAG << "open url:" << m_url;
     //配置该流的ffmpeg设置
     AVDictionary* pOptDict = NULL;
     av_dict_set(&pOptDict, "stimeout", "5000000", 0);//适应延迟网络，设置5s的等待链接时间，可能不生效
@@ -389,7 +423,7 @@ bool MediaReader::StreamOpen()
     // 打开流
     if (AVERROR(ret))
     {
-        LOG_ERROR << m_playIndex << "avformat_open_input failed," << ret << ":" << av_error_string(ret);
+        LOG_ERROR << PLAYTAG << "avformat_open_input failed," << ret << ":" << av_error_string(ret);
         return false;
     }
 
@@ -397,7 +431,7 @@ bool MediaReader::StreamOpen()
     ret = avformat_find_stream_info(m_formatContext, nullptr);
     if (ret < 0)
     {
-        LOG_ERROR << m_playIndex << "avformat_find_stream_info failed," << ret << ":" << av_error_string(ret);
+        LOG_ERROR << PLAYTAG << "avformat_find_stream_info failed," << ret << ":" << av_error_string(ret);
         avformat_close_input(&m_formatContext);
         return false;
     }
@@ -419,7 +453,7 @@ bool MediaReader::StreamOpen()
 
     if (videoStreamIndex < 0 && audioStreamIndex < 0)
     {
-        LOG_ERROR << m_playIndex << "find video stream and audio stream failed";
+        LOG_ERROR << PLAYTAG << "find video stream and audio stream failed";
         avformat_close_input(&m_formatContext);
         return false;
     }
@@ -434,7 +468,7 @@ bool MediaReader::StreamOpen()
         m_videoCodecContext = avcodec_alloc_context3(videoCodec);
         if (avcodec_parameters_to_context(m_videoCodecContext, videoCodecParameters) < 0)
         {
-            LOG_ERROR << m_playIndex << "avcodec_parameters_to_context failed," << ret << ":" << av_error_string(ret);
+            LOG_ERROR << PLAYTAG << "avcodec_parameters_to_context failed," << ret << ":" << av_error_string(ret);
             avcodec_free_context(&m_videoCodecContext);
             avformat_close_input(&m_formatContext);
             return false;
@@ -446,7 +480,7 @@ bool MediaReader::StreamOpen()
         if (!m_options.hwdevice.empty()) {
             m_hwDeviceType = av_hwdevice_find_type_by_name(m_options.hwdevice.c_str());
             if (m_hwDeviceType == AV_HWDEVICE_TYPE_NONE) {
-                LOG_ERROR << m_playIndex << "device type is not supported:" << m_options.hwdevice;
+                LOG_ERROR << PLAYTAG << "device type is not supported:" << m_options.hwdevice;
                 return false;
             }
             //查找硬解码器
@@ -454,7 +488,7 @@ bool MediaReader::StreamOpen()
                 const AVCodecHWConfig* codecHWConfig = avcodec_get_hw_config(videoCodec, i);
                 if (!codecHWConfig) {
                     //没有硬解码器了
-                    LOG_WARN << m_playIndex << string_format("decoder %s is not support device type:%s", videoCodec->name, av_hwdevice_get_type_name(m_hwDeviceType));
+                    LOG_WARN << PLAYTAG << string_format("decoder %s is not support device type:%s", videoCodec->name, av_hwdevice_get_type_name(m_hwDeviceType));
                     break;
                 }
                 if (codecHWConfig->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
@@ -468,7 +502,7 @@ bool MediaReader::StreamOpen()
                 if (!g_dxva2_device) {
                     ret = av_hwdevice_ctx_create(&g_dxva2_device, m_hwDeviceType, nullptr, nullptr, 0);
                     if (AVERROR(ret)) {
-                        LOG_WARN << m_playIndex << "av_hwdevice_ctx_create failed," << ret << ":" << av_error_string(ret);
+                        LOG_WARN << PLAYTAG << "av_hwdevice_ctx_create failed," << ret << ":" << av_error_string(ret);
                         m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
                     }
                 }
@@ -478,7 +512,7 @@ bool MediaReader::StreamOpen()
                 if (!g_d3d11_device) {
                     ret = av_hwdevice_ctx_create(&g_d3d11_device, m_hwDeviceType, nullptr, nullptr, 0);
                     if (AVERROR(ret)) {
-                        LOG_WARN << m_playIndex << "av_hwdevice_ctx_create failed," << ret << ":" << av_error_string(ret);
+                        LOG_WARN << PLAYTAG << "av_hwdevice_ctx_create failed," << ret << ":" << av_error_string(ret);
                         m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
                     }
                 }
@@ -489,7 +523,7 @@ bool MediaReader::StreamOpen()
 
         ret = avcodec_open2(m_videoCodecContext, videoCodec, nullptr);
         if (ret != 0) {
-            LOG_ERROR << m_playIndex << "video avcodec_open2 failed," << ret << ":" << av_error_string(ret);
+            LOG_ERROR << PLAYTAG << "video avcodec_open2 failed," << ret << ":" << av_error_string(ret);
             avcodec_free_context(&m_videoCodecContext);
             avformat_close_input(&m_formatContext);
             return false;
@@ -497,7 +531,7 @@ bool MediaReader::StreamOpen()
 
         if (m_videoCodecContext->width <= 0 || m_videoCodecContext->height <= 0 || m_videoCodecContext->pix_fmt == AV_PIX_FMT_NONE)
         {
-            LOG_ERROR << m_playIndex << "codecContext data error";
+            LOG_ERROR << PLAYTAG << "codecContext data error";
             avcodec_free_context(&m_videoCodecContext);
             avformat_close_input(&m_formatContext);
             return false;
@@ -514,14 +548,14 @@ bool MediaReader::StreamOpen()
         m_audioCodecContext = avcodec_alloc_context3(audioCodec);
         ret = avcodec_parameters_to_context(m_audioCodecContext, audiooCodecParameters);
         if (AVERROR(ret)) {
-            LOG_ERROR << m_playIndex << "avcodec_parameters_to_context failed," << ret << ":" << av_error_string(ret);
+            LOG_ERROR << PLAYTAG << "avcodec_parameters_to_context failed," << ret << ":" << av_error_string(ret);
             avcodec_free_context(&m_audioCodecContext);
             avformat_close_input(&m_formatContext);
             return false;
         }
         ret = avcodec_open2(m_audioCodecContext, audioCodec, nullptr);
         if (ret != 0) {
-            LOG_ERROR << m_playIndex << "audio avcodec_open2 failed," << ret << ":" << av_error_string(ret);
+            LOG_ERROR << PLAYTAG << "audio avcodec_open2 failed," << ret << ":" << av_error_string(ret);
             avcodec_free_context(&m_audioCodecContext);
             avformat_close_input(&m_formatContext);
             return false;
@@ -554,6 +588,8 @@ void MediaReader::StreamClose()
     }
     m_videoStreamIndex = -1;
     m_audioStreamIndex = -1;
+    m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;//硬解码类型
+    m_hwPixFmt = AV_PIX_FMT_NONE;//硬解码的格式
 }
 
 void MediaReader::FrameReaderSync()
@@ -566,7 +602,7 @@ void MediaReader::FrameReaderSync()
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;
 
-    LOG_INFO << m_playIndex << "FrameReader start";
+    LOG_INFO << PLAYTAG << "FrameReader start";
     int videoFrameIndex = 0;
     AVPacket* packet = av_packet_alloc();
     while (m_isThreadRun.load() && !m_isStreamOver.load())
@@ -575,11 +611,11 @@ void MediaReader::FrameReaderSync()
         int ret = av_read_frame(m_formatContext, packet);
         if (ret < 0)
         {
-            LOG_ERROR << m_playIndex << "av_read_frame err," << ret << ":" << av_error_string(ret);
+            LOG_ERROR << PLAYTAG << "av_read_frame err," << ret << ":" << av_error_string(ret);
             if (ret == AVERROR_EOF)
             {
                 m_isStreamOver.store(true);
-                LOG_INFO << m_playIndex << "FrameReader stream over";
+                LOG_INFO << PLAYTAG << "FrameReader stream over";
             }
             break;
         }
@@ -593,5 +629,5 @@ void MediaReader::FrameReaderSync()
         }
     }
     av_packet_free(&packet);
-    LOG_INFO << m_playIndex << "FrameReader end";
+    LOG_INFO << PLAYTAG << "FrameReader end";
 }

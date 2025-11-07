@@ -11,4 +11,6 @@ std::string string_format(const char* fmt, ...);
 
 void set_ffmpeg_log_callback();
 
+std::string uuid32();
+
 #endif // MEDIA_QUEUE_H

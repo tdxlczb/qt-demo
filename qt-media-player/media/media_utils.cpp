@@ -87,3 +87,17 @@ void set_ffmpeg_log_callback()
 {
     av_log_set_callback(log_callback);
 }
+
+
+#include <random>
+#include <sstream>
+#include <iomanip>
+
+std::string uuid32() {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
+    std::ostringstream oss;
+    for (int i = 0; i < 16; ++i) oss << std::hex << std::setw(2) << std::setfill('0') << dis(gen);
+    return oss.str();
+}

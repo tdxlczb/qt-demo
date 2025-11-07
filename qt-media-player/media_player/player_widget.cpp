@@ -43,14 +43,6 @@ PlayerWidget::~PlayerWidget()
 
 void PlayerWidget::StartPlay(const QString& url, int decodeType)
 {
-    //MediaParameter param;
-    //param.url = url.toStdString();
-    //param.hwDeviceName = "dxva2";
-    ////param.hwDeviceName = "d3d11va";
-    //param.outputVideoSpec = { 0, 0, AV_PIX_FMT_NONE };
-    ////param.outputVideoSpec = { 0, 0, AV_PIX_FMT_RGB24 };
-    //param.outputAudioSpec = { 16000, 16, 2, AV_SAMPLE_FMT_S16 };
-
     PlayOptions opt;
     if (decodeType == 1) {
         opt.hwdevice = "dxva2";
@@ -79,6 +71,7 @@ void PlayerWidget::StopPlay()
 {
     if (m_pMediaReader)
     {
+        m_pMediaReader->SetPlayEvent(nullptr);
         m_pMediaReader->Stop();
     }
     if (m_pVideoRender)
