@@ -49,5 +49,7 @@ private:
     QPoint m_pointMove = { 0,0 };//鼠标移动的坐标
     QPoint m_pointRelease = { 0,0 };//鼠标弹起的坐标
     bool m_isDraging = false;
+
+    bool m_isViewShowBlank = true; //视窗是否可以显示空白，不显示空白时，会限制缩放和移动
 };
 #endif // VIDEO_GLWIDGET_H
