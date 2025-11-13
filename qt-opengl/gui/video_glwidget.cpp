@@ -91,7 +91,22 @@ void VideoGLWidget::mouseReleaseEvent(QMouseEvent* event)
         m_isDraging = false;
         QPoint mouseMove = QPoint(m_pointRelease.x() - m_pointPress.x(), m_pointRelease.y() - m_pointPress.y());
         glm::vec2 vecMove = glm::vec2(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight);
-        m_lastTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f)) * m_lastTranslateMat;
+
+        if (!m_isViewShowBlank) {
+            //限制位移位置，窗口不显示空白区域
+            glm::mat4 curTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f));
+            glm::mat4 lastTransform = m_lastTranslateMat * m_curScaleMat;
+            glm::mat4 dstTransform = m_lastTranslateMat * curTranslateMat * m_curScaleMat;
+            glm::vec2 lastMove = glm::vec2(lastTransform[3].x, lastTransform[3].y);
+            glm::vec2 dstMove = glm::vec2(dstTransform[3].x, dstTransform[3].y);
+            float xMaxMove = m_curScaleMat[0][0] - 1.0f;
+            float yMaxMove = m_curScaleMat[1][1] - 1.0f;
+            dstMove.x = glm::clamp(dstMove.x, -xMaxMove, xMaxMove);
+            dstMove.y = glm::clamp(dstMove.y, -yMaxMove, yMaxMove);
+            vecMove = dstMove - lastMove;
+        }
+
+        m_lastTranslateMat = m_lastTranslateMat * glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f));
         m_curTranslateMat = glm::mat4(1.0f);
         update();
     }
@@ -111,6 +126,21 @@ void VideoGLWidget::mouseMoveEvent(QMouseEvent* event)
         if (m_isDraging) {
             QPoint mouseMove = QPoint(m_pointMove.x() - m_pointPress.x(), m_pointMove.y() - m_pointPress.y());
             glm::vec2 vecMove = glm::vec2(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight);
+            
+            if (!m_isViewShowBlank) {
+                //限制位移位置，窗口不显示空白区域
+                glm::mat4 curTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f));
+                glm::mat4 lastTransform = m_lastTranslateMat * m_curScaleMat;
+                glm::mat4 dstTransform = m_lastTranslateMat * curTranslateMat * m_curScaleMat;
+                glm::vec2 lastMove = glm::vec2(lastTransform[3].x, lastTransform[3].y);
+                glm::vec2 dstMove = glm::vec2(dstTransform[3].x, dstTransform[3].y);
+                float xMaxMove = m_curScaleMat[0][0] - 1.0f;
+                float yMaxMove = m_curScaleMat[1][1] - 1.0f;
+                dstMove.x = glm::clamp(dstMove.x, -xMaxMove, xMaxMove);
+                dstMove.y = glm::clamp(dstMove.y, -yMaxMove, yMaxMove);
+                vecMove = dstMove - lastMove;
+            }
+
             m_curTranslateMat = glm::translate(glm::mat4(1.0f), glm::vec3(vecMove, 0.0f));
             update();
         }
@@ -135,9 +165,14 @@ void VideoGLWidget::wheelEvent(QWheelEvent* event)
             qDebug() << "向下滚动，角度:" << angleDelta.y() << "鼠标位置:" << position;
         }
         float scale = 1.0f + angleDelta.y() / 7200.0f;
-        //if (scale < 1.0f) {
-        //    scale = 1.0f;
-        //}
+        if (!m_isViewShowBlank) {
+            //限制缩放大小
+            float dstScale = m_curScaleMat[0][0] * scale;
+            if (dstScale < 1.0f) {
+                scale = 1.0f / m_curScaleMat[0][0];
+            }
+        }
+
         QPoint center = QPoint(m_screenWidth / 2, m_screenHeight / 2);
         QPoint mouseMove = QPoint(position.x() - center.x(), position.y() - center.y());
         glm::vec2 vecMove = glm::vec2(2 * mouseMove.x() / (float)m_screenWidth, -2 * mouseMove.y() / (float)m_screenHeight);
@@ -147,6 +182,17 @@ void VideoGLWidget::wheelEvent(QWheelEvent* event)
         glm::mat4 transformMats1 = glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
         glm::mat4 transformMats2 = glm::translate(glm::mat4(1.0f), glm::vec3(-vecMove, 0.0f)) * m_lastTranslateMat;
         m_curScaleMat = transformMats0 * transformMats1 * transformMats2 * m_curScaleMat;
+
+        if (!m_isViewShowBlank) {
+            //限制位移位置，窗口不显示空白区域
+            glm::mat4 dstTransform = m_lastTranslateMat * m_curScaleMat;
+            float xMaxMove = m_curScaleMat[0][0] - 1.0f;
+            float yMaxMove = m_curScaleMat[1][1] - 1.0f;
+            dstTransform[3].x = glm::clamp(dstTransform[3].x, -xMaxMove, xMaxMove);
+            dstTransform[3].y = glm::clamp(dstTransform[3].y, -yMaxMove, yMaxMove);
+            m_lastTranslateMat = dstTransform * glm::inverse(m_curScaleMat);
+        }
+
         update();
         // 接受事件，阻止继续传播
         event->accept();
