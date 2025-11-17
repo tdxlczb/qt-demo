@@ -45,11 +45,6 @@ struct AudioSpec
     AudioFormat format = -1;  //对应ffmpeg中AVSampleFormat的值
 };
 
-using CopyFrameCallback = std::function<int(
-    uint8_t* dst_data[4], int dst_linesizes[4],
-    uint8_t* src_data[4], int src_linesizes[4],
-    int pix_fmt, int width, int height)>;
-
 /*
 * 视频帧
 */
@@ -59,7 +54,6 @@ struct VideoFrame
     size_t    size = 0;
     uint8_t*  linedata[8] = { 0 };
     int       linesize[8] = { 0 };
-    CopyFrameCallback copycb;
     double    pts = 0.0;//帧时间，转成秒
     size_t    index = 0;
     VideoSpec spec;
@@ -72,8 +66,10 @@ struct AudioFrame
 {
     uint8_t*  data = nullptr;
     size_t    size = 0;
-    int64_t   pts = 0;
-    double    timebase = 0.0;
+    uint8_t*  linedata[8] = { 0 };
+    int       linesize[8] = { 0 };
+    double    pts = 0.0;//帧时间，转成秒
+    size_t    index = 0;
     AudioSpec spec;
 };
 
@@ -82,11 +78,17 @@ struct PlayOptions
     std::string hwdevice;
 };
 
-const int kRenderFmtNONE = -1; //AV_PIX_FMT_NONE
-const int kRenderFmtRGB = 2; //AV_PIX_FMT_RGB24
-const int kRenderFmtYUV420P = 0; //AV_PIX_FMT_YUV420P
-const int kRenderFmtYUVJ420P = 12; //AV_PIX_FMT_YUVJ420P
-const int kRenderFmtNV12 = 23; //AV_PIX_FMT_NV12
+//AVPixelFormat
+const int kVideoFmtRGB = 2;  //AV_PIX_FMT_RGB24
+const int kVideoFmtYUV420P = 0;  //AV_PIX_FMT_YUV420P
+const int kVideoFmtYUVJ420P = 12; //AV_PIX_FMT_YUVJ420P
+const int kVideoFmtNV12 = 23; //AV_PIX_FMT_NV12
+
+//AVSampleFormat
+const int kAudioFmtU8 = 0;  //AV_SAMPLE_FMT_U8 
+const int kAudioFmtS16 = 1;  //AV_SAMPLE_FMT_S16 
+const int kAudioFmtS32 = 2;  //AV_SAMPLE_FMT_S32 
+const int kAudioFmtFLT = 3;  //AV_SAMPLE_FMT_FLT 
 
 using VideoCallback = std::function<void(const VideoFrame& frame)>;
 using AudioCallback = std::function<void(const AudioFrame& frame)>;

@@ -9,6 +9,7 @@ public:
     virtual ~PlayEvent() {};
     // 视频帧(渲染)回调
     virtual void onVideoFrame(const VideoFrame& frame) = 0;
+    virtual void onAudioFrame(const AudioFrame& frame) = 0;
     virtual void onClose(const PlayError& error) = 0;
 private:
 

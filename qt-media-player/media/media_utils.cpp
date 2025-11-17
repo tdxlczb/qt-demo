@@ -3,8 +3,11 @@
 
 extern "C"
 {
-#include <libavutil/error.h>
 #include <libavutil/log.h>
+#include <libavutil/avutil.h>
+#include <libavutil/error.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/samplefmt.h>
 }
 
 #include "log.h"
@@ -100,4 +103,28 @@ std::string uuid32() {
     std::ostringstream oss;
     for (int i = 0; i < 16; ++i) oss << std::hex << std::setw(2) << std::setfill('0') << dis(gen);
     return oss.str();
+}
+
+int video_copy(uint8_t* dst_data[4], int dst_linesizes[4], uint8_t* src_data[4], int src_linesizes[4], int pix_fmt, int width, int height)
+{
+    int      bufferSize = av_image_get_buffer_size((AVPixelFormat)pix_fmt, width, height, 1);
+    if (!dst_data[0]) {
+        uint8_t* buffer = new uint8_t[bufferSize * sizeof(uint8_t)]; //这里申请的buffer，需要单独释放
+        av_image_fill_arrays(dst_data, dst_linesizes, buffer, (AVPixelFormat)pix_fmt, width, height, 1);
+        //如何使用malloc申请内存，外部释放需要用free，而不是delete
+        //av_image_alloc(dst_data, dst_linesizes, width, height, (AVPixelFormat)pix_fmt, 1);//这里的内存需要单独释放av_freep(&pointers[0])
+    }
+    av_image_copy(dst_data, dst_linesizes, (const uint8_t**)src_data, src_linesizes, (AVPixelFormat)pix_fmt, width, height);
+    return bufferSize;
+}
+
+int audio_copy(uint8_t* dst_data[4], int dst_linesizes[4], uint8_t* src_data[4], int src_linesizes[4], int nb_samples, int nb_channels, int sample_fmt)
+{
+    int bufferSize = av_samples_get_buffer_size(dst_linesizes, nb_channels, nb_samples, (AVSampleFormat)sample_fmt, 1);
+    if (!dst_data[0]) {
+        uint8_t* buffer = new uint8_t[bufferSize * sizeof(uint8_t)]; //注意，这里申请的buffer，需要单独释放
+        av_samples_fill_arrays(dst_data, dst_linesizes, buffer, nb_channels, nb_samples, (AVSampleFormat)sample_fmt, 1);
+    }
+    av_samples_copy(dst_data, src_data, 0, 0, nb_samples, nb_channels, (AVSampleFormat)sample_fmt);
+    return bufferSize;
 }

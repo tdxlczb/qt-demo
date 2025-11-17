@@ -306,14 +306,16 @@ void MediaPlayer::onPlayClicked()
     QString playUrl = infoTextEdit->toPlainText();
     if (playUrl.isEmpty())
     {
-        //playUrl = "E:/code/media/BaiduSyncdisk.mp4";
+        playUrl = "E:/code/media/BaiduSyncdisk.mp4";
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
-        playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
+        //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
 
         //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
         //playUrl = "rtsp://172.16.19.69/live/test";
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
         //playUrl = "rtsp://172.16.19.40:554/rtp/34020000001110000001_34020000001320000001_3?token=xCO73xOfG5uekWf4";
+
+        infoTextEdit->setPlainText(playUrl);
     }
     m_pPlayerWidget->StartPlay(playUrl);
     m_pPlayerWidget->show();

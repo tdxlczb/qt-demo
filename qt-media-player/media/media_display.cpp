@@ -76,7 +76,10 @@ PlayError VideoConverter::InitDstFrame()
     m_pFrameDst->format = m_dstSpec.format;
     m_pFrameDst->width = m_dstSpec.width;
     m_pFrameDst->height = m_dstSpec.height;
+    //av_image_alloc申请一块连续内存，pointers[i]的指针分别指向这块内存中各平面的起始位置，使用av_freep(&pointers[0])释放这块内存，只使用av_frame_free不能释放申请的内存
     int iRet = av_image_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->width, m_pFrameDst->height, (AVPixelFormat)m_pFrameDst->format, 1);
+    //av_frame_get_buffer给每个平面单独申请内存，使用av_frame_free释放每个平面的内存
+    //int iRet = av_frame_get_buffer(m_pFrameDst, 64);
     if (iRet <= 0) {
         LOG_ERROR << "converterId:" << m_converterId << " av_image_alloc error:" << iRet;
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
@@ -122,19 +125,6 @@ PlayError VideoConverter::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
             return err;
         }
     }
-
-    //内存拷贝回调
-    outFrame.copycb = [](uint8_t* dst_data[4], int dst_linesizes[4],
-        uint8_t* src_data[4], int src_linesizes[4],
-        int pix_fmt, int width, int height) {
-            int      bufferSize = av_image_get_buffer_size((AVPixelFormat)pix_fmt, width, height, 1);
-            if (!dst_data[0]) {
-                uint8_t* buffer = (uint8_t*)av_malloc(bufferSize * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
-                av_image_fill_arrays(dst_data, dst_linesizes, buffer, (AVPixelFormat)pix_fmt, width, height, 1);
-            }
-            av_image_copy(dst_data, dst_linesizes, (const uint8_t**)src_data, src_linesizes, (AVPixelFormat)pix_fmt, width, height);
-            return bufferSize;
-        };
 
     uint8_t* buffer = nullptr;
     size_t bufferSize = 0;
@@ -324,14 +314,25 @@ PlayError AudioConverter::InitDstFrame()
     m_pFrameDst->channel_layout = av_get_default_channel_layout(m_dstSpec.channels);
     m_pFrameDst->channels = m_dstSpec.channels;
     m_pFrameDst->format = m_dstSpec.format;
-    m_pFrameDst->nb_samples = 1024;
-    int iRet = av_frame_get_buffer(m_pFrameDst, 64);
+    m_pFrameDst->nb_samples = 1024; //这里必须设置值，否则av_samples_alloc申请不到内存 AVFrame内部nb_samples默认设置为1024
+
+    //av_samples_alloc申请一块连续内存，pointers[i]的指针分别指向这块内存中各平面的起始位置，使用av_freep(&pointers[0])释放这块内存，只使用av_frame_free不能释放申请的内存
+    int iRet = av_samples_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->channels, m_pFrameDst->nb_samples, (AVSampleFormat)m_pFrameDst->format, 1);
+    //av_frame_get_buffer给每个平面单独申请内存，使用av_frame_free释放每个平面的内存
+    //int iRet = av_frame_get_buffer(m_pFrameDst, 64);
     if (AVERROR(iRet)) {
         LOG_ERROR << "converterId:" << m_converterId << " av_frame_get_buffer error:" << iRet;
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
+
+//#define DEBUG_PCM
+#ifdef DEBUG_PCM
+#include <fstream>
+static std::ofstream g_pcmOutput;
+static std::ofstream g_pcmInput;
+#endif
 
 PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
 {
@@ -362,6 +363,19 @@ PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
         if (err.code != PlayErrorCode::kNoError) {
             return err;
         }
+#ifdef DEBUG_PCM
+        g_pcmOutput.open("audio_convert_output.pcm", std::ios::binary);
+        if (!g_pcmOutput.is_open())
+        {
+            qDebug() << "open failed";
+        }
+
+        g_pcmInput.open("audio_convert_input.pcm", std::ios::binary);
+        if (!g_pcmInput.is_open())
+        {
+            qDebug() << "open failed";
+        }
+#endif // DEBUG_PCM
     }
     if (nullptr == m_pFrameDst || needInitSwrContext) {
         auto err = InitDstFrame();
@@ -369,26 +383,44 @@ PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
             return err;
         }
     }
-
+#ifdef DEBUG_PCM
+    if (g_pcmInput.is_open())
+    {
+        size_t bufferSize = av_samples_get_buffer_size(pFrame->linesize, pFrame->channels, pFrame->nb_samples, (AVSampleFormat)pFrame->format, 1);
+        g_pcmInput.write(reinterpret_cast<const char*>(pFrame->data[0]), bufferSize);
+        g_pcmInput.flush();
+    }
+#endif // DEBUG_PCM
     uint8_t* buffer = nullptr;
     size_t bufferSize = 0;
     if (needSwrConvert) {
         int max_out_nb_samples = av_rescale_rnd(pFrame->nb_samples, m_dstSpec.sampleRate, pFrame->sample_rate, AV_ROUND_UP);
         m_pFrameDst->nb_samples = max_out_nb_samples;
-        int ret = swr_convert_frame(m_pSwrCxtAudio, m_pFrameDst, pFrame);
-        //int ret = swr_convert(m_pSwrCxtAudio, m_pFrameDst->data, max_out_nb_samples, (const uint8_t**)pFrame->data, pFrame->nb_samples);
-        if (ret < 0) {
-            LOG_ERROR << "converterId:" << m_converterId << " swr_convert err," << ret;
+        //int ret = swr_convert_frame(m_pSwrCxtAudio, m_pFrameDst, pFrame);
+        int out_nb_samples = swr_convert(m_pSwrCxtAudio, m_pFrameDst->data, max_out_nb_samples, (const uint8_t**)pFrame->data, pFrame->nb_samples);
+        if (out_nb_samples < 0) {
+            LOG_ERROR << "converterId:" << m_converterId << " swr_convert err," << out_nb_samples;
             return PlayError{ PlayErrorCode::kConverteFailed,"" };
         }
         buffer = m_pFrameDst->data[0];
-        bufferSize = m_pFrameDst->nb_samples * m_dstSpec.channels * av_get_bytes_per_sample((AVSampleFormat)m_dstSpec.format);
+        bufferSize = out_nb_samples * m_dstSpec.channels * av_get_bytes_per_sample((AVSampleFormat)m_dstSpec.format);
     }
     else {
-        buffer = pFrame->data[0];
-        bufferSize = pFrame->nb_samples * m_dstSpec.channels * av_get_bytes_per_sample((AVSampleFormat)m_dstSpec.format);
-    }
+        //将源帧的不连续内存数据拷贝到连续内存的帧，不连续内存后续不方便使用
+        av_samples_copy(m_pFrameDst->data, pFrame->data, 0, 0, pFrame->nb_samples, pFrame->channels, (AVSampleFormat)pFrame->format);
+        buffer = m_pFrameDst->data[0];
+        bufferSize = m_pFrameDst->nb_samples * m_dstSpec.channels * av_get_bytes_per_sample((AVSampleFormat)m_dstSpec.format);
 
+        //buffer = pFrame->data[0];
+        //bufferSize = av_samples_get_buffer_size(pFrame->linesize, pFrame->channels, pFrame->nb_samples, (AVSampleFormat)pFrame->format, 1);
+    }
+#ifdef DEBUG_PCM
+    if (g_pcmOutput.is_open())
+    {
+        g_pcmOutput.write(reinterpret_cast<const char*>(buffer), bufferSize);
+        g_pcmOutput.flush();
+    }
+#endif // DEBUG_PCM
     outFrame.data = buffer;
     outFrame.size = bufferSize;
     outFrame.spec = m_dstSpec;
@@ -397,6 +429,25 @@ PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
         m_pCallback(outFrame);
     }
     return PlayError{ PlayErrorCode::kNoError,"" };
+}
+
+PlayError AudioConverter::DisplayInput(const AudioFrame& inFrame, AudioFrame& outFrame)
+{
+    AVFrame* pFrame = av_frame_alloc();
+    pFrame->sample_rate = inFrame.spec.sampleRate;
+    pFrame->channel_layout = av_get_default_channel_layout(inFrame.spec.channels);
+    pFrame->channels = inFrame.spec.channels;
+    av_channel_layout_default(&pFrame->ch_layout, inFrame.spec.channels);
+    pFrame->format = inFrame.spec.format;
+    pFrame->nb_samples = 1024;
+    for (size_t i = 0; i < 8; i++)
+    {
+        pFrame->data[i] = inFrame.linedata[i];
+        pFrame->linesize[i] = inFrame.linesize[i];
+    }
+    auto ret = DisplayInput(pFrame, outFrame);
+    av_frame_free(&pFrame);
+    return ret;
 }
 
 PlayError AudioConverter::DisplayInput(AVFrame* pFrame)

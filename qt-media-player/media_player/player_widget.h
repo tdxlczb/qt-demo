@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <QWidget>
+#include <QHash>
 #include "media/media_define.h"
 #include "media/media_play_event.h"
 
@@ -11,6 +12,7 @@ class AudioRender;
 class MediaReader;
 class FishEyeWidget;
 class VideoConverter;
+class AudioConverter;
 class PlayerWidget : public QWidget, public PlayEvent
 {
     Q_OBJECT
@@ -23,6 +25,7 @@ public:
 
 protected:
     virtual void onVideoFrame(const VideoFrame& frame) override;
+    virtual void onAudioFrame(const AudioFrame& frame) override;
     virtual void onClose(const PlayError& error) override;
 
 signals:
@@ -55,7 +58,9 @@ private:
 
     std::atomic_bool m_isVideoPlaying = {false};
     std::atomic_bool m_isAudioPlaying = {false};
-    VideoConverter* m_pVideoConverter = nullptr;
+
+    QHash<int, VideoConverter*> m_hashVideoConverter;
+    QHash<int, AudioConverter*> m_hashAudioConverter;
 };
 
 #endif // PLAYER_WIDGET_H

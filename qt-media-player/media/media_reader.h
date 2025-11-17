@@ -59,6 +59,7 @@ private:
     */
     void DisplayThread();
     void DisplayVideo(AVFrame* frame);
+    void DisplayAudio(AVFrame* frame);
 
     bool StreamOpen();
     void StreamClose();
@@ -78,6 +79,7 @@ private:
     std::thread m_thVideoDisplay;
     std::atomic_bool m_isStreamOver{ false };
 
+    bool m_isMediaFile = false;
     AVFormatContext* m_formatContext = nullptr;
     int m_videoStreamIndex = -1;
     int m_audioStreamIndex = -1;
@@ -93,11 +95,14 @@ private:
 
     int64_t m_videoPacketIndex = 0;
     int64_t m_audioPacketIndex = 0;
+    int64_t m_videoPacketSize = 0; //用于计算码率
+    int64_t m_audioPacketSize = 0; //用于计算码率
+    int64_t m_lastCountPacketSizeTime = 0;
+
     int64_t m_videoFrameIndex = 0;
     int64_t m_audioFrameIndex = 0;
     int64_t m_iLastCountTime = 0;
 
-    double m_timebase = 0.0;
     double m_clockStart = 0.0; //时钟开始时间
     double m_startPts = 0.0; //帧开始时间
     double m_syncThreshold = 0.1;    //同步阈值

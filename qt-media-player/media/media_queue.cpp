@@ -15,33 +15,45 @@ PacketQueue::~PacketQueue()
 {
 }
 
-void PacketQueue::Push(AVPacket* pkt)
+void PacketQueue::Push(AVPacket* pkt, bool fullRemove)
 {
-    std::unique_lock<std::mutex> lock(m_packetQueueMutex);
     AVPacket* pktNew = av_packet_alloc();
     if (!pktNew) {
         av_packet_unref(pkt);
         return;
     }
     av_packet_move_ref(pktNew, pkt);
-    if (m_packetQueue.size() < m_maxQueueSize) {
+
+    std::unique_lock<std::mutex> lock(m_packetQueueMutex);
+    if (!fullRemove) {
+        // 当队列满了，阻塞在这里
+        // 停止播放时，通过Clear清空队列可以解除阻塞
+        m_queueCV.wait(lock, [this]() {
+            return m_packetQueue.size() < m_maxQueueSize;
+            });
+        //lock.unlock();
         m_packetQueue.push(pktNew);
     }
     else {
-        LOG_INFO << "packet 队列已满，准备清空";
-        //这里清空队列要释放内存，清理一半
-        auto packetSize = m_packetQueue.size() / 2;
-        for (size_t i = 0; i < packetSize; i++)
-        {
-            AVPacket* packet = m_packetQueue.front();
-            if (i == 0) {
-                LOG_INFO << "start pop packet pts:" << packet->pts;
+        if (m_packetQueue.size() < m_maxQueueSize) {
+            m_packetQueue.push(pktNew);
+        }
+        else {
+            LOG_INFO << "packet 队列已满，准备清空";
+            //这里清空队列要释放内存，清理一半
+            auto packetSize = m_packetQueue.size() / 2;
+            for (size_t i = 0; i < packetSize; i++)
+            {
+                AVPacket* packet = m_packetQueue.front();
+                if (i == 0) {
+                    LOG_INFO << "start pop packet pts:" << packet->pts;
+                }
+                if (i == packetSize - 1) {
+                    LOG_INFO << "end pop packet pts:" << packet->pts;
+                }
+                m_packetQueue.pop();
+                av_packet_free(&packet);
             }
-            if (i == packetSize - 1) {
-                LOG_INFO << "end pop packet pts:" << packet->pts;
-            }
-            m_packetQueue.pop();
-            av_packet_free(&packet);
         }
     }
 }
@@ -53,6 +65,7 @@ AVPacket* PacketQueue::PopFront()
         return nullptr;
     AVPacket* pkt = m_packetQueue.front();
     m_packetQueue.pop();
+    m_queueCV.notify_all();
     return pkt;
 }
 

@@ -9,10 +9,12 @@
 #include "media/media_display.h"
 #include "fisheye_widget.h"
 
+const int kVideoRGBConverter = 1;
+const int kAudioS16Converter = 1;
+
 PlayerWidget::PlayerWidget(QWidget* parent, int winIndex)
     : QWidget(parent)
     , m_winIndex(winIndex)
-    , m_pAudioRender(new AudioRender())
 {
     //this->setAutoFillBackground(true);
     ////设置主窗口背景颜色
@@ -29,6 +31,7 @@ PlayerWidget::PlayerWidget(QWidget* parent, int winIndex)
     auto VideoRender = new OpenGLRenderWidget(this);//render背景颜色#808080
     //auto VideoRender = new SDLRenderWidget(this);
     m_pVideoRender = VideoRender;
+    m_pAudioRender = new AudioRender(true);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 2, 2, 2);  // 设置边距是为了选中时可以设置border
@@ -54,9 +57,6 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     if (!m_pMediaReader)
         m_pMediaReader = new MediaReader(m_winIndex);
 
-    //m_pAudioRender->Start(param.outputAudioSpec, 1024);
-    //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
-
     m_pMediaReader->SetPlayEvent(this);
     m_pMediaReader->Play(url.toStdString(), opt);
 
@@ -65,6 +65,24 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     //m_pFishEyeWidget->show();
     //m_pFishEyeWidget->SetFishEyeType(FECSetupType::None, FECShowType::Normal);
 
+    if (!m_hashVideoConverter.contains(kVideoRGBConverter)) {
+        VideoSpec spec;
+        spec = { 0, 0, AV_PIX_FMT_RGB24 };
+        VideoConverter* converter = new VideoConverter(0, spec);
+        m_hashVideoConverter.insert(kVideoRGBConverter,converter);
+    }
+    AudioSpec spec;
+    spec.sampleRate = 16000;
+    spec.bitPerSample = 16;
+    spec.channels = 2;
+    spec.format = AV_SAMPLE_FMT_S16;
+    if (!m_hashAudioConverter.contains(kAudioS16Converter)) {
+        AudioConverter* converter = new AudioConverter(0, spec);
+        m_hashAudioConverter.insert(kAudioS16Converter, converter);
+    }
+
+    m_pAudioRender->Start(spec, 1024);
+    //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
 }
 
 void PlayerWidget::StopPlay()
@@ -76,6 +94,9 @@ void PlayerWidget::StopPlay()
     }
     if (m_pVideoRender)
         m_pVideoRender->ClearContent();
+
+    if (m_pAudioRender)
+        m_pAudioRender->Stop();
 }
 
 #include <chrono>
@@ -83,19 +104,17 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 {
     m_isVideoPlaying = true;
 
-    //if (!m_pVideoConverter) {
-    //    VideoSpec spec;
-    //    spec = { 0, 0, AV_PIX_FMT_RGB24 };
-    //    m_pVideoConverter = new VideoConverter(0, spec);
-    //}
-    if (m_pVideoConverter) {
-        VideoFrame outFrame;
-        m_pVideoConverter->DisplayInput(frame, outFrame);
-        m_pVideoRender->UpdateContent(outFrame);
+    VideoFrame outFrame;
+    if (frame.spec.format != kVideoFmtYUV420P && frame.spec.format != kVideoFmtYUVJ420P && frame.spec.format != kVideoFmtNV12) {
+        auto converter = m_hashVideoConverter.value(kVideoRGBConverter);
+        if (converter)
+            converter->DisplayInput(frame, outFrame);
     }
     else {
-        m_pVideoRender->UpdateContent(frame);
+        outFrame = frame;
     }
+    m_pVideoRender->UpdateContent(outFrame);
+
     //auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
     //if (m_pFishEyeWidget) {
     //    cv::Mat matIn = cv::Mat(frame.spec.height, frame.spec.width, CV_8UC3, frame.data);//传递处理后的效果图
@@ -104,6 +123,22 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
     //auto t2 = std::chrono::high_resolution_clock().now().time_since_epoch();
     //auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
     //qDebug() << "delta time:" << duration;
+}
+
+void PlayerWidget::onAudioFrame(const AudioFrame& frame)
+{
+    m_isAudioPlaying = true;
+
+    AudioFrame outFrame;
+    if (frame.spec.format != kAudioFmtS16 || frame.spec.sampleRate != 16000 || frame.spec.channels != 2) {
+        auto converter = m_hashAudioConverter.value(kAudioS16Converter);
+        if (converter)
+            converter->DisplayInput(frame, outFrame);
+    }
+    else {
+        outFrame = frame;
+    }
+    m_pAudioRender->Write(outFrame);
 }
 
 void PlayerWidget::onClose(const PlayError& error)

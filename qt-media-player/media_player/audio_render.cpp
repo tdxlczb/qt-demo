@@ -1,12 +1,13 @@
 #include "audio_render.h"
 #include <QDebug>
+#include <QApplication>
 #include "RtAudio.h"
 
 //#define DEBUG_PCM
 #ifdef DEBUG_PCM
 #include <fstream>
-std::ofstream g_pcmOutput;
-std::ofstream g_pcmInput;
+static std::ofstream g_pcmOutput;
+static std::ofstream g_pcmInput;
 #endif
 
 AudioRender::AudioRender(bool useJitterBuffer)
@@ -32,6 +33,15 @@ static int audioCallback(void *outputBuffer, void *inputBuffer, unsigned int nFr
 
 void AudioRender::Start(const AudioSpec& audioSpec, int renderFrameCount)
 {
+#ifdef DEBUG_PCM
+    QString dirPath = QCoreApplication::applicationDirPath();
+    g_pcmInput.open(QString(dirPath + "/audio_render_input.pcm").toStdString().c_str(), std::ios::binary);
+    if (!g_pcmInput.is_open())
+    {
+        qDebug() << "open failed";
+    }
+#endif // DEBUG_PCM
+
     if (m_isUseJitterBuffer) {
         if (!m_audioBuffer->IsInit())
         {
@@ -160,6 +170,14 @@ void AudioRender::Write(const AudioFrame&frame)
     m_audioBufferCV.wait(lock, [this, &frame]() {
         return m_audioBuffer->GetFreeSize() > frame.size;
         });
+
+#ifdef DEBUG_PCM
+    if (g_pcmInput.is_open())
+    {
+        g_pcmInput.write(reinterpret_cast<const char*>(frame.data), frame.size);
+        g_pcmInput.flush();
+    }
+#endif // DEBUG_PCM
 
     if (frame.spec.bitPerSample == 8)
     {

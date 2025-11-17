@@ -95,7 +95,6 @@ void MediaReader::Stop()
     m_videoFrameIndex = 0;
     m_audioFrameIndex = 0;
     m_iLastCountTime = 0;
-    m_timebase = 0.0;
     m_clockStart = 0.0;
     m_startPts = 0.0;
 }
@@ -160,13 +159,24 @@ void MediaReader::ReadThread()
             }
             continue;
         }
+        int64_t curTime = av_gettime_relative();
         if (packet->stream_index == m_videoStreamIndex)
         {
-            m_videoPacketQueue.Push(packet);
+            m_videoPacketSize += packet->size;
+            m_videoPacketQueue.Push(packet, !m_isMediaFile);
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
-            m_audioPacketQueue.Push(packet);
+            m_audioPacketSize += packet->size;
+            m_audioPacketQueue.Push(packet, !m_isMediaFile);
+        }
+        if (curTime - m_lastCountPacketSizeTime >= 1000000) {
+            m_lastCountPacketSizeTime = curTime;
+            int videoKbps = (double)m_videoPacketSize * 8 / 1000;
+            int audioKbps = (double)m_audioPacketSize * 8 / 1000;
+            LOG_INFO << PLAYTAG << "video " << videoKbps << ", audio " << audioKbps;
+            m_videoPacketSize = 0;
+            m_audioPacketSize = 0;
         }
     }
     av_packet_free(&packet);
@@ -183,7 +193,6 @@ void MediaReader::VideoThread()
     double    fps = av_q2d(videoStream->avg_frame_rate);
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;
-    m_timebase = av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base);
 
     int frameIndex = 0;
     while (m_isThreadRun.load() && !m_isStreamOver.load())
@@ -323,6 +332,7 @@ void MediaReader::AudioDecode(AVPacket* packet)
         }
         //LOG_DEBUG << PLAYTAG << "decode audio frame index:" << m_audioFrameIndex;
         m_audioFrameIndex++;
+        DisplayAudio(frame);
         av_frame_free(&frame);
     }
 }
@@ -345,7 +355,7 @@ void MediaReader::DisplayVideo(AVFrame* frame)
 {
     int npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
     //LOG_INFO << PLAYTAG << "frameIndex:" << m_videoFrameIndex << ",pts:" << npts;
-    double pts = npts * m_timebase;
+    double pts = npts * av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base);
     double now = av_gettime_relative() / 1000000.0;
     if (m_clockStart <= 0.0) {
         m_clockStart = now;
@@ -364,7 +374,7 @@ void MediaReader::DisplayVideo(AVFrame* frame)
     else if (diff < -m_syncThreshold) {
         // 视频落后，加快播放（减少延迟）,或者丢帧
         //delay = delay * 0.9;
-        return;
+        //return;
     }
     if (delay > 0) {
         // 确保延迟在合理范围内
@@ -374,17 +384,6 @@ void MediaReader::DisplayVideo(AVFrame* frame)
 
     if (m_playEvent) {
         VideoFrame outFrame;
-        outFrame.copycb = [](uint8_t* dst_data[4], int dst_linesizes[4],
-            uint8_t* src_data[4], int src_linesizes[4],
-            int pix_fmt, int width, int height) {
-                int      bufferSize = av_image_get_buffer_size((AVPixelFormat)pix_fmt, width, height, 1);
-                if (!dst_data[0]) {
-                    uint8_t* buffer = (uint8_t*)av_malloc(bufferSize * sizeof(uint8_t)); //注意，这里给frameRGB申请的buffer，需要单独释放
-                    av_image_fill_arrays(dst_data, dst_linesizes, buffer, (AVPixelFormat)pix_fmt, width, height, 1);
-                }
-                av_image_copy(dst_data, dst_linesizes, (const uint8_t**)src_data, src_linesizes, (AVPixelFormat)pix_fmt, width, height);
-                return bufferSize;
-            };
         for (size_t i = 0; i < 8; i++)
         {
             outFrame.linedata[i] = frame->data[i];
@@ -399,9 +398,77 @@ void MediaReader::DisplayVideo(AVFrame* frame)
     }
 }
 
+void MediaReader::DisplayAudio(AVFrame* frame)
+{
+    int npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
+    //LOG_INFO << PLAYTAG << "frameIndex:" << m_audioFrameIndex << ",pts:" << npts;
+    double pts = npts * av_q2d(m_formatContext->streams[m_audioStreamIndex]->time_base);
+    if (m_playEvent) {
+        AudioFrame outFrame;
+        for (size_t i = 0; i < 8; i++)
+        {
+            outFrame.linedata[i] = frame->data[i];
+            outFrame.linesize[i] = frame->linesize[i];
+        }
+        outFrame.pts = pts;
+        outFrame.index = m_audioFrameIndex;
+        outFrame.spec.sampleRate = frame->sample_rate;
+        outFrame.spec.channels = frame->channels;
+        outFrame.spec.format = frame->format;
+        m_playEvent->onAudioFrame(outFrame);
+    }
+}
+
 //复用同一个AVHWDeviceContext能减少大量cpu和gpu
 static AVBufferRef* g_d3d11_device = nullptr;
 static AVBufferRef* g_dxva2_device = nullptr;
+
+bool IsNetworkStream(const std::string& url) {
+    const std::vector<std::string> protocols = {
+        "http://", "https://", "rtmp://", "rtsp://", "ftp://",
+        "udp://", "tcp://", "mms://", "rtp://"
+    };
+
+    for (const auto& proto : protocols) {
+        if (url.find(proto) == 0) {  // 以协议头开头
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsMediaTypeFile(AVFormatContext* fmtCtx, const std::string& url) {
+    // 方法1: 优先检查URL协议（最准确）
+    if (IsNetworkStream(url)) {
+        return false;
+    }
+
+    if (!fmtCtx)
+        return true;
+
+    // 方法2: 检查iformat和flags
+    if (fmtCtx->iformat) {
+        // 检查是否是常见的直播格式
+        const char* formatName = fmtCtx->iformat->name;
+        if (strstr(formatName, "rtsp") || strstr(formatName, "rtmp")) {
+            return false;
+        }
+
+        // 检查AVFMT_NOFILE标志
+        if (fmtCtx->iformat->flags & AVFMT_NOFILE) {
+            return false;
+        }
+    }
+
+    // 方法3: 检查时长（辅助判断）
+    if (fmtCtx->duration == AV_NOPTS_VALUE) {
+        // 无时长，很可能是实时流
+        return false;
+    }
+
+    // 默认认为是文件
+    return true;
+}
 
 bool MediaReader::StreamOpen()
 {
@@ -562,6 +629,8 @@ bool MediaReader::StreamOpen()
         }
     }
     m_audioStreamIndex = audioStreamIndex;
+
+    m_isMediaFile = IsMediaTypeFile(m_formatContext, m_url);
     return true;
 }
 

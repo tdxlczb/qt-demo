@@ -64,6 +64,7 @@ public:
     * 返回的帧数据使用的是当前类的buffer地址，会被下一帧数据覆盖，如果要使用data
     */
     PlayError DisplayInput(AVFrame* pFrame, AudioFrame& outFrame);
+    PlayError DisplayInput(const AudioFrame& inFrame, AudioFrame& outFrame);
     /*
     * 重采样，并且调用回调函数
     */

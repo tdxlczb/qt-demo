@@ -2,6 +2,7 @@
 #include <QPainter>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include "media/media_utils.h"
 
 VideoRGBRender::VideoRGBRender(QWidget* parent) : QWidget(parent)
 {
@@ -511,13 +512,13 @@ cv::Mat OpenGLRenderWidget::GetRGBContent()
     try {
         switch (m_frame.spec.format)
         {
-        case kRenderFmtRGB:
+        case kVideoFmtRGB:
         {
             rgbMat = cv::Mat(m_frame.spec.height, m_frame.spec.width, CV_8UC3, m_frame.data).clone();
             break;
         }
-        case kRenderFmtYUV420P:
-        case kRenderFmtYUVJ420P:
+        case kVideoFmtYUV420P:
+        case kVideoFmtYUVJ420P:
         {
             //宽高为uint16_t时有风险，w*h会超过short最大值，要改成int
             int size = m_frame.spec.height * m_frame.spec.width * 1.5;
@@ -539,7 +540,7 @@ cv::Mat OpenGLRenderWidget::GetRGBContent()
             delete[] data;
             break;
         }
-        case kRenderFmtNV12:
+        case kVideoFmtNV12:
         {
             int size = m_frame.spec.height * m_frame.spec.width * 1.5;
             uint8_t* data = new uint8_t[size];
@@ -630,7 +631,7 @@ void OpenGLRenderWidget::UpdateContent(const VideoFrame& frame)
             }
 
             //这里拷贝数据到一块连续内存
-            m_frame.size = frame.copycb(m_frame.linedata, m_frame.linesize, src_data, src_linesizes, frame.spec.format, frame.spec.width, frame.spec.height);
+            m_frame.size = video_copy(m_frame.linedata, m_frame.linesize, src_data, src_linesizes, frame.spec.format, frame.spec.width, frame.spec.height);
             m_frame.data = m_frame.linedata[0];
         }
         else {
@@ -726,18 +727,18 @@ void OpenGLRenderWidget::paintGL()
     glBindVertexArray(m_VAO);
     switch (m_frame.spec.format)
     {
-    case kRenderFmtRGB:
+    case kVideoFmtRGB:
     {
         renderRGB();
         break;
     }
-    case kRenderFmtYUV420P:
-    case kRenderFmtYUVJ420P:
+    case kVideoFmtYUV420P:
+    case kVideoFmtYUVJ420P:
     {
         renderYUV420();
         break;
     }
-    case kRenderFmtNV12:
+    case kVideoFmtNV12:
     {
         renderNV12();
         break;
@@ -841,14 +842,14 @@ void OpenGLRenderWidget::updatePlaneInfo(int w, int h, int format)
 {
     switch (m_frame.spec.format)
     {
-    case kRenderFmtRGB:
+    case kVideoFmtRGB:
     {
         m_plane[0] = { w,h,w * 3,w * h * 3 };
         m_planeSize = 1;
         break;
     }
-    case kRenderFmtYUV420P:
-    case kRenderFmtYUVJ420P:
+    case kVideoFmtYUV420P:
+    case kVideoFmtYUVJ420P:
     {
         m_plane[0] = { w,h,w,w * h };
         m_plane[1] = { w / 2,h / 2,w / 2,w * h / 4 };
@@ -856,7 +857,7 @@ void OpenGLRenderWidget::updatePlaneInfo(int w, int h, int format)
         m_planeSize = 3;
         break;
     }
-    case kRenderFmtNV12:
+    case kVideoFmtNV12:
     {
         m_plane[0] = { w,h,w,w * h };
         m_plane[1] = { w / 2,h / 2,w,w * h / 2 };
@@ -913,7 +914,7 @@ void OpenGLRenderWidget::uploadPBOData()
         return;
     }
     m_pboIdx = (m_pboIdx + 1) % 2;   // 环形前进
-    if (m_frame.spec.format == kRenderFmtYUV420P || m_frame.spec.format == kRenderFmtYUVJ420P) {
+    if (m_frame.spec.format == kVideoFmtYUV420P || m_frame.spec.format == kVideoFmtYUVJ420P) {
 
         for (size_t i = 0; i < m_planeSize; i++)
         {
@@ -928,7 +929,7 @@ void OpenGLRenderWidget::uploadPBOData()
                     memcpy(dst + y * dstStride, m_frame.linedata[i] + y * srcStride, dstStride);
         }
     }
-    else if (m_frame.spec.format == kRenderFmtNV12) {
+    else if (m_frame.spec.format == kVideoFmtNV12) {
         /* 只改拷贝部分，其余令牌逻辑不变 */
         uint8_t* dstY = static_cast<uint8_t*>(m_mapped[0][m_pboIdx]);
         uint8_t* dstUV = static_cast<uint8_t*>(m_mapped[1][m_pboIdx]);
@@ -962,18 +963,18 @@ void OpenGLRenderWidget::initGL()
     releaseGL();
     switch (m_frame.spec.format)
     {
-    case kRenderFmtRGB:
+    case kVideoFmtRGB:
     {
         initRGB();
         break;
     }
-    case kRenderFmtYUV420P:
-    case kRenderFmtYUVJ420P:
+    case kVideoFmtYUV420P:
+    case kVideoFmtYUVJ420P:
     {
         initYUV420();
         break;
     }
-    case kRenderFmtNV12:
+    case kVideoFmtNV12:
     {
         initNV12();
         break;
