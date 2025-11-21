@@ -8,6 +8,8 @@ extern "C"
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/samplefmt.h>
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
 }
 
 #include "log.h"
@@ -127,4 +129,88 @@ int audio_copy(uint8_t* dst_data[4], int dst_linesizes[4], uint8_t* src_data[4],
     }
     av_samples_copy(dst_data, src_data, 0, 0, nb_samples, nb_channels, (AVSampleFormat)sample_fmt);
     return bufferSize;
+}
+
+
+AudioPCMWriter::AudioPCMWriter(const std::string& filePath)
+{
+    m_fs.open(filePath, std::ios::binary);
+}
+
+AudioPCMWriter::~AudioPCMWriter()
+{
+    m_fs.close();
+}
+
+void AudioPCMWriter::Write(const char* ptr, size_t size)
+{
+    if (m_fs.is_open()) {
+        m_fs.write(ptr, size);
+        m_fs.flush();
+    }
+}
+
+void AudioPCMWriter::WriteFrame(AVFrame* frame)
+{
+    if (!m_fs.is_open() || !frame)
+        return;
+
+    if (frame->nb_samples <= 0)
+        return; // 空帧跳过
+
+    // 获取格式信息
+    int channels = frame->channels;           // 声道数
+    int sampleRate = frame->sample_rate;      // 采样率
+    int nbSamples = frame->nb_samples;        // 采样点数
+    AVSampleFormat format = (AVSampleFormat)frame->format; // 采样格式
+
+    switch (format) {
+    case AV_SAMPLE_FMT_S16:   // packed 16bit PCM
+    {
+        // data[0] 指向交错存储的 PCM 数据
+        // 每个样本 2 字节（int16_t）
+        // 双声道：L0 R0 L1 R1 L2 R2 ...
+        size_t dataSize = nbSamples * channels * sizeof(int16_t); // samples * channels * bytes
+        m_fs.write(reinterpret_cast<const char*>(frame->data[0]), dataSize);
+        m_fs.flush();
+        break;
+    }
+    case AV_SAMPLE_FMT_S16P:  // planar 16bit PCM
+    {
+        // 每个声道独立存储
+        int16_t* leftChannel = (int16_t*)frame->data[0];  // LLL...
+        int16_t* rightChannel = (int16_t*)frame->data[1]; // RRR...
+
+        // 手动交错写入：L0 R0 L1 R1 ...
+        for (int i = 0; i < frame->nb_samples; i++) {
+            m_fs.write(reinterpret_cast<const char*>(&leftChannel[i]), sizeof(int16_t));
+            m_fs.write(reinterpret_cast<const char*>(&rightChannel[i]), sizeof(int16_t));
+        }
+        m_fs.flush();
+        break;
+    }
+    case AV_SAMPLE_FMT_FLT:   // packed float PCM
+    {
+        // float 也是 packed，每个样本 4 字节
+        size_t dataSize = nbSamples * channels * sizeof(float);
+        m_fs.write(reinterpret_cast<const char*>(frame->data[0]), dataSize);
+        m_fs.flush();
+        break;
+    }
+    case AV_SAMPLE_FMT_FLTP:  // planar float PCM
+    {
+        const float* leftChannel = (float*)frame->data[0];
+        const float* rightChannel = (float*)frame->data[1];
+
+        for (int i = 0; i < frame->nb_samples; i++) {
+            m_fs.write(reinterpret_cast<const char*>(&leftChannel[i]), sizeof(float));
+            m_fs.write(reinterpret_cast<const char*>(&rightChannel[i]), sizeof(float));
+        }
+        m_fs.flush();
+        break;
+    }
+    default:
+        printf("不支持的采样格式: %s\n", av_get_sample_fmt_name(format));
+        break;
+    }
 }

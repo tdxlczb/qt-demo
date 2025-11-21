@@ -27,8 +27,8 @@ MainWidget::MainWidget(QWidget *parent) :
     MediaPlayer* pMediaPlayer = new MediaPlayer(nullptr);
     pMediaPlayer->show();
 
-    VideoManager* pVideoManager = new VideoManager(nullptr);
-    pVideoManager->show();
+    //VideoManager* pVideoManager = new VideoManager(nullptr);
+    //pVideoManager->show();
 
     //PlayerWidget* pPlayerWidget = new PlayerWidget(nullptr, 0);
     //pPlayerWidget->show();

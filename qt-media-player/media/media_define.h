@@ -70,6 +70,7 @@ struct AudioFrame
     int       linesize[8] = { 0 };
     double    pts = 0.0;//帧时间，转成秒
     size_t    index = 0;
+    int       nbSamples = 0;
     AudioSpec spec;
 };
 

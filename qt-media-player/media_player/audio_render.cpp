@@ -45,12 +45,15 @@ void AudioRender::Start(const AudioSpec& audioSpec, int renderFrameCount)
     if (m_isUseJitterBuffer) {
         if (!m_audioBuffer->IsInit())
         {
+            // buffer缓冲区如果太大，进行倍速切换时就无法做到及时切换
+            // 缓冲区越大，延迟越高，缓冲区设置为2倍的渲染采样点数
+            int nMaxSize = 2 * renderFrameCount * audioSpec.channels * audioSpec.bitPerSample / 8;
             if (audioSpec.bitPerSample == 8)
-                m_audioBuffer->Init<int8_t>();
+                m_audioBuffer->Init<int8_t>(nMaxSize);
             else if (audioSpec.bitPerSample == 16)
-                m_audioBuffer->Init<int16_t>();
+                m_audioBuffer->Init<int16_t>(nMaxSize);
             else if (audioSpec.bitPerSample == 32)
-                m_audioBuffer->Init<int32_t>();
+                m_audioBuffer->Init<int32_t>(nMaxSize);
         }
     }
     RtAudio::StreamParameters params;
@@ -102,6 +105,7 @@ int AudioRender::AudioOutputCallback(void* outputBuffer, unsigned int nFrames)
     float volume = GetVolume();
     if (volume == 1.0f) {
         auto readSize = m_audioBuffer->PopData(outputShort, bufferSize);
+        //qDebug() << m_audioBuffer->GetSize() << bufferSize << "read size:" << readSize;
         m_audioBufferCV.notify_all();
         return readSize;
     }
@@ -178,6 +182,7 @@ void AudioRender::Write(const AudioFrame&frame)
         g_pcmInput.flush();
     }
 #endif // DEBUG_PCM
+    //qDebug() << "write size:" << frame.size;
 
     if (frame.spec.bitPerSample == 8)
     {

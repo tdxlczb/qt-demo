@@ -99,6 +99,21 @@ void PlayerWidget::StopPlay()
         m_pAudioRender->Stop();
 }
 
+void PlayerWidget::ChangeSpeed(double speed)
+{
+    if (m_pMediaReader) {
+        m_pMediaReader->Speed(speed);
+    }
+}
+
+void PlayerWidget::SeekPercent(int value)
+{
+    if (m_pMediaReader) {
+        int seekSeconds = m_pMediaReader->GetDuration() * value / 100;
+        m_pMediaReader->Seek(seekSeconds);
+    }
+}
+
 #include <chrono>
 void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 {
@@ -113,8 +128,11 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
     else {
         outFrame = frame;
     }
-    m_pVideoRender->UpdateContent(outFrame);
 
+    m_pVideoRender->UpdateContent(outFrame);
+    if (m_pMediaReader) {
+        emit sig_PlayTime((int)outFrame.pts, m_pMediaReader->GetDuration());
+    }
     //auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
     //if (m_pFishEyeWidget) {
     //    cv::Mat matIn = cv::Mat(frame.spec.height, frame.spec.width, CV_8UC3, frame.data);//传递处理后的效果图

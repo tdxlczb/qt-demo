@@ -1,4 +1,4 @@
-﻿#ifndef MEDIA_READER_H
+#ifndef MEDIA_READER_H
 #define MEDIA_READER_H
 
 #include <thread>
@@ -19,6 +19,7 @@ extern "C"
 #include "media_define.h"
 #include "media_play_event.h"
 #include "media_queue.h"
+#include "media_clock.h"
 
 /*
 * 为实现音画同步效果
@@ -28,6 +29,7 @@ extern "C"
 * 解码和取包不要在统一个线程，避免性能不足的时候可能会影响取包，导致网络包延迟累积
 */
 
+class AudioSpeedFilter;
 class MediaReader
 {
 public:
@@ -38,9 +40,14 @@ public:
     int  GetPlayIndex() const;
     std::string GetPlayUrl() const;
 
+    void SetPlayEvent(PlayEvent* playEvent);
     void Play(const std::string& url, const PlayOptions& options);
     void Stop();
-    void SetPlayEvent(PlayEvent* playEvent);
+    //只有在播放文件时才支持倍速播放，播放网络流时倍速无效
+    void Speed(double speed);
+    //只有在播放文件时才支持跳转播放，播放网络流时跳转无效
+    void Seek(double seconds);
+    int64_t GetDuration();
 
     //获取当前硬解码的图像格式(仅硬解码时有效)
     const AVPixelFormat& GetHwPixFmt() const;
@@ -103,10 +110,14 @@ private:
     int64_t m_audioFrameIndex = 0;
     int64_t m_iLastCountTime = 0;
 
-    double m_clockStart = 0.0; //时钟开始时间
-    double m_startPts = 0.0; //帧开始时间
-    double m_syncThreshold = 0.1;    //同步阈值
+    MediaClock audioClock;
+    MediaClock videoClock;
+    MediaClock extClock;  // 外部时钟
+
     double m_speed = 1.0;             //倍速播放
+    AudioSpeedFilter* m_pAudioSpeedFilter = nullptr;
+    std::atomic_bool m_seekReq{ false };
+    double m_seekPos = 0.0;
 };
 
 #endif // MEDIA_READER_H

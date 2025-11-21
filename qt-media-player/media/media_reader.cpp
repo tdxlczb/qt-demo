@@ -1,6 +1,7 @@
-﻿#include "media_reader.h"
+#include "media_reader.h"
 #include "log.h"
 #include "media_utils.h"
+#include "media_audio_filter.h"
 
 #define PLAYTAG  std::to_string(m_playIndex) + " "  
 /**
@@ -52,6 +53,11 @@ std::string MediaReader::GetPlayUrl() const
     return m_url;
 }
 
+void MediaReader::SetPlayEvent(PlayEvent* playEvent)
+{
+    m_playEvent = playEvent;
+}
+
 void MediaReader::Play(const std::string& url, const PlayOptions& options)
 {
     Stop();
@@ -95,13 +101,33 @@ void MediaReader::Stop()
     m_videoFrameIndex = 0;
     m_audioFrameIndex = 0;
     m_iLastCountTime = 0;
-    m_clockStart = 0.0;
-    m_startPts = 0.0;
 }
 
-void MediaReader::SetPlayEvent(PlayEvent* playEvent)
+void MediaReader::Speed(double speed)
 {
-    m_playEvent = playEvent;
+    if (m_isMediaFile) {
+        m_speed = speed;
+        if (m_pAudioSpeedFilter) {
+            m_pAudioSpeedFilter->ChangeSpeed(speed);
+        }
+    }
+}
+
+void MediaReader::Seek(double seconds)
+{
+    if (m_isMediaFile) {
+        m_seekPos = seconds;
+        m_seekReq.store(true);
+    }
+}
+
+int64_t MediaReader::GetDuration()
+{
+    if (m_formatContext) {
+        int64_t duration = m_formatContext->duration / AV_TIME_BASE;
+        return duration;
+    }
+    return 0;
 }
 
 const AVPixelFormat& MediaReader::GetHwPixFmt() const
@@ -140,6 +166,23 @@ void MediaReader::ReadThread()
     AVPacket* packet = av_packet_alloc();
     while (m_isThreadRun.load() && !m_isStreamOver.load())
     {
+        if (m_seekReq.load()) {
+            int64_t seekTarget = m_seekPos * AV_TIME_BASE;
+            // 1. 执行跳转
+            avformat_seek_file(m_formatContext, -1, INT64_MIN, seekTarget, seekTarget, AVSEEK_FLAG_BACKWARD);
+
+            // 2. 清空解码器缓存
+            avcodec_flush_buffers(m_videoCodecContext);
+            avcodec_flush_buffers(m_audioCodecContext);
+
+            // 3. 清空队列（防止旧数据）
+            m_videoPacketQueue.Clear();
+            m_audioPacketQueue.Clear();
+
+            m_seekReq.store(false);
+        }
+
+
         av_packet_unref(packet);
         int ret = av_read_frame(m_formatContext, packet);
         if (ret < 0)
@@ -195,17 +238,28 @@ void MediaReader::VideoThread()
     int       gopSize = m_videoCodecContext->gop_size;
 
     int frameIndex = 0;
-    while (m_isThreadRun.load() && !m_isStreamOver.load())
+    while (m_isThreadRun.load())
     {
-        av_usleep(1000);
+        //播放流时，流结束就退出循环
+        if (m_isStreamOver.load() && !m_isMediaFile)
+            break;
+        //播放文件时，文件结束，并且队列为空才退出循环
+        if (m_isStreamOver.load() && m_isMediaFile && m_videoPacketQueue.Size() <= 0)
+            break;
+
         AVPacket* packet = m_videoPacketQueue.PopFront();
-        if (!packet)
+        if (!packet) {
+            av_usleep(1000);//windows系统sleep精度是15ms，放到前面使用sleep会导致处理太慢
+            //std::this_thread::yield(); //让出时间片，无数据时降低CPU到30-50%
             continue;
+        }
 
         m_videoPacketIndex++;
         VideoDecode(packet);
         av_packet_free(&packet);
     }
+
+    m_videoPacketQueue.Clear();//线程退出时清空队列，避免队列阻塞等待卡死
 }
 
 void MediaReader::AudioThread()
@@ -220,17 +274,27 @@ void MediaReader::AudioThread()
     //uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
     //int            in_channels = m_audioCodecContext->channels;
 
-    while (m_isThreadRun.load() && !m_isStreamOver.load())
+    while (m_isThreadRun.load())
     {
-        av_usleep(1000);
+        //播放流时，流结束就退出循环
+        if (m_isStreamOver.load() && !m_isMediaFile)
+            break;
+        //播放文件时，文件结束，并且队列为空才退出循环
+        if (m_isStreamOver.load() && m_isMediaFile && m_audioPacketQueue.Size() <= 0)
+            break;
+
         AVPacket* packet = m_audioPacketQueue.PopFront();
-        if (!packet)
+        if (!packet) {
+            av_usleep(1000);//windows系统sleep精度是15ms，放到前面使用sleep会导致处理太慢
+            //std::this_thread::yield(); //让出时间片，无数据时降低CPU到30-50%
             continue;
+        }
 
         m_audioPacketIndex++;
         AudioDecode(packet);
         av_packet_free(&packet);
     }
+    m_audioPacketQueue.Clear();//线程退出时清空队列，避免队列阻塞等待卡死
 }
 
 void MediaReader::VideoDecode(AVPacket* packet)
@@ -309,6 +373,9 @@ void MediaReader::VideoDecode(AVPacket* packet)
     }
 }
 
+//static AudioPCMWriter g_filter1("audio_fileter1.pcm");
+//static AudioPCMWriter g_filter2("audio_fileter2.pcm");
+
 void MediaReader::AudioDecode(AVPacket* packet)
 {
     if (packet->stream_index != m_audioStreamIndex)
@@ -332,7 +399,32 @@ void MediaReader::AudioDecode(AVPacket* packet)
         }
         //LOG_DEBUG << PLAYTAG << "decode audio frame index:" << m_audioFrameIndex;
         m_audioFrameIndex++;
-        DisplayAudio(frame);
+
+        if (m_speed != 1.0f) {
+            if (!m_pAudioSpeedFilter) {
+                m_pAudioSpeedFilter = new AudioSpeedFilter();
+                m_pAudioSpeedFilter->Init(frame->sample_rate, (AVSampleFormat)frame->format, frame->channel_layout, m_speed);
+            }
+            // 1. 发送解码帧到滤镜
+            m_pAudioSpeedFilter->SendFrame(frame);
+
+            // 2. 循环获取倍速后的帧（可能1输入对应多输出或少输出）
+            while (true) {
+                AVFrame* filteredFrame = m_pAudioSpeedFilter->ReceiveFrame();
+                if (!filteredFrame)
+                    break; // 没有更多输出
+
+                //size_t bufferSize = av_samples_get_buffer_size(filteredFrame->linesize, filteredFrame->channels, filteredFrame->nb_samples, (AVSampleFormat)filteredFrame->format, 1);
+                //g_filter1.Write(reinterpret_cast<const char*>(filteredFrame->data[0]), bufferSize);
+                DisplayAudio(filteredFrame);
+
+                // 4. 释放处理后的帧
+                av_frame_free(&filteredFrame);
+            }
+        }
+        else {
+            DisplayAudio(frame);
+        }
         av_frame_free(&frame);
     }
 }
@@ -341,7 +433,6 @@ void MediaReader::DisplayThread()
 {
     while (m_isThreadRun.load() && !m_isStreamOver.load())
     {
-        av_usleep(1000);
         AVFrame* frame = m_videoFrameQueue.PopFront();
         if (!frame)
             continue;
@@ -357,45 +448,36 @@ void MediaReader::DisplayVideo(AVFrame* frame)
     //LOG_INFO << PLAYTAG << "frameIndex:" << m_videoFrameIndex << ",pts:" << npts;
     double pts = npts * av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base);
     double now = av_gettime_relative() / 1000000.0;
-    if (m_clockStart <= 0.0) {
-        m_clockStart = now;
-        m_startPts = pts;
-        LOG_INFO << PLAYTAG << "first pts:" << npts;
-    }
-    //时钟同步
-    double elapsedPts = pts - m_startPts; // 相对 pts
-    double elapsedClock = now - m_clockStart; // 相对 clock
-    double diff = elapsedPts - elapsedClock;// +1.0; // > 0 表示视频超前, 增加1s延迟，会导致第一帧播放慢
-    double delay = diff;
-    if (diff > m_syncThreshold) {
-        // 视频超前，减慢播放（增加延迟）
-        //delay = delay * 1.1;
-    }
-    else if (diff < -m_syncThreshold) {
-        // 视频落后，加快播放（减少延迟）,或者丢帧
-        //delay = delay * 0.9;
-        //return;
-    }
-    if (delay > 0) {
-        // 确保延迟在合理范围内
-        //delay = FFMAX(0.01, FFMIN(delay, 0.1));
-        av_usleep(delay * 1000000.0);
+
+    while (true)
+    {
+        if (!videoClock.wait(pts, audioClock.get_clock(), m_speed)) {
+            av_usleep(1000.0);
+            continue;
+        }
+        else {
+            break;
+        }
+
     }
 
+    VideoFrame outFrame;
+    for (size_t i = 0; i < 8; i++)
+    {
+        outFrame.linedata[i] = frame->data[i];
+        outFrame.linesize[i] = frame->linesize[i];
+    }
+    outFrame.pts = pts;
+    outFrame.index = m_videoFrameIndex;
+    outFrame.spec.width = frame->width;
+    outFrame.spec.height = frame->height;
+    outFrame.spec.format = frame->format;
     if (m_playEvent) {
-        VideoFrame outFrame;
-        for (size_t i = 0; i < 8; i++)
-        {
-            outFrame.linedata[i] = frame->data[i];
-            outFrame.linesize[i] = frame->linesize[i];
-        }
-        outFrame.pts = pts;
-        outFrame.index = m_videoFrameIndex;
-        outFrame.spec.width = frame->width;
-        outFrame.spec.height = frame->height;
-        outFrame.spec.format = frame->format;
         m_playEvent->onVideoFrame(outFrame);
     }
+    //更新时钟
+    videoClock.set_clock(pts);
+    extClock.sync_clock_to_slave(videoClock.get_clock());
 }
 
 void MediaReader::DisplayAudio(AVFrame* frame)
@@ -403,20 +485,41 @@ void MediaReader::DisplayAudio(AVFrame* frame)
     int npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
     //LOG_INFO << PLAYTAG << "frameIndex:" << m_audioFrameIndex << ",pts:" << npts;
     double pts = npts * av_q2d(m_formatContext->streams[m_audioStreamIndex]->time_base);
-    if (m_playEvent) {
-        AudioFrame outFrame;
-        for (size_t i = 0; i < 8; i++)
-        {
-            outFrame.linedata[i] = frame->data[i];
-            outFrame.linesize[i] = frame->linesize[i];
+    double now = av_gettime_relative() / 1000000.0;
+
+    while (true)
+    {
+        if (!audioClock.wait(pts, -1.0)) {
+            av_usleep(1000.0);
+            continue;
         }
-        outFrame.pts = pts;
-        outFrame.index = m_audioFrameIndex;
-        outFrame.spec.sampleRate = frame->sample_rate;
-        outFrame.spec.channels = frame->channels;
-        outFrame.spec.format = frame->format;
+        else {
+            break;
+        }
+
+    }
+    //g_filter2.WriteFrame(frame);
+
+    AudioFrame outFrame;
+    for (size_t i = 0; i < 8; i++)
+    {
+        outFrame.linedata[i] = frame->data[i];
+        outFrame.linesize[i] = frame->linesize[i];
+    }
+    outFrame.nbSamples = frame->nb_samples;
+    outFrame.pts = pts;
+    outFrame.index = m_audioFrameIndex;
+    outFrame.spec.sampleRate = frame->sample_rate;
+    outFrame.spec.channels = frame->channels;
+    outFrame.spec.format = frame->format;
+
+    if (m_playEvent) {
         m_playEvent->onAudioFrame(outFrame);
     }
+
+    //更新时钟
+    audioClock.set_clock(pts);
+    extClock.sync_clock_to_slave(audioClock.get_clock());
 }
 
 //复用同一个AVHWDeviceContext能减少大量cpu和gpu
@@ -483,6 +586,7 @@ bool MediaReader::StreamOpen()
     av_dict_set(&pOptDict, "rtsp_transport", "tcp", 0);//tcp拉流，尽量保证不丢包
     //av_dict_set(&pOptDict, "rtbufsize", "20M", 0);
     //av_dict_set(&pOptDict, "buffer_size", "1024000", 0);
+    //av_dict_set(&pOptDict, "fflags", "nobuffer", 0); //无缓存，解码时有效
     int ret = avformat_open_input(&m_formatContext, m_url.c_str(), nullptr, &pOptDict);
     av_dict_free(&pOptDict);
     pOptDict = nullptr;

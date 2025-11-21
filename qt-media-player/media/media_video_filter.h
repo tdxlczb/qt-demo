@@ -1,0 +1,4 @@
+﻿#ifndef MEDIA_VIDEO_FILTER_H
+#define MEDIA_VIDEO_FILTER_H
+
+#endif // MEDIA_VIDEO_FILTER_H

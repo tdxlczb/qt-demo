@@ -7,7 +7,18 @@
 #include <QDebug>
 #include "player_widget.h"
 
-MediaPlayer::MediaPlayer(QWidget *parent)
+QString secondsToHms(int totalSeconds)
+{
+    int hours = totalSeconds / 3600;
+    int minutes = (totalSeconds % 3600) / 60;
+    int seconds = totalSeconds % 60;
+    if (hours > 0)
+        return QTime(hours, minutes, seconds).toString("hh:mm:ss");
+    else
+        return QTime(hours, minutes, seconds).toString("mm:ss");
+}
+
+MediaPlayer::MediaPlayer(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::MediaPlayer)
     , m_pPlayerWidget(new PlayerWidget(this))
@@ -18,6 +29,8 @@ MediaPlayer::MediaPlayer(QWidget *parent)
     setWindowTitle("MediaPlayer");
     setMinimumSize(800, 600); // 设置最小尺寸
     resize(800, 600);
+
+    connect(m_pPlayerWidget, &PlayerWidget::sig_PlayTime, this, &MediaPlayer::onPlayTime, Qt::QueuedConnection); //跨线程需要使用队列模式
 }
 
 MediaPlayer::~MediaPlayer()
@@ -28,6 +41,36 @@ MediaPlayer::~MediaPlayer()
 void MediaPlayer::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
+}
+
+bool MediaPlayer::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == progressSlider && event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+
+        if (mouseEvent->button() == Qt::LeftButton) {
+            // 简化计算，直接根据比例计算
+            auto pos = mouseEvent->pos();
+
+            int value = 0;
+            if (progressSlider->orientation() == Qt::Horizontal) {
+                value = progressSlider->minimum() +
+                    ((progressSlider->maximum() - progressSlider->minimum()) * pos.x()) /
+                    progressSlider->width();
+            }
+            else {
+                value = progressSlider->minimum() +
+                    ((progressSlider->maximum() - progressSlider->minimum()) *
+                        (progressSlider->height() - pos.y())) / progressSlider->height();
+            }
+            value = qBound(progressSlider->minimum(), value, progressSlider->maximum());
+            qInfo() << "slider clicked:" << value;
+            progressSlider->setValue(value);
+            PlaySeek(value);
+            //return true; // 事件已处理，阻止默认行为
+        }
+    }
+    return QObject::eventFilter(obj, event);
 }
 
 void MediaPlayer::setupUI()
@@ -107,6 +150,7 @@ void MediaPlayer::setupProgressArea()
     progressSlider = new QSlider(Qt::Horizontal);
     progressSlider->setRange(0, 100);
     progressSlider->setValue(0);
+    progressSlider->setPageStep(1);//不设置好像默认为10，会出现点击进度条跳转太大
     progressSlider->setStyleSheet(
         "QSlider::groove:horizontal {"
         "    border: 1px solid #34495e;"
@@ -117,9 +161,10 @@ void MediaPlayer::setupProgressArea()
         "QSlider::handle:horizontal {"
         "    background: #3498db;"
         "    border: 1px solid #2980b9;"
-        "    width: 14px;"
-        "    margin: -4px 0;"
-        "    border-radius: 7px;"
+        "    width: 20px;"
+        "    height: 20px;"
+        "    margin: -8px 0;"
+        "    border-radius: 8px;"
         "}"
         "QSlider::sub-page:horizontal {"
         "    background: #3498db;"
@@ -127,8 +172,10 @@ void MediaPlayer::setupProgressArea()
         "}"
     );
 
+    progressSlider->installEventFilter(this);
+
     // 总时间标签
-    totalTimeLabel = new QLabel("05:00");
+    totalTimeLabel = new QLabel("00:00");
     totalTimeLabel->setStyleSheet(
         "color: #ecf0f1;"
         "font-size: 12px;"
@@ -144,6 +191,9 @@ void MediaPlayer::setupProgressArea()
 
     // 连接信号槽
     connect(progressSlider, &QSlider::valueChanged, this, &MediaPlayer::onProgressChanged);
+    connect(progressSlider, &QSlider::sliderPressed, this, &MediaPlayer::onSliderPressed);
+    connect(progressSlider, &QSlider::sliderMoved, this, &MediaPlayer::onSliderMoved);
+    connect(progressSlider, &QSlider::sliderReleased, this, &MediaPlayer::onSliderReleased);
 
     mainLayout->addWidget(progressWidget);
 }
@@ -280,17 +330,45 @@ void MediaPlayer::setupControlArea()
         "}"
     );
 
+    comboBox = new QComboBox();
+    comboBox->addItem("0.5x");
+    comboBox->addItem("1.0x");
+    comboBox->addItem("1.5x");
+    comboBox->addItem("2.0x");
+    comboBox->setCurrentIndex(1);
+    comboBox->setFixedSize(60, 30);
+    comboBox->setStyleSheet(
+        "QComboBox {"
+        "    background-color: #27ae60;"
+        "    color: #FFFFFF;"
+        "    border: none;"
+        "    border-radius: 5px;"
+        "    font-weight: bold;"
+        "}"
+    );
+
     // 添加到布局
     controlLayout->addStretch(); // 左侧弹簧
     controlLayout->addWidget(playButton);
     controlLayout->addWidget(pauseButton);
     controlLayout->addWidget(stopButton);
+    controlLayout->addWidget(comboBox);
     controlLayout->addStretch(); // 右侧弹簧
 
     // 连接信号槽
     connect(playButton, &QPushButton::clicked, this, &MediaPlayer::onPlayClicked);
     connect(pauseButton, &QPushButton::clicked, this, &MediaPlayer::onPauseClicked);
     connect(stopButton, &QPushButton::clicked, this, &MediaPlayer::onStopClicked);
+
+    // 绑定currentIndexChanged信号 - 选项改变时触发
+    QObject::connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        [this](int index) {
+            qDebug() << "选项改变，当前索引:" << index;
+            if (m_pPlayerWidget) {
+                double speed = index * 0.5 + 0.5;
+                m_pPlayerWidget->ChangeSpeed(speed);
+            }
+        });
 
     mainLayout->addWidget(controlWidget);
 }
@@ -306,7 +384,7 @@ void MediaPlayer::onPlayClicked()
     QString playUrl = infoTextEdit->toPlainText();
     if (playUrl.isEmpty())
     {
-        playUrl = "E:/code/media/BaiduSyncdisk.mp4";
+        playUrl = "E:/code/media/BaiduSyncdisk2.mp4";
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
 
@@ -335,7 +413,6 @@ void MediaPlayer::onStopClicked()
 
     //videoLabel->setText("视频播放");
     progressSlider->setValue(0);
-    updateTimeDisplay(0);
 }
 
 void MediaPlayer::onOpenClicked()
@@ -363,8 +440,29 @@ void MediaPlayer::onOpenClicked()
 
 void MediaPlayer::onProgressChanged(int value)
 {
-    updateTimeDisplay(value);
     // 这里添加实际的进度改变逻辑
+    //qInfo() << "slider changed:" << value;
+
+}
+
+void MediaPlayer::onSliderPressed()
+{
+    qInfo() << "slider pressed";
+    m_sliderDragging = true;
+}
+
+void MediaPlayer::onSliderMoved(int value)
+{
+    qInfo() << "slider moved:" << value;
+
+}
+
+void MediaPlayer::onSliderReleased()
+{
+    int value = progressSlider->value();
+    qInfo() << "slider released:" << value;
+    PlaySeek(value);
+    m_sliderDragging = false;
 }
 
 void MediaPlayer::onTextChanged()
@@ -378,15 +476,19 @@ void MediaPlayer::onTextChanged()
     }
 }
 
-void MediaPlayer::updateTimeDisplay(int value)
+void MediaPlayer::onPlayTime(int64_t seconds, int64_t totalSeconds)
 {
-    // 假设总时长为5分钟（300秒）
-    int totalSeconds = 300;
-    int currentSeconds = value * totalSeconds / 100;
+    currentTimeLabel->setText(secondsToHms(seconds));
+    totalTimeLabel->setText(secondsToHms(totalSeconds));
+    int percent = seconds * 100 / totalSeconds;
+    if (!m_sliderDragging) {
+        //qInfo() << "slider set:" << percent;
+        progressSlider->setValue(percent);
+    }
+}
 
-    QTime currentTime(0, currentSeconds / 60, currentSeconds % 60);
-    QTime totalTime(0, totalSeconds / 60, totalSeconds % 60);
-
-    currentTimeLabel->setText(currentTime.toString("mm:ss"));
-    totalTimeLabel->setText(totalTime.toString("mm:ss"));
+void MediaPlayer::PlaySeek(int value)
+{
+    if (m_pPlayerWidget)
+        m_pPlayerWidget->SeekPercent(value);
 }

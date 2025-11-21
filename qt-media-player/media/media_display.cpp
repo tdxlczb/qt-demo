@@ -317,11 +317,12 @@ PlayError AudioConverter::InitDstFrame()
     m_pFrameDst->nb_samples = 1024; //这里必须设置值，否则av_samples_alloc申请不到内存 AVFrame内部nb_samples默认设置为1024
 
     //av_samples_alloc申请一块连续内存，pointers[i]的指针分别指向这块内存中各平面的起始位置，使用av_freep(&pointers[0])释放这块内存，只使用av_frame_free不能释放申请的内存
-    int iRet = av_samples_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->channels, m_pFrameDst->nb_samples, (AVSampleFormat)m_pFrameDst->format, 1);
+    int nSize = av_samples_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->channels, m_pFrameDst->nb_samples, (AVSampleFormat)m_pFrameDst->format, 1);
     //av_frame_get_buffer给每个平面单独申请内存，使用av_frame_free释放每个平面的内存
     //int iRet = av_frame_get_buffer(m_pFrameDst, 64);
-    if (AVERROR(iRet)) {
-        LOG_ERROR << "converterId:" << m_converterId << " av_frame_get_buffer error:" << iRet;
+    //if (AVERROR(iRet)) {
+    if (nSize <= 0) {
+        LOG_ERROR << "converterId:" << m_converterId << " av_frame_get_buffer error:" << nSize;
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     return PlayError{ PlayErrorCode::kNoError,"" };
@@ -439,7 +440,7 @@ PlayError AudioConverter::DisplayInput(const AudioFrame& inFrame, AudioFrame& ou
     pFrame->channels = inFrame.spec.channels;
     av_channel_layout_default(&pFrame->ch_layout, inFrame.spec.channels);
     pFrame->format = inFrame.spec.format;
-    pFrame->nb_samples = 1024;
+    pFrame->nb_samples = inFrame.nbSamples;
     for (size_t i = 0; i < 8; i++)
     {
         pFrame->data[i] = inFrame.linedata[i];

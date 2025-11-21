@@ -22,13 +22,17 @@ public:
 
     void StartPlay(const QString& url, int decodeType = 0);
     void StopPlay();
+    void ChangeSpeed(double speed);
+    void SeekPercent(int value);
 
 protected:
     virtual void onVideoFrame(const VideoFrame& frame) override;
     virtual void onAudioFrame(const AudioFrame& frame) override;
     virtual void onClose(const PlayError& error) override;
 
+
 signals:
+    void sig_PlayTime(int64_t seconds, int64_t totalSeconds);
     //通知：该窗口被选中
     void sig_Selected(PlayerWidget* pWidget);
 

@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QProgressBar>
 #include <QTextEdit>
+#include <QComboBox>
 
 namespace Ui {
 class MediaPlayer;
@@ -32,18 +33,23 @@ private slots:
     void onStopClicked();
     void onOpenClicked();
     void onProgressChanged(int value);
+    void onSliderPressed();
+    void onSliderMoved(int value);
+    void onSliderReleased();
     void onTextChanged();
+    void onPlayTime(int64_t seconds, int64_t totalSeconds);
 
+    void PlaySeek(int value);
 private:
     void setupUI();
     void setupVideoArea();
     void setupProgressArea();
     void setupInfoArea();
     void setupControlArea();
-    void updateTimeDisplay(int value);
 
 private:
     void resizeEvent(QResizeEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
     Ui::MediaPlayer *ui;
@@ -58,6 +64,7 @@ private:
     QSlider* progressSlider;
     QLabel* currentTimeLabel;
     QLabel* totalTimeLabel;
+    bool m_sliderDragging = false;
 
     // 三层 - url打开区域
     QWidget* infoWidget;
@@ -69,6 +76,7 @@ private:
     QPushButton* playButton;
     QPushButton* pauseButton;
     QPushButton* stopButton;
+    QComboBox* comboBox;
 
     // 主布局
     QVBoxLayout* mainLayout;

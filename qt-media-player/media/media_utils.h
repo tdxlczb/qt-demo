@@ -23,4 +23,23 @@ int audio_copy(
     uint8_t* src_data[4], int src_linesizes[4],
     int nb_samples, int nb_channels, int sample_fmt);
 
+
+#include <fstream>
+#include <cstdio>
+#include <cstring>
+
+struct AVFrame;
+class AudioPCMWriter
+{
+public:
+    AudioPCMWriter(const std::string& filePath);
+	~AudioPCMWriter();
+    void Write(const char* ptr, size_t size);
+    void WriteFrame(AVFrame* frame);
+private:
+    std::ofstream m_fs;
+    int totalSamplesWritten = 0;
+};
+
+
 #endif // MEDIA_QUEUE_H
