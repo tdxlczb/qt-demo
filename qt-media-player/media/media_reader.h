@@ -43,6 +43,7 @@ public:
     void SetPlayEvent(PlayEvent* playEvent);
     void Play(const std::string& url, const PlayOptions& options);
     void Stop();
+    void Pause();
     //只有在播放文件时才支持倍速播放，播放网络流时倍速无效
     void Speed(double speed);
     //只有在播放文件时才支持跳转播放，播放网络流时跳转无效
@@ -118,6 +119,8 @@ private:
     AudioSpeedFilter* m_pAudioSpeedFilter = nullptr;
     std::atomic_bool m_seekReq{ false };
     double m_seekPos = 0.0;
+    std::atomic_bool m_pauseReq{ false };
+    std::atomic_bool m_isPaused{ false };
 };
 
 #endif // MEDIA_READER_H

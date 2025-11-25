@@ -24,7 +24,7 @@ MainWidget::MainWidget(QWidget *parent) :
     vBoxLayout->addWidget(button01);
     vBoxLayout->addWidget(button02);
 
-    MediaPlayer* pMediaPlayer = new MediaPlayer(nullptr);
+    VideoPlayer* pMediaPlayer = new VideoPlayer(nullptr);
     pMediaPlayer->show();
 
     //VideoManager* pVideoManager = new VideoManager(nullptr);

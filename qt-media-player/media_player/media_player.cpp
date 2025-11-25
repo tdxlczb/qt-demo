@@ -18,32 +18,32 @@ QString secondsToHms(int totalSeconds)
         return QTime(hours, minutes, seconds).toString("mm:ss");
 }
 
-MediaPlayer::MediaPlayer(QWidget* parent)
+VideoPlayer::VideoPlayer(QWidget* parent)
     : QWidget(parent)
-    , ui(new Ui::MediaPlayer)
+    , ui(new Ui::VideoPlayer)
     , m_pPlayerWidget(new PlayerWidget(this))
 {
     ui->setupUi(this);
 
     setupUI();
-    setWindowTitle("MediaPlayer");
+    setWindowTitle("VideoPlayer");
     setMinimumSize(800, 600); // 设置最小尺寸
     resize(800, 600);
 
-    connect(m_pPlayerWidget, &PlayerWidget::sig_PlayTime, this, &MediaPlayer::onPlayTime, Qt::QueuedConnection); //跨线程需要使用队列模式
+    connect(m_pPlayerWidget, &PlayerWidget::sig_PlayTime, this, &VideoPlayer::onPlayTime, Qt::QueuedConnection); //跨线程需要使用队列模式
 }
 
-MediaPlayer::~MediaPlayer()
+VideoPlayer::~VideoPlayer()
 {
     delete ui;
 }
 
-void MediaPlayer::resizeEvent(QResizeEvent* event)
+void VideoPlayer::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
 }
 
-bool MediaPlayer::eventFilter(QObject* obj, QEvent* event)
+bool VideoPlayer::eventFilter(QObject* obj, QEvent* event)
 {
     if (obj == progressSlider && event->type() == QEvent::MouseButtonPress) {
         QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -73,7 +73,7 @@ bool MediaPlayer::eventFilter(QObject* obj, QEvent* event)
     return QObject::eventFilter(obj, event);
 }
 
-void MediaPlayer::setupUI()
+void VideoPlayer::setupUI()
 {
     // 主布局 - 上中下四层
     mainLayout = new QVBoxLayout(this);
@@ -93,7 +93,7 @@ void MediaPlayer::setupUI()
     setupControlArea();
 }
 
-void MediaPlayer::setupVideoArea()
+void VideoPlayer::setupVideoArea()
 {
     // 一层 - 播放窗口（自适应）
     videoWidget = new QWidget;
@@ -121,7 +121,7 @@ void MediaPlayer::setupVideoArea()
     mainLayout->addWidget(videoWidget, 1);
 }
 
-void MediaPlayer::setupProgressArea()
+void VideoPlayer::setupProgressArea()
 {
     // 二层 - 进度条区域（固定高度50）
     progressWidget = new QWidget;
@@ -190,15 +190,15 @@ void MediaPlayer::setupProgressArea()
     progressLayout->addWidget(totalTimeLabel);
 
     // 连接信号槽
-    connect(progressSlider, &QSlider::valueChanged, this, &MediaPlayer::onProgressChanged);
-    connect(progressSlider, &QSlider::sliderPressed, this, &MediaPlayer::onSliderPressed);
-    connect(progressSlider, &QSlider::sliderMoved, this, &MediaPlayer::onSliderMoved);
-    connect(progressSlider, &QSlider::sliderReleased, this, &MediaPlayer::onSliderReleased);
+    connect(progressSlider, &QSlider::valueChanged, this, &VideoPlayer::onProgressChanged);
+    connect(progressSlider, &QSlider::sliderPressed, this, &VideoPlayer::onSliderPressed);
+    connect(progressSlider, &QSlider::sliderMoved, this, &VideoPlayer::onSliderMoved);
+    connect(progressSlider, &QSlider::sliderReleased, this, &VideoPlayer::onSliderReleased);
 
     mainLayout->addWidget(progressWidget);
 }
 
-void MediaPlayer::setupInfoArea()
+void VideoPlayer::setupInfoArea()
 {
     // 三层 - 信息编辑区域（固定高度50）
     infoWidget = new QWidget;
@@ -256,13 +256,13 @@ void MediaPlayer::setupInfoArea()
     infoLayout->addWidget(infoTextEdit, 1); // 文本编辑框拉伸
 
     // 连接信号槽
-    connect(openButton, &QPushButton::clicked, this, &MediaPlayer::onOpenClicked);
-    connect(infoTextEdit, &QTextEdit::textChanged, this, &MediaPlayer::onTextChanged);
+    connect(openButton, &QPushButton::clicked, this, &VideoPlayer::onOpenClicked);
+    connect(infoTextEdit, &QTextEdit::textChanged, this, &VideoPlayer::onTextChanged);
 
     mainLayout->addWidget(infoWidget);
 }
 
-void MediaPlayer::setupControlArea()
+void VideoPlayer::setupControlArea()
 {
     // 四层 - 控制按钮区域（固定高度50）
     controlWidget = new QWidget;
@@ -356,9 +356,9 @@ void MediaPlayer::setupControlArea()
     controlLayout->addStretch(); // 右侧弹簧
 
     // 连接信号槽
-    connect(playButton, &QPushButton::clicked, this, &MediaPlayer::onPlayClicked);
-    connect(pauseButton, &QPushButton::clicked, this, &MediaPlayer::onPauseClicked);
-    connect(stopButton, &QPushButton::clicked, this, &MediaPlayer::onStopClicked);
+    connect(playButton, &QPushButton::clicked, this, &VideoPlayer::onPlayClicked);
+    connect(pauseButton, &QPushButton::clicked, this, &VideoPlayer::onPauseClicked);
+    connect(stopButton, &QPushButton::clicked, this, &VideoPlayer::onStopClicked);
 
     // 绑定currentIndexChanged信号 - 选项改变时触发
     QObject::connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -373,7 +373,7 @@ void MediaPlayer::setupControlArea()
     mainLayout->addWidget(controlWidget);
 }
 
-void MediaPlayer::onPlayClicked()
+void VideoPlayer::onPlayClicked()
 {
     //videoLabel->setText("播放中...");
     //QString currentText = infoTextEdit->toPlainText();
@@ -384,12 +384,12 @@ void MediaPlayer::onPlayClicked()
     QString playUrl = infoTextEdit->toPlainText();
     if (playUrl.isEmpty())
     {
-        playUrl = "E:/code/media/BaiduSyncdisk2.mp4";
+        //playUrl = "E:/code/media/BaiduSyncdisk2.mp4";
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
 
         //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
-        //playUrl = "rtsp://172.16.19.69/live/test";
+        playUrl = "rtsp://127.0.0.1/live/rtsp_push";
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
         //playUrl = "rtsp://172.16.19.40:554/rtp/34020000001110000001_34020000001320000001_3?token=xCO73xOfG5uekWf4";
 
@@ -400,12 +400,13 @@ void MediaPlayer::onPlayClicked()
     videoLabel->hide();
 }
 
-void MediaPlayer::onPauseClicked()
+void VideoPlayer::onPauseClicked()
 {
     //videoLabel->setText("已暂停");
+    m_pPlayerWidget->PlayPause();
 }
 
-void MediaPlayer::onStopClicked()
+void VideoPlayer::onStopClicked()
 {
     videoLabel->show();
     m_pPlayerWidget->hide();
@@ -415,7 +416,7 @@ void MediaPlayer::onStopClicked()
     progressSlider->setValue(0);
 }
 
-void MediaPlayer::onOpenClicked()
+void VideoPlayer::onOpenClicked()
 {
     // 打开文件对话框
     QString fileName = QFileDialog::getOpenFileName(
@@ -438,26 +439,26 @@ void MediaPlayer::onOpenClicked()
     qInfo() << "选择的文件:" << fileName;
 }
 
-void MediaPlayer::onProgressChanged(int value)
+void VideoPlayer::onProgressChanged(int value)
 {
     // 这里添加实际的进度改变逻辑
     //qInfo() << "slider changed:" << value;
 
 }
 
-void MediaPlayer::onSliderPressed()
+void VideoPlayer::onSliderPressed()
 {
     qInfo() << "slider pressed";
     m_sliderDragging = true;
 }
 
-void MediaPlayer::onSliderMoved(int value)
+void VideoPlayer::onSliderMoved(int value)
 {
     qInfo() << "slider moved:" << value;
 
 }
 
-void MediaPlayer::onSliderReleased()
+void VideoPlayer::onSliderReleased()
 {
     int value = progressSlider->value();
     qInfo() << "slider released:" << value;
@@ -465,7 +466,7 @@ void MediaPlayer::onSliderReleased()
     m_sliderDragging = false;
 }
 
-void MediaPlayer::onTextChanged()
+void VideoPlayer::onTextChanged()
 {
     QString text = infoTextEdit->toPlainText();
 
@@ -476,18 +477,20 @@ void MediaPlayer::onTextChanged()
     }
 }
 
-void MediaPlayer::onPlayTime(int64_t seconds, int64_t totalSeconds)
+void VideoPlayer::onPlayTime(int64_t seconds, int64_t totalSeconds)
 {
     currentTimeLabel->setText(secondsToHms(seconds));
     totalTimeLabel->setText(secondsToHms(totalSeconds));
-    int percent = seconds * 100 / totalSeconds;
-    if (!m_sliderDragging) {
-        //qInfo() << "slider set:" << percent;
-        progressSlider->setValue(percent);
+    if (totalSeconds > 0) {
+        int percent = seconds * 100 / totalSeconds;
+        if (!m_sliderDragging) {
+            //qInfo() << "slider set:" << percent;
+            progressSlider->setValue(percent);
+        }
     }
 }
 
-void MediaPlayer::PlaySeek(int value)
+void VideoPlayer::PlaySeek(int value)
 {
     if (m_pPlayerWidget)
         m_pPlayerWidget->SeekPercent(value);

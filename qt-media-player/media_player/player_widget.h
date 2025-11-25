@@ -13,6 +13,7 @@ class MediaReader;
 class FishEyeWidget;
 class VideoConverter;
 class AudioConverter;
+class FrameQuality;
 class PlayerWidget : public QWidget, public PlayEvent
 {
     Q_OBJECT
@@ -22,6 +23,7 @@ public:
 
     void StartPlay(const QString& url, int decodeType = 0);
     void StopPlay();
+    void PlayPause();
     void ChangeSpeed(double speed);
     void SeekPercent(int value);
 
@@ -59,6 +61,7 @@ private:
     AudioRender* m_pAudioRender = nullptr;
     MediaReader* m_pMediaReader = nullptr;
     FishEyeWidget* m_pFishEyeWidget = nullptr;
+    FrameQuality* m_pFrameQuality = nullptr;
 
     std::atomic_bool m_isVideoPlaying = {false};
     std::atomic_bool m_isAudioPlaying = {false};

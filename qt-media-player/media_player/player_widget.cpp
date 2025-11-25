@@ -7,6 +7,7 @@
 #include "audio_render.h"
 #include "media/media_reader.h"
 #include "media/media_display.h"
+#include "media/media_frame_quality.h"
 #include "fisheye_widget.h"
 
 const int kVideoRGBConverter = 1;
@@ -37,11 +38,32 @@ PlayerWidget::PlayerWidget(QWidget* parent, int winIndex)
     layout->setContentsMargins(2, 2, 2, 2);  // 设置边距是为了选中时可以设置border
     layout->setSpacing(0);                   // 可选：去掉间距
     layout->addWidget(VideoRender);
+
+    m_pFrameQuality = new FrameQuality();
 }
 
 PlayerWidget::~PlayerWidget()
 {
+    delete m_pFrameQuality;
+    for (auto it = m_hashVideoConverter.begin(); it != m_hashVideoConverter.end(); ) {
+        if (it.value()) {
+            delete it.value();
+            it = m_hashVideoConverter.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
 
+    for (auto it = m_hashAudioConverter.begin(); it != m_hashAudioConverter.end(); ) {
+        if (it.value()) {
+            delete it.value();
+            it = m_hashAudioConverter.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
 }
 
 void PlayerWidget::StartPlay(const QString& url, int decodeType)
@@ -68,7 +90,7 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     if (!m_hashVideoConverter.contains(kVideoRGBConverter)) {
         VideoSpec spec;
         spec = { 0, 0, AV_PIX_FMT_RGB24 };
-        VideoConverter* converter = new VideoConverter(0, spec);
+        VideoConverter* converter = new VideoConverter(spec,"RGB_play");
         m_hashVideoConverter.insert(kVideoRGBConverter,converter);
     }
     AudioSpec spec;
@@ -77,7 +99,7 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     spec.channels = 2;
     spec.format = AV_SAMPLE_FMT_S16;
     if (!m_hashAudioConverter.contains(kAudioS16Converter)) {
-        AudioConverter* converter = new AudioConverter(0, spec);
+        AudioConverter* converter = new AudioConverter(spec,"S16_play");
         m_hashAudioConverter.insert(kAudioS16Converter, converter);
     }
 
@@ -91,12 +113,22 @@ void PlayerWidget::StopPlay()
     {
         m_pMediaReader->SetPlayEvent(nullptr);
         m_pMediaReader->Stop();
+        delete m_pMediaReader;
+        m_pMediaReader = nullptr;
     }
+
     if (m_pVideoRender)
         m_pVideoRender->ClearContent();
 
     if (m_pAudioRender)
         m_pAudioRender->Stop();
+}
+
+void PlayerWidget::PlayPause()
+{
+    if (m_pMediaReader) {
+        m_pMediaReader->Pause();
+    }
 }
 
 void PlayerWidget::ChangeSpeed(double speed)
@@ -119,11 +151,16 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 {
     m_isVideoPlaying = true;
 
+    if (m_pFrameQuality) {
+        if (m_pFrameQuality->IsGrayFrame(frame))
+            return;
+    }
+
     VideoFrame outFrame;
     if (frame.spec.format != kVideoFmtYUV420P && frame.spec.format != kVideoFmtYUVJ420P && frame.spec.format != kVideoFmtNV12) {
         auto converter = m_hashVideoConverter.value(kVideoRGBConverter);
         if (converter)
-            converter->DisplayInput(frame, outFrame);
+            converter->Input(frame, outFrame);
     }
     else {
         outFrame = frame;
@@ -151,7 +188,7 @@ void PlayerWidget::onAudioFrame(const AudioFrame& frame)
     if (frame.spec.format != kAudioFmtS16 || frame.spec.sampleRate != 16000 || frame.spec.channels != 2) {
         auto converter = m_hashAudioConverter.value(kAudioS16Converter);
         if (converter)
-            converter->DisplayInput(frame, outFrame);
+            converter->Input(frame, outFrame);
     }
     else {
         outFrame = frame;

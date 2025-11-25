@@ -2,8 +2,8 @@
  <author/>
  <comment/>
  <exportmacro/>
- <class>MediaPlayer</class>
- <widget class="QWidget" name="MediaPlayer">
+ <class>VideoPlayer</class>
+ <widget class="QWidget" name="VideoPlayer">
   <property name="geometry">
    <rect>
     <x>0</x>

@@ -4,7 +4,7 @@
 #include <queue>
 #include <condition_variable>
 #include <mutex>
-
+#include <cmath>
 
 //参考fflay的时钟写法
 //ffplay的倍速播放是通过滤镜实现的，时钟设置的倍速好像没有使用
@@ -15,6 +15,7 @@ public:
     ~MediaClock();
 
     bool wait(double pts, double master = -1.0, double speed = 1.0);
+    bool wait2(double pts, double master = -1.0, double speed = 1.0);
 
     double get_clock();
 

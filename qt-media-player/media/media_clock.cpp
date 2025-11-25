@@ -68,7 +68,7 @@ double MediaClock::compute_target_delay(double delay, double pts, double master)
 bool MediaClock::wait(double pts, double master, double speed)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
-    if (m_startTs == 0.0f) {
+    if (m_startTs == 0.0) {
         m_startTs = master;
         m_startPts = pts;
     }
@@ -115,6 +115,24 @@ bool MediaClock::wait(double pts, double master, double speed)
     return true;
 }
 
+bool MediaClock::wait2(double pts, double master, double speed)
+{
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_startTs == 0.0 && !isnan(pts) && !isnan(master)) {
+        m_startTs = master;
+        m_startPts = pts;
+    }
+    double elapsedPts = pts - m_startPts; // 相对 pts
+    double elapsedClock = master - m_startTs; // 相对 clock
+    double diff = elapsedPts - elapsedClock;// +1.0; // > 0 表示视频超前, 增加1s延迟，会导致第一帧播放慢
+
+    if (diff > 0) {
+        diff = (std::min)(diff, kNoSyncThreshold); //避免等待时间过长
+        av_usleep(diff * 1000000.0);
+    }
+    return true;
+}
+
 double MediaClock::get_clock()
 {
     std::lock_guard<std::mutex> locker(m_mutex);
@@ -123,7 +141,8 @@ double MediaClock::get_clock()
     }
     else {
         double time = av_gettime_relative() / 1000000.0;
-        return m_ptsDrift + time - (time - m_lastUpdated) * (1.0 - m_speed);
+        double clock =  m_ptsDrift + time - (time - m_lastUpdated) * (1.0 - m_speed);
+        return clock;
     }
 }
 
@@ -156,16 +175,13 @@ void MediaClock::sync_clock_to_slave(double slave_clock)
 }
 
 void MediaClock::init_clock() {
+    set_clock(NAN);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_startTs = 0.0;
     m_startPts = 0.0;
     m_lastPts = 0.0;
     m_lastDelay = 0.0;
     m_frameTimer = 0.0;
-
-    m_pts = NAN;
-    m_lastUpdated = 0.0;
-    m_ptsDrift = 0.0;
     m_speed = 1.0;
     m_paused = 0;
 }

@@ -11,7 +11,7 @@ struct AVFrame;
 class PacketQueue
 {
 public:
-    PacketQueue(int16_t maxQueueSize = 3000);
+    PacketQueue(int16_t maxQueueSize = 1000);
     ~PacketQueue();
 
     void Push(AVPacket* pkt, bool fullRemove = false); //满了移除队列

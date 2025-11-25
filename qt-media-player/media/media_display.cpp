@@ -15,15 +15,16 @@ extern "C"
 #include "log.h"
 #include "media/media_utils.h"
 
-VideoConverter::VideoConverter(int converterId, const VideoSpec& dstSpec)
-    : m_converterId(converterId)
-    , m_dstSpec(dstSpec)
+VideoConverter::VideoConverter(const VideoSpec& dstSpec, const std::string& id)
+    : m_dstSpec(dstSpec)
+    , m_converterId(id)
 {
 
 }
 
 VideoConverter::~VideoConverter()
 {
+    m_pCallback = nullptr;
     if (m_pSwsCxtVideo) {
         sws_freeContext(m_pSwsCxtVideo);
         m_pSwsCxtVideo = nullptr;
@@ -32,6 +33,16 @@ VideoConverter::~VideoConverter()
         av_freep(&m_pFrameDst[0]);
         av_frame_free(&m_pFrameDst);
     }
+}
+
+VideoSpec VideoConverter::GetSrcSpec()
+{
+    return m_srcSpec;
+}
+
+VideoSpec VideoConverter::GetDstSpec()
+{
+    return m_dstSpec;
 }
 
 void VideoConverter::SetCallback(const VideoCallback& callback)
@@ -87,7 +98,7 @@ PlayError VideoConverter::InitDstFrame()
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError VideoConverter::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
+PlayError VideoConverter::Input(AVFrame* pFrame, VideoFrame& outFrame)
 {
     //重采样操作锁，避免同时更改
     std::lock_guard<std::mutex> lock(m_swsMutex);
@@ -177,7 +188,7 @@ PlayError VideoConverter::DisplayInput(AVFrame* pFrame, VideoFrame& outFrame)
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError VideoConverter::DisplayInput(const VideoFrame& inFrame, VideoFrame& outFrame)
+PlayError VideoConverter::Input(const VideoFrame& inFrame, VideoFrame& outFrame)
 {
     AVFrame* pFrame = av_frame_alloc();
     pFrame->width = inFrame.spec.width;
@@ -188,21 +199,21 @@ PlayError VideoConverter::DisplayInput(const VideoFrame& inFrame, VideoFrame& ou
         pFrame->data[i] = inFrame.linedata[i];
         pFrame->linesize[i] = inFrame.linesize[i];
     }
-    auto ret = DisplayInput(pFrame, outFrame);
+    auto ret = Input(pFrame, outFrame);
     av_frame_free(&pFrame);
     return ret;
 }
 
-PlayError VideoConverter::DisplayInput(AVFrame* pFrame)
+PlayError VideoConverter::Input(AVFrame* pFrame)
 {
     VideoFrame outFrame;
-    return DisplayInput(pFrame, outFrame);
+    return Input(pFrame, outFrame);
 }
 
-void VideoConverter::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
+void VideoConverter::UpdateDstSize(int iDstWidth, int iDstHeight)
 {
-    LOG_INFO << "converterId:" << m_converterId << " update display size:" << iDisplayWidth << "," << iDisplayHeight;
-    if (m_dstSpec.width == iDisplayWidth && m_dstSpec.height)
+    LOG_INFO << "converterId:" << m_converterId << " update converter size:" << iDstWidth << "," << iDstHeight;
+    if (m_dstSpec.width == iDstWidth && m_dstSpec.height == iDstHeight)
         return;
     int64_t curTime = av_gettime_relative();
     //避免快速更改大小导致的重新初始化重采样器，限制1s内不更改重采样器
@@ -220,7 +231,7 @@ void VideoConverter::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
         iWidth = minW;
         iHeight = minH;
         //获取一个宽高刚好比播放宽高大，比例一致的宽高，宽高比例要是不一致，重采样出来的图片是混乱的
-        while (iWidth <= iDisplayWidth && iHeight <= iDisplayHeight)
+        while (iWidth <= iDstWidth && iHeight <= iDstHeight)
         {
             times += 8;//非4的倍数，在使用QImage加载时，会默认以4对齐取每行的字节数，非8的倍数，yuv渲染有点问题，这里强制保证宽高是8的倍数
             iWidth = minW * times;
@@ -246,16 +257,15 @@ void VideoConverter::UpdateDisplaySize(int iDisplayWidth, int iDisplayHeight)
     }
 }
 
-
-AudioConverter::AudioConverter(int converterId, const AudioSpec& dstSpec)
-    : m_converterId(converterId)
-    , m_dstSpec(dstSpec)
+AudioConverter::AudioConverter(const AudioSpec& dstSpec, const std::string& id)
+    : m_dstSpec(dstSpec)
+    , m_converterId(id)
 {
-
 }
 
 AudioConverter::~AudioConverter()
 {
+    m_pCallback = nullptr;
     if (m_pSwrCxtAudio) {
         swr_free(&m_pSwrCxtAudio);
         m_pSwrCxtAudio = nullptr;
@@ -263,6 +273,16 @@ AudioConverter::~AudioConverter()
     if (m_pFrameDst) {
         av_frame_free(&m_pFrameDst);
     }
+}
+
+AudioSpec AudioConverter::GetSrcSpec()
+{
+    return m_srcSpec;
+}
+
+AudioSpec AudioConverter::GetDstSpec()
+{
+    return m_dstSpec;
 }
 
 void AudioConverter::SetCallback(const AudioCallback& callback)
@@ -335,7 +355,7 @@ static std::ofstream g_pcmOutput;
 static std::ofstream g_pcmInput;
 #endif
 
-PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
+PlayError AudioConverter::Input(AVFrame* pFrame, AudioFrame& outFrame)
 {
     if (m_dstSpec.sampleRate <= 0)
         m_dstSpec.sampleRate = pFrame->sample_rate;
@@ -432,7 +452,7 @@ PlayError AudioConverter::DisplayInput(AVFrame* pFrame, AudioFrame& outFrame)
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
 
-PlayError AudioConverter::DisplayInput(const AudioFrame& inFrame, AudioFrame& outFrame)
+PlayError AudioConverter::Input(const AudioFrame& inFrame, AudioFrame& outFrame)
 {
     AVFrame* pFrame = av_frame_alloc();
     pFrame->sample_rate = inFrame.spec.sampleRate;
@@ -446,18 +466,18 @@ PlayError AudioConverter::DisplayInput(const AudioFrame& inFrame, AudioFrame& ou
         pFrame->data[i] = inFrame.linedata[i];
         pFrame->linesize[i] = inFrame.linesize[i];
     }
-    auto ret = DisplayInput(pFrame, outFrame);
+    auto ret = Input(pFrame, outFrame);
     av_frame_free(&pFrame);
     return ret;
 }
 
-PlayError AudioConverter::DisplayInput(AVFrame* pFrame)
+PlayError AudioConverter::Input(AVFrame* pFrame)
 {
     AudioFrame outFrame;
-    return DisplayInput(pFrame, outFrame);
+    return Input(pFrame, outFrame);
 }
 
-PlayError AudioConverter::GetDisplayEndFrame(AudioFrame& outFrame)
+PlayError AudioConverter::GetEndFrame(AudioFrame& outFrame)
 {
     uint8_t* buffer = nullptr;
     size_t bufferSize = 0;

@@ -12,17 +12,17 @@
 #include <QComboBox>
 
 namespace Ui {
-class MediaPlayer;
+class VideoPlayer;
 }
 
 class PlayerWidget;
-class MediaPlayer : public QWidget
+class VideoPlayer : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit MediaPlayer(QWidget *parent = nullptr);
-    ~MediaPlayer();
+    explicit VideoPlayer(QWidget *parent = nullptr);
+    ~VideoPlayer();
 
 signals:
     //void sig_Update();
@@ -52,7 +52,7 @@ private:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
-    Ui::MediaPlayer *ui;
+    Ui::VideoPlayer *ui;
 
     // 一层 - 播放窗口
     QWidget* videoWidget;

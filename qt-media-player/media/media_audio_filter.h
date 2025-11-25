@@ -44,7 +44,7 @@ private:
     int m_sampleRate = 0;
     AVSampleFormat m_sampleFmt;
     int64_t m_channelLayout = 0;
-    double m_speed = 1.0f;
+    double m_speed = 1.0;
 };
 
 void processAudioFrame(AVFrame* decodedFrame, AudioSpeedFilter* filter);

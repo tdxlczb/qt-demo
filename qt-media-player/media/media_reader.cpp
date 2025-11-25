@@ -103,6 +103,25 @@ void MediaReader::Stop()
     m_iLastCountTime = 0;
 }
 
+void MediaReader::Pause()
+{
+    m_pauseReq.store(true);
+    //if (m_isPaused.load()) {
+    //    // 恢复读取（FFmpeg 4.0+）
+    //    if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
+    //        int ret = av_read_play(m_formatContext);  // 内部发送RTSP PLAY
+    //        m_isPaused.store(false);
+    //    }
+    //}
+    //else {
+    //    // 暂停读取（FFmpeg 4.0+）
+    //    if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
+    //        int ret = av_read_pause(m_formatContext); // 内部发送RTSP PAUSE
+    //        m_isPaused.store(true);
+    //    }
+    //}
+}
+
 void MediaReader::Speed(double speed)
 {
     if (m_isMediaFile) {
@@ -147,6 +166,10 @@ void MediaReader::ReadThread()
         return;
     }
 
+    videoClock.init_clock();
+    audioClock.init_clock();
+    extClock.init_clock();
+
     //FrameReaderSync();
     //return;
     if (m_videoStreamIndex >= 0) {
@@ -182,6 +205,28 @@ void MediaReader::ReadThread()
             m_seekReq.store(false);
         }
 
+        if (m_pauseReq.load()) {
+            if (m_isPaused.load()) {
+                // 恢复读取（FFmpeg 4.0+）
+                if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
+                    int ret = av_read_play(m_formatContext);  // 内部发送RTSP PLAY
+                    m_isPaused.store(false);
+                }
+            }
+            else {
+                // 暂停读取（FFmpeg 4.0+）
+                if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
+                    int ret = av_read_pause(m_formatContext); // 内部发送RTSP PAUSE
+                    m_isPaused.store(true);
+                }
+            }
+            m_pauseReq.store(false);
+        }
+
+        if (m_isPaused.load()) {
+            av_usleep(10000);
+            continue;
+        }
 
         av_packet_unref(packet);
         int ret = av_read_frame(m_formatContext, packet);
@@ -205,11 +250,13 @@ void MediaReader::ReadThread()
         int64_t curTime = av_gettime_relative();
         if (packet->stream_index == m_videoStreamIndex)
         {
+            //LOG_INFO << "========video packet pts:" << packet->pts;
             m_videoPacketSize += packet->size;
             m_videoPacketQueue.Push(packet, !m_isMediaFile);
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
+            //LOG_INFO << "audio packet pts:" << packet->pts;
             m_audioPacketSize += packet->size;
             m_audioPacketQueue.Push(packet, !m_isMediaFile);
         }
@@ -237,6 +284,13 @@ void MediaReader::VideoThread()
     auto      frameCount = videoStream->nb_frames;
     int       gopSize = m_videoCodecContext->gop_size;
 
+
+    if (videoStream->start_time != AV_NOPTS_VALUE) {
+        auto videoStartTime = videoStream->start_time * av_q2d(videoStream->time_base);
+        LOG_INFO << PLAYTAG << "video start time:" << videoStartTime;
+    }
+
+
     int frameIndex = 0;
     while (m_isThreadRun.load())
     {
@@ -247,6 +301,10 @@ void MediaReader::VideoThread()
         if (m_isStreamOver.load() && m_isMediaFile && m_videoPacketQueue.Size() <= 0)
             break;
 
+        if (m_isPaused.load()) {
+            av_usleep(1000);
+            continue;
+        }
         AVPacket* packet = m_videoPacketQueue.PopFront();
         if (!packet) {
             av_usleep(1000);//windows系统sleep精度是15ms，放到前面使用sleep会导致处理太慢
@@ -267,12 +325,17 @@ void MediaReader::AudioThread()
     if (!m_formatContext || !m_videoCodecContext)
         return;
 
-    //AVStream* audioStream = m_formatContext->streams[m_audioStreamIndex];
+    AVStream* audioStream = m_formatContext->streams[m_audioStreamIndex];
     //const int      in_sample_rate = m_audioCodecContext->sample_rate;
     //AVSampleFormat in_sfmt = m_audioCodecContext->sample_fmt;
     //int            int_spb = av_get_bytes_per_sample(in_sfmt);
     //uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
     //int            in_channels = m_audioCodecContext->channels;
+
+    if (audioStream->start_time != AV_NOPTS_VALUE) {
+        auto audioStartTime = audioStream->start_time * av_q2d(audioStream->time_base);
+        LOG_INFO << PLAYTAG << "audio start time:" << audioStartTime;
+    }
 
     while (m_isThreadRun.load())
     {
@@ -283,6 +346,10 @@ void MediaReader::AudioThread()
         if (m_isStreamOver.load() && m_isMediaFile && m_audioPacketQueue.Size() <= 0)
             break;
 
+        if (m_isPaused.load()) {
+            av_usleep(1000);
+            continue;
+        }
         AVPacket* packet = m_audioPacketQueue.PopFront();
         if (!packet) {
             av_usleep(1000);//windows系统sleep精度是15ms，放到前面使用sleep会导致处理太慢
@@ -400,7 +467,7 @@ void MediaReader::AudioDecode(AVPacket* packet)
         //LOG_DEBUG << PLAYTAG << "decode audio frame index:" << m_audioFrameIndex;
         m_audioFrameIndex++;
 
-        if (m_speed != 1.0f) {
+        if (m_speed != 1.0) {
             if (!m_pAudioSpeedFilter) {
                 m_pAudioSpeedFilter = new AudioSpeedFilter();
                 m_pAudioSpeedFilter->Init(frame->sample_rate, (AVSampleFormat)frame->format, frame->channel_layout, m_speed);
@@ -449,17 +516,25 @@ void MediaReader::DisplayVideo(AVFrame* frame)
     double pts = npts * av_q2d(m_formatContext->streams[m_videoStreamIndex]->time_base);
     double now = av_gettime_relative() / 1000000.0;
 
-    while (true)
-    {
-        if (!videoClock.wait(pts, audioClock.get_clock(), m_speed)) {
-            av_usleep(1000.0);
-            continue;
-        }
-        else {
-            break;
-        }
-
+    double master = audioClock.get_clock();
+    if (isnan(master)) {
+        master = extClock.get_clock();
     }
+    videoClock.wait2(pts, master, m_speed);
+    //更新时钟
+    videoClock.set_clock(pts);
+    extClock.sync_clock_to_slave(videoClock.get_clock());
+    //while (true)
+    //{
+    //    if (!videoClock.wait(pts, master, m_speed)) {
+    //        av_usleep(1000.0);
+    //        continue;
+    //    }
+    //    else {
+    //        break;
+    //    }
+
+    //}
 
     VideoFrame outFrame;
     for (size_t i = 0; i < 8; i++)
@@ -475,9 +550,7 @@ void MediaReader::DisplayVideo(AVFrame* frame)
     if (m_playEvent) {
         m_playEvent->onVideoFrame(outFrame);
     }
-    //更新时钟
-    videoClock.set_clock(pts);
-    extClock.sync_clock_to_slave(videoClock.get_clock());
+
 }
 
 void MediaReader::DisplayAudio(AVFrame* frame)
@@ -487,19 +560,22 @@ void MediaReader::DisplayAudio(AVFrame* frame)
     double pts = npts * av_q2d(m_formatContext->streams[m_audioStreamIndex]->time_base);
     double now = av_gettime_relative() / 1000000.0;
 
-    while (true)
-    {
-        if (!audioClock.wait(pts, -1.0)) {
-            av_usleep(1000.0);
-            continue;
-        }
-        else {
-            break;
-        }
+    //while (true)
+    //{
+    //    if (!audioClock.wait(pts, -1.0)) {
+    //        av_usleep(1000.0);
+    //        continue;
+    //    }
+    //    else {
+    //        break;
+    //    }
 
-    }
+    //}
     //g_filter2.WriteFrame(frame);
-
+   
+    //更新时钟
+    audioClock.set_clock(pts);
+    extClock.sync_clock_to_slave(audioClock.get_clock());
     AudioFrame outFrame;
     for (size_t i = 0; i < 8; i++)
     {
@@ -517,9 +593,7 @@ void MediaReader::DisplayAudio(AVFrame* frame)
         m_playEvent->onAudioFrame(outFrame);
     }
 
-    //更新时钟
-    audioClock.set_clock(pts);
-    extClock.sync_clock_to_slave(audioClock.get_clock());
+
 }
 
 //复用同一个AVHWDeviceContext能减少大量cpu和gpu
@@ -780,6 +854,29 @@ void MediaReader::FrameReaderSync()
     AVPacket* packet = av_packet_alloc();
     while (m_isThreadRun.load() && !m_isStreamOver.load())
     {
+        if (m_pauseReq.load()) {
+            if (m_isPaused.load()) {
+                // 恢复读取（FFmpeg 4.0+）
+                if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
+                    int ret = av_read_play(m_formatContext);  // 内部发送RTSP PLAY
+                    m_isPaused.store(false);
+                }
+            }
+            else {
+                // 暂停读取（FFmpeg 4.0+）
+                if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
+                    int ret = av_read_pause(m_formatContext); // 内部发送RTSP PAUSE
+                    m_isPaused.store(true);
+                }
+            }
+            m_pauseReq.store(false);
+        }
+
+        if (m_isPaused.load()) {
+            av_usleep(10000);
+            continue;
+        }
+
         av_packet_unref(packet);
         int ret = av_read_frame(m_formatContext, packet);
         if (ret < 0)
@@ -794,11 +891,13 @@ void MediaReader::FrameReaderSync()
         }
         if (packet->stream_index == m_videoStreamIndex)
         {
+            m_videoPacketIndex++;
             VideoDecode(packet);
         }
         else if (packet->stream_index == m_audioStreamIndex)
         {
-
+            m_audioPacketIndex++;
+            AudioDecode(packet);
         }
     }
     av_packet_free(&packet);
