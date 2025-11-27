@@ -12,7 +12,7 @@ DEFINES += QT_MESSAGELOGCONTEXT
 
 include(core/core.pri)
 include(media/media.pri)
-include(media_player/media_player.pri)
+include(player/player.pri)
 include(tests/tests.pri)
 include(utils/utils.pri)
 

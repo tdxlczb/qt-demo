@@ -4,7 +4,7 @@
 #include <QPushButton>
 #include <QDebug>
 #include "media_player/player_widget.h"
-#include "media_player/media_player.h"
+#include "media_player/video_player.h"
 #include "media_player/video_manager.h"
 
 
