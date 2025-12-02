@@ -330,12 +330,54 @@ void VideoPlayer::setupControlArea()
         "}"
     );
 
+    // 向后跳转按钮
+    seekBackwardButton = new QPushButton;
+    seekBackwardButton->setFixedSize(40, 40);
+    seekBackwardButton->setIcon(style()->standardIcon(QStyle::SP_MediaSeekBackward));
+    seekBackwardButton->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #e74c3c;"
+        "    border: none;"
+        "    border-radius: 20px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #ec7063;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #c0392b;"
+        "}"
+    );
+
+    // 向前跳转按钮
+    seekForwardButton = new QPushButton;
+    seekForwardButton->setFixedSize(40, 40);
+    seekForwardButton->setIcon(style()->standardIcon(QStyle::SP_MediaSeekForward));
+    seekForwardButton->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #e74c3c;"
+        "    border: none;"
+        "    border-radius: 20px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #ec7063;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #c0392b;"
+        "}"
+    );
+
     comboBox = new QComboBox();
-    comboBox->addItem("0.5x");
-    comboBox->addItem("1.0x");
-    comboBox->addItem("1.5x");
-    comboBox->addItem("2.0x");
-    comboBox->setCurrentIndex(1);
+    comboBox->addItem("0.125x", 0.125);
+    comboBox->addItem("0.25x", 0.25);
+    comboBox->addItem("0.5x", 0.5);
+    comboBox->addItem("0.75x", 0.75);
+    comboBox->addItem("1.0x", 1.0);
+    comboBox->addItem("1.5x", 1.5);
+    comboBox->addItem("2.0x", 2.0);
+    comboBox->addItem("4.0x", 4.0);
+    comboBox->addItem("8.0x", 8.0);
+    comboBox->addItem("16.0x", 16.0);
+    comboBox->setCurrentIndex(4);
     comboBox->setFixedSize(60, 30);
     comboBox->setStyleSheet(
         "QComboBox {"
@@ -352,6 +394,8 @@ void VideoPlayer::setupControlArea()
     controlLayout->addWidget(playButton);
     controlLayout->addWidget(pauseButton);
     controlLayout->addWidget(stopButton);
+    controlLayout->addWidget(seekBackwardButton);
+    controlLayout->addWidget(seekForwardButton);
     controlLayout->addWidget(comboBox);
     controlLayout->addStretch(); // 右侧弹簧
 
@@ -359,13 +403,16 @@ void VideoPlayer::setupControlArea()
     connect(playButton, &QPushButton::clicked, this, &VideoPlayer::onPlayClicked);
     connect(pauseButton, &QPushButton::clicked, this, &VideoPlayer::onPauseClicked);
     connect(stopButton, &QPushButton::clicked, this, &VideoPlayer::onStopClicked);
+    connect(seekBackwardButton, &QPushButton::clicked, this, &VideoPlayer::onSeekBackwardClicked);
+    connect(seekForwardButton, &QPushButton::clicked, this, &VideoPlayer::onSeekForwardClicked);
 
     // 绑定currentIndexChanged信号 - 选项改变时触发
     QObject::connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         [this](int index) {
             qDebug() << "选项改变，当前索引:" << index;
+            auto data = comboBox->itemData(index);
             if (m_pPlayerWidget) {
-                double speed = index * 0.5 + 0.5;
+                double speed = data.toDouble();
                 m_pPlayerWidget->ChangeSpeed(speed);
             }
         });
@@ -385,13 +432,17 @@ void VideoPlayer::onPlayClicked()
     if (playUrl.isEmpty())
     {
         //playUrl = "E:/code/media/BaiduSyncdisk2.mp4";
+        //playUrl = "rtsp://172.16.19.69/live/test";
+        
+        
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
         //playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
-
         //playUrl = "rtsp://172.16.47.126:554/rtp/34020000001180000009_34020000001320000002_20250820091840_20250820235959_3_100000_1755652956?token=yCZGygvNedUaTiZW";
-        playUrl = "rtsp://127.0.0.1/live/rtsp_push";
+
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
         //playUrl = "rtsp://172.16.19.40:554/rtp/34020000001110000001_34020000001320000001_3?token=xCO73xOfG5uekWf4";
+        //playUrl = "rtsp://172.16.25.11:554/unicast/c1/s1/live/";//宇视
+        playUrl = "rtsp://admin:admin@123@172.16.25.11:554/c2/b1764374400/e1764378000/replay/s0/";//宇视
 
         infoTextEdit->setPlainText(playUrl);
     }
@@ -414,6 +465,16 @@ void VideoPlayer::onStopClicked()
 
     //videoLabel->setText("视频播放");
     progressSlider->setValue(0);
+}
+
+void VideoPlayer::onSeekForwardClicked()
+{
+    m_pPlayerWidget->SeekTime(60);
+}
+
+void VideoPlayer::onSeekBackwardClicked()
+{
+    m_pPlayerWidget->SeekTime(-60);
 }
 
 void VideoPlayer::onOpenClicked()

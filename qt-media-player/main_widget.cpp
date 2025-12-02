@@ -3,9 +3,9 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QDebug>
-#include "media_player/player_widget.h"
-#include "media_player/video_player.h"
-#include "media_player/video_manager.h"
+#include "player/player_widget.h"
+#include "player/video_player.h"
+#include "player/video_manager.h"
 
 
 MainWidget::MainWidget(QWidget *parent) :

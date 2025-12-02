@@ -9,7 +9,7 @@
 
 class VideoRender;
 class AudioRender;
-class MediaReader;
+class MediaPlayer;
 class FishEyeWidget;
 class VideoConverter;
 class AudioConverter;
@@ -26,6 +26,7 @@ public:
     void PlayPause();
     void ChangeSpeed(double speed);
     void SeekPercent(int value);
+    void SeekTime(int value);
 
 protected:
     virtual void onVideoFrame(const VideoFrame& frame) override;
@@ -59,13 +60,17 @@ private:
     int m_winIndex = 0;
     VideoRender* m_pVideoRender = nullptr;
     AudioRender* m_pAudioRender = nullptr;
-    MediaReader* m_pMediaReader = nullptr;
+    MediaPlayer* m_pMediaPlayer = nullptr;
     FishEyeWidget* m_pFishEyeWidget = nullptr;
     FrameQuality* m_pFrameQuality = nullptr;
 
     std::atomic_bool m_isVideoPlaying = {false};
     std::atomic_bool m_isAudioPlaying = {false};
 
+    bool m_isPaused = false;
+    double m_playStartPts = 0.0;
+    double m_playCurrentPts = 0.0;
+    double m_totalSeekTime = 0.0;
     QHash<int, VideoConverter*> m_hashVideoConverter;
     QHash<int, AudioConverter*> m_hashAudioConverter;
 };

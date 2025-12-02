@@ -131,6 +131,19 @@ int audio_copy(uint8_t* dst_data[4], int dst_linesizes[4], uint8_t* src_data[4],
     return bufferSize;
 }
 
+bool IsNetworkStream(const std::string& url) {
+    const std::vector<std::string> protocols = {
+        "http://", "https://", "rtmp://", "rtsp://", "ftp://",
+        "udp://", "tcp://", "mms://", "rtp://"
+    };
+
+    for (const auto& proto : protocols) {
+        if (url.find(proto) == 0) {  // 以协议头开头
+            return true;
+        }
+    }
+    return false;
+}
 
 AudioPCMWriter::AudioPCMWriter(const std::string& filePath)
 {

@@ -31,6 +31,8 @@ private slots:
     void onPlayClicked();
     void onPauseClicked();
     void onStopClicked();
+    void onSeekForwardClicked();
+    void onSeekBackwardClicked();
     void onOpenClicked();
     void onProgressChanged(int value);
     void onSliderPressed();
@@ -76,6 +78,8 @@ private:
     QPushButton* playButton;
     QPushButton* pauseButton;
     QPushButton* stopButton;
+    QPushButton* seekForwardButton;
+    QPushButton* seekBackwardButton;
     QComboBox* comboBox;
 
     // 主布局

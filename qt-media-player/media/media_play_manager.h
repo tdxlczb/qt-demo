@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-class MediaReader;
+class MediaPlayer;
 class PlayManager
 {
 public:
@@ -13,7 +13,7 @@ public:
     ~PlayManager() {};
     static PlayManager& Instance();
 
-    std::shared_ptr<MediaReader> CreatePlay(int index);
+    std::shared_ptr<MediaPlayer> CreatePlay(int index);
 
 private:
     PlayManager(const PlayManager&) = delete; //拷贝构造
@@ -21,7 +21,7 @@ private:
     PlayManager(PlayManager&&) = delete; //移动构造
     PlayManager& operator=(PlayManager&&) = delete; //移动赋值
 private:
-    std::map<std::string, std::shared_ptr<MediaReader>> m_mediaMaps;
+    std::map<std::string, std::shared_ptr<MediaPlayer>> m_mediaMaps;
 };
 
 

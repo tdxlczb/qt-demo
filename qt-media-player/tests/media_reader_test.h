@@ -1,10 +1,10 @@
-#ifndef MEDIA_READER_TEST_H
-#define MEDIA_READER_TEST_H
+#ifndef MEDIA_PLAYER_TEST_H
+#define MEDIA_PLAYER_TEST_H
 
-void MediaReaderTest();
+void MediaPlayerTest();
 
 void FindEncoders();
 
 void FindHWDeviceDecoders();
 
-#endif // MEDIA_READER_TEST_H
+#endif // MEDIA_PLAYER_TEST_H

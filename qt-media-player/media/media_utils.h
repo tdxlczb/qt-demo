@@ -23,6 +23,7 @@ int audio_copy(
     uint8_t* src_data[4], int src_linesizes[4],
     int nb_samples, int nb_channels, int sample_fmt);
 
+bool IsNetworkStream(const std::string& url);
 
 #include <fstream>
 #include <cstdio>

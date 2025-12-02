@@ -63,7 +63,7 @@ void AudioOutputTest()
 #include <fstream>
 #include <thread>
 #include <chrono>
-#include "media_player/audio_render.h"
+#include "player/audio_render.h"
 #include "../media/sonic/sonic.h"
 
 void AudioRenderTest()

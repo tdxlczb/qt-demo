@@ -30,7 +30,7 @@ VideoConverter::~VideoConverter()
         m_pSwsCxtVideo = nullptr;
     }
     if (m_pFrameDst) {
-        av_freep(&m_pFrameDst[0]);
+        av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
     }
 }
@@ -75,7 +75,7 @@ PlayError VideoConverter::InitSwsContext(const VideoSpec& srcSpec)
 PlayError VideoConverter::InitDstFrame()
 {
     if (m_pFrameDst) {
-        av_freep(&m_pFrameDst[0]);
+        av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
     }
 
@@ -251,7 +251,7 @@ void VideoConverter::UpdateDstSize(int iDstWidth, int iDstHeight)
         m_pSwsCxtVideo = nullptr;
     }
     if (m_pFrameDst) {
-        av_freep(&m_pFrameDst[0]);
+        av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
         m_pFrameDst = nullptr;
     }
@@ -321,7 +321,7 @@ PlayError AudioConverter::InitSwrContext(const AudioSpec& srcSpec)
 PlayError AudioConverter::InitDstFrame()
 {
     if (m_pFrameDst) {
-        av_freep(&m_pFrameDst[0]);
+        av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
     }
 

@@ -2,7 +2,7 @@
 #include "ui_video_manager.h"
 #include <QDebug>
 #include <QTextStream>
-#include "media_player/player_widget.h"
+#include "player/player_widget.h"
 
 VideoManager::VideoManager(QWidget* parent) :
     QWidget(parent),

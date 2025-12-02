@@ -5,9 +5,11 @@
 #include <QDebug>
 #include "video_render.h"
 #include "audio_render.h"
-#include "media/media_reader.h"
+#include "media/media_player.h"
 #include "media/media_display.h"
 #include "media/media_frame_quality.h"
+#include "media/ffmpeg_player.h"
+#include "media/rtsp_player.h"
 #include "fisheye_widget.h"
 
 const int kVideoRGBConverter = 1;
@@ -76,11 +78,14 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
         opt.hwdevice = "d3d11va";
     }
 
-    if (!m_pMediaReader)
-        m_pMediaReader = new MediaReader(m_winIndex);
+    if (!m_pMediaPlayer) {
+        //m_pMediaPlayer = new MediaPlayer();
+        //m_pMediaPlayer = new FFmpegPlayer();
+        m_pMediaPlayer = new RtspPlayer();
+    }
 
-    m_pMediaReader->SetPlayEvent(this);
-    m_pMediaReader->Play(url.toStdString(), opt);
+    m_pMediaPlayer->SetPlayEvent(this);
+    m_pMediaPlayer->Play(url.toStdString(), opt);
 
     //m_pFishEyeWidget = new FishEyeWidget();
     //m_pFishEyeWidget->resize(1000, 800);
@@ -89,7 +94,7 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
 
     if (!m_hashVideoConverter.contains(kVideoRGBConverter)) {
         VideoSpec spec;
-        spec = { 0, 0, AV_PIX_FMT_RGB24 };
+        spec = { 0, 0, kVideoFmtRGB };
         VideoConverter* converter = new VideoConverter(spec,"RGB_play");
         m_hashVideoConverter.insert(kVideoRGBConverter,converter);
     }
@@ -97,24 +102,24 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     spec.sampleRate = 16000;
     spec.bitPerSample = 16;
     spec.channels = 2;
-    spec.format = AV_SAMPLE_FMT_S16;
+    spec.format = kAudioFmtS16;
     if (!m_hashAudioConverter.contains(kAudioS16Converter)) {
         AudioConverter* converter = new AudioConverter(spec,"S16_play");
         m_hashAudioConverter.insert(kAudioS16Converter, converter);
     }
 
     m_pAudioRender->Start(spec, 1024);
-    //m_pAudioRender->SetPCMCallback(std::bind(&MediaReader::GetAudioFrame, m_pMediaReader, std::placeholders::_1, std::placeholders::_2));
+    //m_pAudioRender->SetPCMCallback(std::bind(&MediaPlayer::GetAudioFrame, m_pMediaPlayer, std::placeholders::_1, std::placeholders::_2));
 }
 
 void PlayerWidget::StopPlay()
 {
-    if (m_pMediaReader)
+    if (m_pMediaPlayer)
     {
-        m_pMediaReader->SetPlayEvent(nullptr);
-        m_pMediaReader->Stop();
-        delete m_pMediaReader;
-        m_pMediaReader = nullptr;
+        m_pMediaPlayer->SetPlayEvent(nullptr);
+        m_pMediaPlayer->Stop();
+        delete m_pMediaPlayer;
+        m_pMediaPlayer = nullptr;
     }
 
     if (m_pVideoRender)
@@ -126,23 +131,38 @@ void PlayerWidget::StopPlay()
 
 void PlayerWidget::PlayPause()
 {
-    if (m_pMediaReader) {
-        m_pMediaReader->Pause();
+    if (m_pMediaPlayer) {
+        if (m_isPaused) {
+            m_pMediaPlayer->Resume();
+            m_isPaused = false;
+        }
+        else {
+            m_pMediaPlayer->Pause();
+            m_isPaused = true;
+        }
     }
 }
 
 void PlayerWidget::ChangeSpeed(double speed)
 {
-    if (m_pMediaReader) {
-        m_pMediaReader->Speed(speed);
+    if (m_pMediaPlayer) {
+        m_pMediaPlayer->Speed(speed);
     }
 }
 
 void PlayerWidget::SeekPercent(int value)
 {
-    if (m_pMediaReader) {
-        int seekSeconds = m_pMediaReader->GetDuration() * value / 100;
-        m_pMediaReader->Seek(seekSeconds);
+    if (m_pMediaPlayer) {
+        int seekSeconds = m_pMediaPlayer->GetDuration() * value / 100;
+        m_pMediaPlayer->Seek(seekSeconds);
+    }
+}
+
+void PlayerWidget::SeekTime(int value)
+{
+    if (m_pMediaPlayer) {
+        m_totalSeekTime += value;
+        m_pMediaPlayer->Seek(m_playCurrentPts - m_playStartPts + m_totalSeekTime);
     }
 }
 
@@ -150,7 +170,11 @@ void PlayerWidget::SeekPercent(int value)
 void PlayerWidget::onVideoFrame(const VideoFrame& frame)
 {
     m_isVideoPlaying = true;
-
+    if (m_playStartPts == 0.0 || (m_playStartPts < 10.0 && frame.pts - m_playCurrentPts > 120.0)) {
+        //遇到一种情况，刚开始的几帧pts非常小，后面恢复成一个较大值
+        m_playStartPts = frame.pts;
+    }
+    m_playCurrentPts = frame.pts;
     if (m_pFrameQuality) {
         if (m_pFrameQuality->IsGrayFrame(frame))
             return;
@@ -167,8 +191,8 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
     }
 
     m_pVideoRender->UpdateContent(outFrame);
-    if (m_pMediaReader) {
-        emit sig_PlayTime((int)outFrame.pts, m_pMediaReader->GetDuration());
+    if (m_pMediaPlayer) {
+        emit sig_PlayTime((int)outFrame.pts, m_pMediaPlayer->GetDuration());
     }
     //auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
     //if (m_pFishEyeWidget) {
@@ -221,6 +245,6 @@ void PlayerWidget::resizeEvent(QResizeEvent* event)
     //    m_pVideoRender->resize(rc.width() - 40, rc.height() - 150);
     //    m_pVideoRender->move(10, 10);
     //}
-    //if (m_pMediaReader)
-    //    m_pMediaReader->UpdateDisplaySize(event->size().width(), event->size().height());
+    //if (m_pMediaPlayer)
+    //    m_pMediaPlayer->UpdateDisplaySize(event->size().width(), event->size().height());
 }
