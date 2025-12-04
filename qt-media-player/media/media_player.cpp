@@ -10,6 +10,8 @@ extern "C"
 #include <libavutil/time.h>
 }
 
+namespace mp {
+
 /**
 * 较新版本的av_packet_free、av_frame_free内部都先执行了av_packet_unref、av_frame_unref，因此没必要再多调一次
 */
@@ -129,7 +131,7 @@ void MediaPlayer::Resume()
 
 void MediaPlayer::Speed(double speed)
 {
-    //m_speed = speed;
+    m_speed = speed;
     m_videoClock.set_clock_speed(speed);
     m_audioClock.set_clock_speed(speed);
     m_extClock.set_clock_speed(speed);
@@ -292,9 +294,20 @@ void MediaPlayer::AudioThread()
         }
 
         m_audioPacketIndex++;
-        if (m_pAudioDecoder) {
-            m_pAudioDecoder->SendPacket(packet);
+
+        if (m_speed >= 0.5 && m_speed <= 2.0) {
+            if (m_pAudioDecoder) {
+                m_pAudioDecoder->SendPacket(packet);
+            }
         }
+        else {
+            int64_t npts = packet->pts == AV_NOPTS_VALUE ? 0 : packet->pts;
+            double pts = npts * m_audioTimebae;
+            //更新时钟
+            m_audioClock.set_clock(pts);
+            m_extClock.sync_clock_to_slave(m_audioClock.get_clock());
+        }
+
         av_packet_free(&packet);
     }
     m_audioPacketQueue.Clear();//线程退出时清空队列，避免队列阻塞等待卡死
@@ -310,7 +323,7 @@ void MediaPlayer::OnVideoFrame(AVFrame* frame)
     }
 
     m_videoFrameIndex++;
-    LOG_INFO << PLAYTAG << "decode video frame index:" << m_videoFrameIndex << ", pts:" << frame->pts;
+    //LOG_INFO << PLAYTAG << "decode video frame index:" << m_videoFrameIndex << ", pts:" << frame->pts;
     int64_t curTime = av_gettime_relative();
     if (curTime - m_iLastCountTime > 4000000) {
         LOG_INFO << PLAYTAG << "frame index:" << m_videoFrameIndex;
@@ -342,7 +355,7 @@ void MediaPlayer::OnAudioFrame(AVFrame* frame)
             AVFrame* filteredFrame = m_pAudioSpeedFilter->ReceiveFrame();
             if (!filteredFrame)
                 break; // 没有更多输出
-
+            filteredFrame->pts = filteredFrame->pkt_dts;
             //size_t bufferSize = av_samples_get_buffer_size(filteredFrame->linesize, filteredFrame->channels, filteredFrame->nb_samples, (AVSampleFormat)filteredFrame->format, 1);
             //g_filter1.Write(reinterpret_cast<const char*>(filteredFrame->data[0]), bufferSize);
             DisplayAudio(filteredFrame);
@@ -372,10 +385,15 @@ void MediaPlayer::DisplayThread()
 void MediaPlayer::DisplayVideo(AVFrame* frame)
 {
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
-    //LOG_INFO << PLAYTAG << "frameIndex:" << m_videoFrameIndex << ",pts:" << npts;
+    //LOG_INFO << PLAYTAG << "===== video frameIndex:" << m_videoFrameIndex << ",pts:" << npts / 90;
     double pts = npts * m_videoTimebae;
     double now = av_gettime_relative() / 1000000.0;
-
+    if (m_lastVideoPts != 0.0 && ((pts - m_lastVideoPts) / m_speed) < 0.016) {
+        //帧率太高没有意义，太快的帧舍弃
+        return;
+    }
+    m_lastVideoPts = pts;
+    double clock = m_videoClock.get_clock();
     double master = m_audioClock.get_clock() + 0.2;
     if (isnan(master)) {
         master = m_extClock.get_clock();
@@ -385,16 +403,16 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
     // 如果使用wait,短时间内频繁同步音频时间戳，可以规避这个问题
     // m_videoClock.wait2(pts, master, m_speed);
 
-    //while (true)
-    //{
-    //    if (!m_videoClock.wait(pts, master, m_speed)) {
-    //        av_usleep(1000.0);
-    //        continue;
-    //    }
-    //    else {
-    //        break;
-    //    }
-    //}
+    while (true)
+    {
+        if (!m_videoClock.wait(clock, master)) {
+            av_usleep(1000.0);
+            continue;
+        }
+        else {
+            break;
+        }
+    }
     //更新时钟
     m_videoClock.set_clock(pts);
     m_extClock.sync_clock_to_slave(m_videoClock.get_clock());
@@ -419,20 +437,20 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
 void MediaPlayer::DisplayAudio(AVFrame* frame)
 {
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
-    //LOG_INFO << PLAYTAG << "frameIndex:" << m_audioFrameIndex << ",pts:" << npts;
+    auto clock = m_audioClock.get_clock();
+    //LOG_INFO << PLAYTAG << "     audio frameIndex:" << m_audioFrameIndex << ",pts:" << npts / 8 << ", clock:" << clock;
     double pts = npts * m_audioTimebae;
     double now = av_gettime_relative() / 1000000.0;
 
     //while (true)
     //{
-    //    if (!m_audioClock.wait(pts, -1.0, m_speed)) {
+    //    if (!m_audioClock.wait(pts, -1.0)) {
     //        av_usleep(1000.0);
     //        continue;
     //    }
     //    else {
     //        break;
     //    }
-
     //}
     //g_filter2.WriteFrame(frame);
 
@@ -458,3 +476,5 @@ void MediaPlayer::DisplayAudio(AVFrame* frame)
 
 
 }
+
+} // namespace mp

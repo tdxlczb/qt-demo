@@ -84,7 +84,7 @@ void AudioRenderTest()
 
     player->Start({ kSampleRate, kBitPerSample, kChannels }, renderFrames);
 
-    AudioFrame frame;
+    mp::AudioFrame frame;
     frame.data = pcmData;
     frame.size = bufSize;
     frame.spec.sampleRate = kSampleRate;
@@ -96,7 +96,7 @@ void AudioRenderTest()
         uint8_t* speedPcmData = new uint8_t[bufSize];
         sonicStream ss = sonicCreateStream(kSampleRate, kChannels);
         sonicSetSpeed(ss, speed);
-        AudioFrame speedFrame;
+        mp::AudioFrame speedFrame;
         speedFrame.spec = frame.spec;
         int readSize = 0;
         do {

@@ -7,14 +7,17 @@
 #include "media/media_define.h"
 #include "media/media_play_event.h"
 
-class VideoRender;
-class AudioRender;
+namespace mp {
 class MediaPlayer;
-class FishEyeWidget;
 class VideoConverter;
 class AudioConverter;
 class FrameQuality;
-class PlayerWidget : public QWidget, public PlayEvent
+}
+class VideoRender;
+class AudioRender;
+class FishEyeWidget;
+
+class PlayerWidget : public QWidget, public mp::PlayEvent
 {
     Q_OBJECT
 public:
@@ -29,9 +32,9 @@ public:
     void SeekTime(int value);
 
 protected:
-    virtual void onVideoFrame(const VideoFrame& frame) override;
-    virtual void onAudioFrame(const AudioFrame& frame) override;
-    virtual void onClose(const PlayError& error) override;
+    virtual void onVideoFrame(const mp::VideoFrame& frame) override;
+    virtual void onAudioFrame(const mp::AudioFrame& frame) override;
+    virtual void onClose(const mp::PlayError& error) override;
 
 
 signals:
@@ -60,19 +63,19 @@ private:
     int m_winIndex = 0;
     VideoRender* m_pVideoRender = nullptr;
     AudioRender* m_pAudioRender = nullptr;
-    MediaPlayer* m_pMediaPlayer = nullptr;
+    mp::MediaPlayer* m_pMediaPlayer = nullptr;
     FishEyeWidget* m_pFishEyeWidget = nullptr;
-    FrameQuality* m_pFrameQuality = nullptr;
+    mp::FrameQuality* m_pFrameQuality = nullptr;
 
-    std::atomic_bool m_isVideoPlaying = {false};
-    std::atomic_bool m_isAudioPlaying = {false};
+    std::atomic_bool m_isVideoPlaying = { false };
+    std::atomic_bool m_isAudioPlaying = { false };
 
     bool m_isPaused = false;
     double m_playStartPts = 0.0;
     double m_playCurrentPts = 0.0;
     double m_totalSeekTime = 0.0;
-    QHash<int, VideoConverter*> m_hashVideoConverter;
-    QHash<int, AudioConverter*> m_hashAudioConverter;
+    QHash<int, mp::VideoConverter*> m_hashVideoConverter;
+    QHash<int, mp::AudioConverter*> m_hashAudioConverter;
 };
 
 #endif // PLAYER_WIDGET_H

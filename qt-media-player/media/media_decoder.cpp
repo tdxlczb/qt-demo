@@ -2,7 +2,7 @@
 #include "media_utils.h"
 #include "log.h"
 
-//namespace media {
+namespace mp {
 
 //复用同一个AVHWDeviceContext能减少大量cpu和gpu
 static AVBufferRef* g_d3d11_device = nullptr;
@@ -139,6 +139,13 @@ void VideoDecoder::CloseDecoder()
     }
     m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;//硬解码类型
     m_hwPixFmt = AV_PIX_FMT_NONE;//硬解码的格式
+    m_inputIndex = 0;
+    m_outputIndex = 0;
+}
+
+bool VideoDecoder::IsOpen()
+{
+    return m_videoCodecContext != nullptr;
 }
 
 void VideoDecoder::SetOnDecodeFrame(OnDecodeFrame callback)
@@ -189,6 +196,7 @@ void VideoDecoder::SendPacket(AVPacket* packet)
             av_frame_free(&frame);
             break;
         }
+        m_outputIndex++;
         //if (frame->width <= 0 || frame->height <= 0) {//该帧不可用，舍弃
         //    av_frame_free(&frame);
         //    continue;
@@ -279,6 +287,13 @@ void AudioDecoder::CloseDecoder()
         avcodec_free_context(&m_audioCodecContext);
         m_audioCodecContext = nullptr;
     }
+    m_inputIndex = 0;
+    m_outputIndex = 0;
+}
+
+bool AudioDecoder::IsOpen()
+{
+    return m_audioCodecContext != nullptr;
 }
 
 void AudioDecoder::SetOnDecodeFrame(OnDecodeFrame callback)
@@ -290,7 +305,7 @@ void AudioDecoder::SendPacket(AVPacket* packet)
 {
     if (!m_audioCodecContext)
         return;
-
+    m_inputIndex++;
     int ret = avcodec_send_packet(m_audioCodecContext, packet);
     if (ret < 0)
     {//错误处理
@@ -306,6 +321,7 @@ void AudioDecoder::SendPacket(AVPacket* packet)
             av_frame_free(&frame);
             break;
         }
+        m_outputIndex++;
         if (m_callback) {
             m_callback(frame);
         }
@@ -318,4 +334,4 @@ void AudioDecoder::FlushBuffers()
     avcodec_flush_buffers(m_audioCodecContext);
 }
 
-//} // namespace media
+} // namespace mp

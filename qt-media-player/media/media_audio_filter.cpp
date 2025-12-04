@@ -1,6 +1,8 @@
 ﻿#include "media_audio_filter.h"
 #include "media_utils.h"
 
+namespace mp {
+
 AudioSpeedFilter::AudioSpeedFilter()
 {
 }
@@ -187,3 +189,5 @@ void processAudioFrame(AVFrame* decodedFrame, AudioSpeedFilter* filter) {
         av_frame_free(&filteredFrame);
     }
 }
+
+} // namespace mp

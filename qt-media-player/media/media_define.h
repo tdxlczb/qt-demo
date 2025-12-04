@@ -1,8 +1,10 @@
-﻿#ifndef MEDIA_DEFINE_H
+#ifndef MEDIA_DEFINE_H
 #define MEDIA_DEFINE_H
 
 #include <string>
 #include <functional>
+
+namespace mp {
 
 enum class PlayErrorCode
 {
@@ -94,5 +96,6 @@ const int kAudioFmtFLT = 3;  //AV_SAMPLE_FMT_FLT
 using VideoCallback = std::function<void(const VideoFrame& frame)>;
 using AudioCallback = std::function<void(const AudioFrame& frame)>;
 
+} // namespace mp
 
 #endif // MEDIA_DEFINE_H

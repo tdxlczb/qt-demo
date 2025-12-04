@@ -15,6 +15,8 @@ extern "C"
 #include "log.h"
 #include "media/media_utils.h"
 
+namespace mp {
+
 VideoConverter::VideoConverter(const VideoSpec& dstSpec, const std::string& id)
     : m_dstSpec(dstSpec)
     , m_converterId(id)
@@ -501,3 +503,5 @@ PlayError AudioConverter::GetEndFrame(AudioFrame& outFrame)
     }
     return PlayError{ PlayErrorCode::kNoError,"" };
 }
+
+} // namespace mp

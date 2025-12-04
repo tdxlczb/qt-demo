@@ -14,6 +14,8 @@ extern "C" {
 #include <libavutil/opt.h>
 }
 
+namespace mp {
+
 class AudioSpeedFilter
 {
 public:
@@ -48,5 +50,7 @@ private:
 };
 
 void processAudioFrame(AVFrame* decodedFrame, AudioSpeedFilter* filter);
+
+} // namespace mp
 
 #endif // MEDIA_AUDIO_FILTER_H

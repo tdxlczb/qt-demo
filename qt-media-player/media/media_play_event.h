@@ -3,6 +3,8 @@
 
 #include "media_define.h"
 
+namespace mp {
+
 class PlayEvent
 {
 public:
@@ -19,5 +21,7 @@ public:
 private:
 
 };
+
+} // namespace mp
 
 #endif // PLAY_EVENT_H

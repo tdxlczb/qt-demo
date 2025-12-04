@@ -6,7 +6,9 @@ extern "C"
 #include <libavutil/time.h>
 }
 
-PacketQueue::PacketQueue(int16_t maxQueueSize)
+namespace mp {
+
+PacketQueue::PacketQueue(size_t maxQueueSize)
     : m_maxQueueSize(maxQueueSize)
 {
 }
@@ -88,7 +90,7 @@ void PacketQueue::Clear()
 }
 
 
-FrameQueue::FrameQueue(int16_t maxQueueSize)
+FrameQueue::FrameQueue(size_t maxQueueSize)
     : m_maxQueueSize(maxQueueSize)
 {
 }
@@ -139,3 +141,5 @@ void FrameQueue::Clear()
     }
     m_queueCV.notify_all();
 }
+
+} // namespace mp

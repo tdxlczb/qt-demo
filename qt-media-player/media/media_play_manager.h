@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+namespace mp {
+
 class MediaPlayer;
 class PlayManager
 {
@@ -24,5 +26,6 @@ private:
     std::map<std::string, std::shared_ptr<MediaPlayer>> m_mediaMaps;
 };
 
+} // namespace mp
 
 #endif // MEDIA_PLAY_MANAGER_H

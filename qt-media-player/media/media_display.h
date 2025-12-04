@@ -7,6 +7,9 @@
 struct AVFrame;
 struct SwsContext;
 struct SwrContext;
+
+namespace mp {
+
 /*
 * 视频格式转换器，视频转换一定要保证源宽高和目标宽高比例一致，要是不一致，重采样出来的图片是混乱的
 * 转换器初始化宽高为0时，默认使用源宽高，初始化格式为-1时，默认使用源格式，视频规格前后源和目标一致，不进行格式转换
@@ -97,5 +100,7 @@ private:
     SwrContext* m_pSwrCxtAudio = nullptr;
     std::mutex m_swsMutex; //重采样操作锁
 };
+
+} // namespace mp
 
 #endif // MEDIA_CONVERTER_H

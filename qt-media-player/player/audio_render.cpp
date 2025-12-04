@@ -10,6 +10,8 @@ static std::ofstream g_pcmOutput;
 static std::ofstream g_pcmInput;
 #endif
 
+using namespace mp;
+
 AudioRender::AudioRender(bool useJitterBuffer)
     : m_audioBuffer(new DynamicJitterBuffer())
     , m_rtAudio(new RtAudio())

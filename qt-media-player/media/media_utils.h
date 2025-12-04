@@ -3,6 +3,8 @@
 
 #include <string>
 
+// 媒体工具类
+
 int GetGCD(int a, int b);
 
 std::string av_error_string(int errnum);
@@ -34,7 +36,7 @@ class AudioPCMWriter
 {
 public:
     AudioPCMWriter(const std::string& filePath);
-	~AudioPCMWriter();
+    ~AudioPCMWriter();
     void Write(const char* ptr, size_t size);
     void WriteFrame(AVFrame* frame);
 private:

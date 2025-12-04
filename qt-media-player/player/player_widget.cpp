@@ -15,6 +15,8 @@
 const int kVideoRGBConverter = 1;
 const int kAudioS16Converter = 1;
 
+using namespace mp;
+
 PlayerWidget::PlayerWidget(QWidget* parent, int winIndex)
     : QWidget(parent)
     , m_winIndex(winIndex)
@@ -70,7 +72,7 @@ PlayerWidget::~PlayerWidget()
 
 void PlayerWidget::StartPlay(const QString& url, int decodeType)
 {
-    PlayOptions opt;
+    mp::PlayOptions opt;
     if (decodeType == 1) {
         opt.hwdevice = "dxva2";
     }
@@ -79,9 +81,9 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     }
 
     if (!m_pMediaPlayer) {
-        //m_pMediaPlayer = new MediaPlayer();
-        //m_pMediaPlayer = new FFmpegPlayer();
-        m_pMediaPlayer = new RtspPlayer();
+        //m_pMediaPlayer = new mp::MediaPlayer();
+        //m_pMediaPlayer = new mp::FFmpegPlayer();
+        m_pMediaPlayer = new mp::RtspPlayer();
     }
 
     m_pMediaPlayer->SetPlayEvent(this);

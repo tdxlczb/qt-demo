@@ -8,7 +8,7 @@ extern "C"
 #include <libavcodec/avcodec.h>
 }
 
-//namespace media {
+namespace mp {
 
 using OnDecodeFrame = std::function<void(AVFrame*)>;
 
@@ -20,6 +20,7 @@ public:
 
     bool OpenDecoder(AVCodecID id, const std::string& hwdevice = "", AVCodecParameters* codecpar = nullptr);
     void CloseDecoder();
+    bool IsOpen();
 
     void SetOnDecodeFrame(OnDecodeFrame callback);
     void SendPacket(AVPacket* packet);
@@ -46,6 +47,7 @@ public:
 
     bool OpenDecoder(AVCodecID id, AVCodecParameters* codecpar = nullptr);
     void CloseDecoder();
+    bool IsOpen();
 
     void SetOnDecodeFrame(OnDecodeFrame callback);
     void SendPacket(AVPacket* packet);
@@ -53,9 +55,11 @@ public:
 private:
     AVCodecContext* m_audioCodecContext = nullptr;
     OnDecodeFrame m_callback;
+    int64_t m_inputIndex = 0;
+    int64_t m_outputIndex = 0;
 };
 
-//} // namespace media
+} // namespace mp
 
 
 #endif // MEDIA_DECODER_H

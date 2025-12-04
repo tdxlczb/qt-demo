@@ -14,6 +14,8 @@ class ZlmPlayer;
 }
 #endif // USE_ORIGIN_ZLM
 
+namespace mp {
+
 class RtspPlayer : public MediaPlayer
 {
 public:
@@ -35,10 +37,13 @@ private:
     std::shared_ptr<RtspPlayerImpl> m_pZlmPlayer;
 #else
     std::shared_ptr<zlmplayer::ZlmPlayer> m_pZlmPlayer;
-    uint8_t* m_packetBuf = nullptr;
-    size_t m_packetBufSize = 0;
-    int64_t m_packetPts = 0;
+    int64_t m_firstAudioPts = 0;
+    int64_t m_firstVideoPts = 0;
+    int64_t m_lastVideoPts = 0;
+    bool m_isDiscardPacket = false; //是否丢帧
 #endif // USE_ORIGIN_ZLM
 };
+
+} // namespace mp
 
 #endif // RTSP_PLAYER_HPP

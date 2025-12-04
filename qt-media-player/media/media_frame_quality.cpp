@@ -4,6 +4,8 @@
 #include "opencv2/opencv.hpp"
 #include "log.h"
 
+namespace mp {
+
 FrameQuality::FrameQuality()
 {
 }
@@ -40,7 +42,7 @@ bool FrameQuality::IsGrayFrame(const VideoFrame& frame)
     spec.format = 8;//AV_PIX_FMT_GRAY8
 
     if (!m_rgbConverter) {
-        m_rgbConverter = std::make_unique<VideoConverter>(spec,"GRAY_CV");
+        m_rgbConverter = std::make_unique<VideoConverter>(spec, "GRAY_CV");
     }
 
     VideoFrame outFrame;
@@ -102,3 +104,5 @@ bool FrameQuality::IsGrayFrame(const VideoFrame& frame)
     //}
     return false;
 }
+
+} // namespace mp

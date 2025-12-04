@@ -19,9 +19,9 @@ extern "C"
 
 void MediaPlayerTest()
 {
-    auto reader = new MediaPlayer();
+    auto reader = new mp::MediaPlayer();
     std::string url = "E:/code/media/BaiduSyncdisk.mp4";
-    PlayOptions opt;
+    mp::PlayOptions opt;
     opt.hwdevice = "";
     reader->Play(url, opt);
     while (true)

@@ -16,11 +16,11 @@ public:
     AudioRender(bool useJitterBuffer = false);
     ~AudioRender();
 
-    void Start(const AudioSpec& audioSpec, int renderFrameCount);
+    void Start(const mp::AudioSpec& audioSpec, int renderFrameCount);
     void Stop();
     void SetPCMCallback(PCMCallback callback);
 
-    void Write(const AudioFrame& frame);
+    void Write(const mp::AudioFrame& frame);
 
     //设置音量，音量范围在0.0~1.0
     void SetVolume(float volume);// 0.0~1.0
@@ -30,7 +30,7 @@ public:
 
 private:
     RtAudio* m_rtAudio = nullptr;
-    AudioSpec m_audioSpec;
+    mp::AudioSpec m_audioSpec;
     int m_renderFrameCount = 0;
     float m_audioVolume = 1.0;
     PCMCallback m_pcmCallback;

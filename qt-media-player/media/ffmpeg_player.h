@@ -5,6 +5,10 @@
 
 struct AVFormatContext;
 
+namespace mp {
+
+//使用ffmpeg拉流播放
+
 class FFmpegPlayer : public MediaPlayer
 {
 public:
@@ -26,6 +30,6 @@ private:
     AVFormatContext* m_formatContext = nullptr;
 };
 
-
+} // namespace mp
 
 #endif // FFMPEG_PLAYER_H

@@ -16,6 +16,9 @@ extern "C"
 
 #define PLAYTAG  m_tag + " " 
 
+struct AVCodecParameters;
+
+namespace mp {
 /*
 * 为实现音画同步效果
 * 视频采用回调方式渲染
@@ -26,12 +29,11 @@ extern "C"
 class AudioSpeedFilter;
 class VideoDecoder;
 class AudioDecoder;
-struct AVCodecParameters;
 class MediaPlayer
 {
 public:
     MediaPlayer();
-    ~MediaPlayer();
+    virtual ~MediaPlayer();
 
     std::string GetId() const;
     std::string GetTag() const;
@@ -99,6 +101,7 @@ protected:
     int64_t m_videoPacketSize = 0; //用于计算码率
     int64_t m_audioPacketSize = 0; //用于计算码率
     int64_t m_lastCountPacketSizeTime = 0;
+    double m_lastVideoPts = 0.0;
 
     int64_t m_videoFrameIndex = 0;
     int64_t m_audioFrameIndex = 0;
@@ -120,5 +123,7 @@ protected:
     std::unique_ptr<VideoDecoder> m_pVideoDecoder;
     std::unique_ptr<AudioDecoder> m_pAudioDecoder;
 };
+
+} // namespace mp
 
 #endif // MEDIA_PLAYER_H

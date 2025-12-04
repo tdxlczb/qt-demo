@@ -4,6 +4,8 @@
 #include <opencv2/highgui.hpp>
 #include "media/media_utils.h"
 
+using namespace mp;
+
 VideoRGBRender::VideoRGBRender(QWidget* parent) : QWidget(parent)
 {
     this->setAutoFillBackground(true);//启用背景填充

@@ -2,9 +2,11 @@
 #include "log.h"
 extern "C"
 {
-#include <libavcodec/avcodec.h>
+//#include <libavcodec/avcodec.h>
 #include <libavutil/time.h>
 }
+
+namespace mp {
 
 MediaClock::MediaClock()
 {
@@ -65,22 +67,18 @@ double MediaClock::compute_target_delay(double delay, double pts, double master)
     return delay;
 }
 
-bool MediaClock::wait(double pts, double master, double speed)
+bool MediaClock::wait(double pts, double master)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
-    if (m_startTs == 0.0) {
+    if (m_startTs == 0.0 && !isnan(pts) && !isnan(master)) {
         m_startTs = master;
         m_startPts = pts;
     }
 
     double delay = pts - m_lastPts;
-    if (delay <= 0 || delay >= 1.0) {
+    if (isnan(delay) || delay <= 0 || delay > kMaxFrameDuration) {
         delay = m_lastDelay;
     }
-
-    double elapsedPts = pts - m_startPts; // 相对 pts
-    double elapsedClock = master - m_startTs; // 相对 clock
-    double diff = elapsedPts - elapsedClock;// +1.0; // > 0 表示视频超前, 增加1s延迟，会导致第一帧播放慢
 
     // last_duration是lastvp也就是当前正在播放的视频帧的理论应该播放的时间，
     // last_duration = vp->pts - lastvp->pts。
@@ -89,17 +87,17 @@ bool MediaClock::wait(double pts, double master, double speed)
     // 得到实际应该播放的时间delay
     delay = compute_target_delay(last_duration, pts, master);
 
-    delay /= speed;
+    //delay /= speed;
     //if (pts < m_lastPts)
     //    return true;
 
     double time = av_gettime_relative() / 1000000.0;
-    double remaining_time = m_frameTimer + delay - time;
+    double actual_delay = m_frameTimer + delay - time;
     // is->frame_timer是当前正在播放视频帧应该开始播放的时间，
     // is->frame_timer + delay是当前正在播放视频帧经过音视频同步之后应该结束播放的时间，也就是下一帧应该开始播放的时间，
     // 如果当前时间time还没有到当前播放视频帧的结束时间的话，继续播放当前帧，并计算当前帧还需要播放多长时间remaining_time。
-    if (remaining_time > 0.0) {
-        remaining_time = (std::min)(remaining_time, kRefreshTime);
+    if (actual_delay > 0.0) {
+        double remaining_time = (std::min)(actual_delay, kRefreshTime);
         lock.unlock();
         av_usleep((int64_t)(remaining_time * 1000000.0));
         return false;
@@ -141,7 +139,7 @@ double MediaClock::get_clock()
     }
     else {
         double time = av_gettime_relative() / 1000000.0;
-        double clock =  m_ptsDrift + time - (time - m_lastUpdated) * (1.0 - m_speed);
+        double clock = m_ptsDrift + time - (time - m_lastUpdated) * (1.0 - m_speed);
         return clock;
     }
 }
@@ -185,3 +183,5 @@ void MediaClock::init_clock() {
     m_speed = 1.0;
     m_paused = 0;
 }
+
+} // namespace mp

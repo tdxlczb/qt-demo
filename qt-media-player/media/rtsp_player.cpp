@@ -3,14 +3,14 @@
 
 #ifdef USE_ORIGIN_ZLM
 
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\jsoncpp.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\flv.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\mov.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\mpeg.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\build\3rdpart\ZLToolKit\lib\Release\ZLToolKit.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\zlmediakit.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\ext-codec.lib)")
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\srt.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\jsoncpp.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\flv.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\mov.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\mpeg.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\build\3rdpart\ZLToolKit\lib\Release\ZLToolKit.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\zlmediakit.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\ext-codec.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\srt.lib)")
 
 #include "Rtsp/RtspDemuxer.h"
 #include "Rtsp/RtspPlayer.h"
@@ -144,7 +144,7 @@ void RtspPlayerImpl::onRecvRTP(mediakit::RtpPacket::Ptr rtp, const mediakit::Sdp
 }
 
 #else
-#pragma comment(lib,R"(E:\code\github\ZLMediaKit\release\windows\Debug\Release\zlmplayer.lib)")
+#pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\zlmplayer.lib)")
 #endif // USE_ORIGIN_ZLM
 
 #include "log.h"
@@ -155,6 +155,8 @@ extern "C"
 #include <libavutil/frame.h>
 }
 #include "zlm_player.h"
+
+namespace mp {
 
 RtspPlayer::RtspPlayer()
     : MediaPlayer()
@@ -220,6 +222,16 @@ static AVCodecID getAVCodecId(int id) {
     return AV_CODEC_ID_NONE;
 }
 
+static AVSampleFormat getSampleFormat(int sampleBit) {
+    switch (sampleBit) {
+    case 8: return AV_SAMPLE_FMT_U8;
+    case 16: return AV_SAMPLE_FMT_S16;
+    case 32: return AV_SAMPLE_FMT_S32;
+    default: break;
+    }
+    return AV_SAMPLE_FMT_NONE;
+}
+
 bool RtspPlayer::StreamOpen()
 {
 #ifndef USE_ORIGIN_ZLM
@@ -237,31 +249,68 @@ bool RtspPlayer::StreamOpen()
             if (audioStream.codecId >= 0) {
                 m_audioTimebae = (double)1 / audioStream.clockRate;
                 AVCodecID aCodeId = getAVCodecId(audioStream.codecId);
-                CreateAudioDecoder(aCodeId, nullptr);
+                AVCodecParameters* audioCodecParameters = avcodec_parameters_alloc();
+                audioCodecParameters->codec_id = aCodeId;
+                audioCodecParameters->codec_type = AVMEDIA_TYPE_AUDIO;
+                audioCodecParameters->sample_rate = audioStream.sampleRate;
+                audioCodecParameters->format = getSampleFormat(audioStream.sampleBit);
+                audioCodecParameters->channels = audioStream.channels;
+                audioCodecParameters->channel_layout = av_get_default_channel_layout(audioStream.channels);
+                av_channel_layout_default(&audioCodecParameters->ch_layout, audioStream.channels);
+                CreateAudioDecoder(aCodeId, audioCodecParameters);
+                avcodec_parameters_free(&audioCodecParameters);
             }
         }
         });
     m_pZlmPlayer->SetOnPacket([this](const zlmplayer::Packet& pkt) {
         AVPacket* packet = av_packet_alloc();
-        packet->pts = pkt.pts;
-        packet->dts = pkt.dts;
         packet->data = pkt.data;
         packet->size = pkt.size;
         if (pkt.isKey) {
             packet->flags |= AV_PKT_FLAG_KEY;
         }
         if (pkt.isAudio) {
+            if (m_firstAudioPts <= 0) {
+                m_firstAudioPts = pkt.pts;
+            }
+            packet->pts = pkt.pts - m_firstAudioPts;
+            packet->dts = packet->pts;
             static int packetIndex = 0;
             packetIndex++;
-            LOG_INFO << "audio packet Index:" << packetIndex << ", pts:" << packet->pts;
-            m_audioPacketQueue.Push(av_packet_clone(packet), true);
+            //LOG_INFO << "audio packet Index:" << packetIndex << ", pts:" << packet->pts;
+            if (m_pAudioDecoder->IsOpen())
+                m_audioPacketQueue.Push(av_packet_clone(packet), true);
         }
         else {
+            if (m_firstVideoPts <= 0) {
+                m_firstVideoPts = pkt.pts;
+            }
+            packet->pts = pkt.pts - m_firstVideoPts;
+            packet->dts = packet->pts;
             //packet->pts -= 420831312;
             //packet->dts -= 420831312;
             static int packetIndex = 0;
             packetIndex++;
-            LOG_INFO << "===== start video packet Index:" << packetIndex << ", pts:" << packet->pts;
+            int framePlayInterval = (packet->pts - m_lastVideoPts) * m_videoTimebae * 1000 / m_speed; //帧播放间隔
+            //if (pkt.isKey) {
+                // 60帧的帧间隔为16.67ms，最大支持60帧
+                if (framePlayInterval > 0 && framePlayInterval < 30) {
+                    m_isDiscardPacket = true;
+                }
+                else {
+                    m_isDiscardPacket = false;
+                }
+                //LOG_INFO << "===== start video packet Index:" << packetIndex << ", pts:" << packet->pts << ", framePlayInterval:" << framePlayInterval << ", m_isDiscardPacket:" << m_isDiscardPacket;
+            //}
+
+            if (m_isDiscardPacket && !pkt.isKey)
+                return;
+
+            m_lastVideoPts = packet->pts;
+
+            static int packetIndex1 = 0;
+            packetIndex1++;
+            LOG_INFO << "===== start video packet Index:" << packetIndex1 << ", pts:" << packet->pts * m_videoTimebae << ", framePlayInterval:" << framePlayInterval;
             m_videoPacketQueue.Push(av_packet_clone(packet), true);//推送到队列需要拷贝内存，否则所有帧都使用同一块内存解码画面异常
             //if (m_pVideoDecoder)
             //    m_pVideoDecoder->SendPacket(av_packet_clone(packet));
@@ -354,7 +403,10 @@ void RtspPlayer::StreamClose()
     }
 #endif // USE_ORIGIN_ZLM
     MediaPlayer::StreamClose();
+    m_firstAudioPts = 0;
+    m_firstVideoPts = 0;
     if (m_pZlmPlayer)
         m_pZlmPlayer->Stop();
 }
 
+} // namespace mp

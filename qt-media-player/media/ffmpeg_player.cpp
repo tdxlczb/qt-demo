@@ -14,6 +14,8 @@ extern "C"
 #include "media/media_utils.h"
 #include "media/media_decoder.h"
 
+namespace mp {
+
 FFmpegPlayer::FFmpegPlayer()
     : MediaPlayer()
 {
@@ -306,3 +308,5 @@ void FFmpegPlayer::StreamDemux()
     }
     av_packet_free(&packet);
 }
+
+} // namespace mp

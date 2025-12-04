@@ -19,9 +19,9 @@ public:
 public:
     virtual ~VideoRender() {};
 
-    virtual VideoFrame GetContent() = 0;
+    virtual mp::VideoFrame GetContent() = 0;
     virtual cv::Mat GetRGBContent() = 0;
-    virtual void UpdateContent(const VideoFrame& frame) = 0;
+    virtual void UpdateContent(const mp::VideoFrame& frame) = 0;
     virtual void ClearContent() = 0;
     //virtual void SetAspectRatioMode(AspectRatioMode mode) = 0;
 
@@ -36,9 +36,9 @@ public:
     explicit VideoRGBRender(QWidget* parent = nullptr);
     ~VideoRGBRender();
 
-    VideoFrame GetContent() override;
+    mp::VideoFrame GetContent() override;
     cv::Mat GetRGBContent() override;
-    void UpdateContent(const VideoFrame& frame) override;
+    void UpdateContent(const mp::VideoFrame& frame) override;
     void ClearContent() override;
 
 signals:
@@ -51,7 +51,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
-    VideoFrame m_frame;//当前帧
+    mp::VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
 };
 
@@ -76,10 +76,10 @@ public:
     ~PlayGLWidget();
 
     //获取画面
-    VideoFrame GetContent() override;
+    mp::VideoFrame GetContent() override;
     cv::Mat GetRGBContent() override;
     //以新传入的Mat作为数据来源以显示该画面
-    void UpdateContent(const VideoFrame& frame) override;
+    void UpdateContent(const mp::VideoFrame& frame) override;
     //清空画面
     void ClearContent() override;
 signals:
@@ -120,7 +120,7 @@ private:
     QPoint m_pointLastMove;//传入鼠标上次移动坐标
     bool m_isZoom = false;
 
-    VideoFrame m_frame;//当前帧
+    mp::VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
 };
 
@@ -155,10 +155,10 @@ public:
     ~OpenGLRenderWidget();
 
     //获取画面
-    VideoFrame GetContent() override;
+    mp::VideoFrame GetContent() override;
     cv::Mat GetRGBContent() override;
     //以新传入的Mat作为数据来源以显示该画面
-    void UpdateContent(const VideoFrame& frame) override;
+    void UpdateContent(const mp::VideoFrame& frame) override;
     //清空画面
     void ClearContent() override;
 signals:
@@ -205,7 +205,7 @@ private:
 
     int m_nVideoW = 0; //视频分辨率宽
     int m_nVideoH = 0; //视频分辨率高
-    VideoFrame m_frame;//当前帧
+    mp::VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
     int64_t m_frameIndex = 0;
     bool m_isInitGL = false;
@@ -237,9 +237,9 @@ public:
     ~SDLRenderWidget();
 
     //获取画面
-    VideoFrame GetContent() override;
+    mp::VideoFrame GetContent() override;
     //以新传入的Mat作为数据来源以显示该画面
-    void UpdateContent(const VideoFrame& frame) override;
+    void UpdateContent(const mp::VideoFrame& frame) override;
     //清空画面
     void ClearContent() override;
 
@@ -267,7 +267,7 @@ private:
     int m_nVideoH = 0;
     uint8_t* m_pBufYuv420p = nullptr;
 
-    VideoFrame m_frame;//当前帧
+    mp::VideoFrame m_frame;//当前帧
     QMutex m_frameMutex;//数据锁
 };
 
