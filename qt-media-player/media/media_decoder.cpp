@@ -153,10 +153,10 @@ void VideoDecoder::SetOnDecodeFrame(OnDecodeFrame callback)
     m_callback = callback;
 }
 
-void VideoDecoder::SendPacket(AVPacket* packet)
+bool VideoDecoder::SendPacket(AVPacket* packet)
 {
     if (!m_videoCodecContext)
-        return;
+        return false;
 
     m_inputIndex++;
     bool isKey = packet->flags & AV_PKT_FLAG_KEY;
@@ -165,15 +165,14 @@ void VideoDecoder::SendPacket(AVPacket* packet)
     if (ret < 0)
     {//错误处理
         LOG_ERROR << "avcodec_send_packet err," << ret << ":" << av_error_string(ret) << ", pts:" << packet->pts << ", isKey:" << isKey << ", packetIndex:" << m_inputIndex;
-        return;
         // 处理返回值
         if (ret == AVERROR(EAGAIN)) {
-            // 需要先接收帧
-            return;
+            // 解码器需要更多数据，需要先接收帧
+            return true;
         }
         else if (ret == AVERROR_EOF) {
             // 解码器已冲刷，退出
-            return;
+            return true;
         }
         else if (ret == AVERROR_INVALIDDATA) {
             // 警告性错误：记录日志但继续
@@ -183,7 +182,7 @@ void VideoDecoder::SendPacket(AVPacket* packet)
         else {
             // 其他错误
         }
-
+        return false;
     }
 
     while (true)
@@ -227,6 +226,7 @@ void VideoDecoder::SendPacket(AVPacket* packet)
         }
         av_frame_free(&frame);
     }
+    return true;
 }
 
 void VideoDecoder::FlushBuffers()

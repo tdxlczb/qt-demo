@@ -269,7 +269,7 @@ bool RtspPlayer::StreamOpen()
         if (pkt.isKey) {
             packet->flags |= AV_PKT_FLAG_KEY;
         }
-        if (pkt.isAudio) {
+        if (pkt.mediaType == AVMEDIA_TYPE_AUDIO) {
             if (m_firstAudioPts <= 0) {
                 m_firstAudioPts = pkt.pts;
             }
@@ -278,7 +278,7 @@ bool RtspPlayer::StreamOpen()
             static int packetIndex = 0;
             packetIndex++;
             //LOG_INFO << "audio packet Index:" << packetIndex << ", pts:" << packet->pts;
-            if (m_pAudioDecoder->IsOpen())
+            if (m_pAudioDecoder->IsOpen() && m_speed == 1.0)
                 m_audioPacketQueue.Push(av_packet_clone(packet), true);
         }
         else {
@@ -291,6 +291,7 @@ bool RtspPlayer::StreamOpen()
             //packet->dts -= 420831312;
             static int packetIndex = 0;
             packetIndex++;
+            //LOG_INFO << "video packet Index:" << packetIndex << ", pts:" << packet->pts * m_videoTimebae << ", size:" << packet->size;
             int framePlayInterval = (packet->pts - m_lastVideoPts) * m_videoTimebae * 1000 / m_speed; //帧播放间隔
             //if (pkt.isKey) {
                 // 60帧的帧间隔为16.67ms，最大支持60帧
@@ -303,14 +304,17 @@ bool RtspPlayer::StreamOpen()
                 //LOG_INFO << "===== start video packet Index:" << packetIndex << ", pts:" << packet->pts << ", framePlayInterval:" << framePlayInterval << ", m_isDiscardPacket:" << m_isDiscardPacket;
             //}
 
-            if (m_isDiscardPacket && !pkt.isKey)
+            if (m_speed > 4.0 && !pkt.isKey)
                 return;
+            //LOG_INFO << "video packet Index:" << packetIndex << ", pts:" << packet->pts << ", ts:" << packet->pts * m_videoTimebae << ", size:" << packet->size;
+            //if (m_isDiscardPacket && !pkt.isKey)
+            //    return;
 
             m_lastVideoPts = packet->pts;
 
             static int packetIndex1 = 0;
             packetIndex1++;
-            LOG_INFO << "===== start video packet Index:" << packetIndex1 << ", pts:" << packet->pts * m_videoTimebae << ", framePlayInterval:" << framePlayInterval;
+            //LOG_INFO << "===== start video packet Index:" << packetIndex1 << ", pts:" << packet->pts << ", ts:" << packet->pts * m_videoTimebae << ", framePlayInterval:" << framePlayInterval;
             m_videoPacketQueue.Push(av_packet_clone(packet), true);//推送到队列需要拷贝内存，否则所有帧都使用同一块内存解码画面异常
             //if (m_pVideoDecoder)
             //    m_pVideoDecoder->SendPacket(av_packet_clone(packet));
@@ -319,7 +323,7 @@ bool RtspPlayer::StreamOpen()
         av_packet_free(&packet);
         });
     zlmplayer::PlayOptions options;
-    options["rtsp_transport"] = "tcp";
+    options.isTcp = true;
     auto ret = m_pZlmPlayer->Play(m_url, options);
     if (!ret)
         return false;

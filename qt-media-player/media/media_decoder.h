@@ -23,7 +23,7 @@ public:
     bool IsOpen();
 
     void SetOnDecodeFrame(OnDecodeFrame callback);
-    void SendPacket(AVPacket* packet);
+    bool SendPacket(AVPacket* packet);
     void FlushBuffers();
     //获取当前硬解码的图像格式(仅硬解码时有效)
     const AVPixelFormat& GetHwPixFmt() const;

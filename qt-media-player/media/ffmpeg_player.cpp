@@ -164,6 +164,7 @@ bool FFmpegPlayer::StreamOpen()
         //double    fps = av_q2d(videoStream->avg_frame_rate);
         //auto      frameCount = videoStream->nb_frames;
         //int       gopSize = m_videoCodecContext->gop_size;
+        m_videoTimebae = av_q2d(videoStream->time_base);
         if (videoStream->start_time != AV_NOPTS_VALUE) {
             auto videoStartTime = videoStream->start_time * av_q2d(videoStream->time_base);
             LOG_INFO << PLAYTAG << "video start time:" << videoStartTime;
@@ -184,6 +185,7 @@ bool FFmpegPlayer::StreamOpen()
         //int            int_spb = av_get_bytes_per_sample(in_sfmt);
         //uint64_t       in_channel_layout = m_audioCodecContext->channel_layout;
         //int            in_channels = m_audioCodecContext->channels;
+        m_audioTimebae = (double)1 / audioCodecParameters->sample_rate;
         if (audioStream->start_time != AV_NOPTS_VALUE) {
             auto audioStartTime = audioStream->start_time * av_q2d(audioStream->time_base);
             LOG_INFO << PLAYTAG << "audio start time:" << audioStartTime;
@@ -301,7 +303,7 @@ void FFmpegPlayer::StreamDemux()
             m_lastCountPacketSizeTime = curTime;
             int videoKbps = (double)m_videoPacketSize * 8 / 1000;
             int audioKbps = (double)m_audioPacketSize * 8 / 1000;
-            LOG_INFO << PLAYTAG << "video " << videoKbps << ", audio " << audioKbps;
+            //LOG_INFO << PLAYTAG << "Kbps: video " << videoKbps << ", audio " << audioKbps;
             m_videoPacketSize = 0;
             m_audioPacketSize = 0;
         }

@@ -304,14 +304,14 @@ void VideoManager::setupVideoGrid()
     videoGridLayout->setContentsMargins(2, 2, 2, 2);
 
     // 初始化视频单元格容器
-    videoCells.resize(3);
-    for (int i = 0; i < 3; ++i) {
-        videoCells[i].resize(3);
+    videoCells.resize(gridRows);
+    for (int i = 0; i < gridRows; ++i) {
+        videoCells[i].resize(gridCols);
     }
 
     // 创建 3x3 视频单元格
-    for (int row = 0; row < 3; ++row) {
-        for (int col = 0; col < 3; ++col) {
+    for (int row = 0; row < gridRows; ++row) {
+        for (int col = 0; col < gridCols; ++col) {
             createVideoCell(row, col);
         }
     }
@@ -335,7 +335,7 @@ void VideoManager::createVideoCell(int row, int col)
     //cellLayout->setAlignment(Qt::AlignCenter);
 
     //// 视频编号标签
-    //QLabel* numberLabel = new QLabel(QString("视频 %1").arg(row * 3 + col + 1));
+    //QLabel* numberLabel = new QLabel(QString("视频 %1").arg(row * gridCols + col + 1));
     //numberLabel->setStyleSheet(
     //    "color: #ffffff;"
     //    "font-size: 14px;"
@@ -358,7 +358,7 @@ void VideoManager::createVideoCell(int row, int col)
 
     // 存储到容器中
     //videoCells[row][col] = cell;
-    int index = row * 3 + col;
+    int index = row * gridCols + col;
     PlayerWidget* playWidget = new PlayerWidget(nullptr, index);
     connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoManager::on_Selected);
     videoCells[row][col] = playWidget;
@@ -519,8 +519,8 @@ void VideoManager::onPlayAllClicked()
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
     QString playUrl = fileListWidget->currentItem()->text();
     // 播放全部视频的逻辑
-    for (int row = 0; row < 3; ++row) {
-        for (int col = 0; col < 3; ++col) {
+    for (int row = 0; row < gridRows; ++row) {
+        for (int col = 0; col < gridCols; ++col) {
             //QWidget* cell = videoCells[row][col];
             //QLabel* statusLabel = cell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
             //if (statusLabel && statusLabel->text() != "状态") {
@@ -548,8 +548,8 @@ void VideoManager::onPlayAllClicked()
 void VideoManager::onStopAllClicked()
 {
     // 停止全部视频的逻辑
-    for (int row = 0; row < 3; ++row) {
-        for (int col = 0; col < 3; ++col) {
+    for (int row = 0; row < gridRows; ++row) {
+        for (int col = 0; col < gridCols; ++col) {
             //QWidget* cell = videoCells[row][col];
             //QLabel* statusLabel = cell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
             //if (statusLabel && statusLabel->text() != "状态") {

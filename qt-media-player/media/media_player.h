@@ -106,6 +106,7 @@ protected:
     int64_t m_videoFrameIndex = 0;
     int64_t m_audioFrameIndex = 0;
     int64_t m_iLastCountTime = 0;
+    int64_t m_iLastCountFrameIndex = 0;
 
     MediaClock m_audioClock;
     MediaClock m_videoClock;

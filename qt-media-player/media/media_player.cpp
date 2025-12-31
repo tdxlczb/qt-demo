@@ -226,9 +226,19 @@ void MediaPlayer::DemuxThread()
     m_audioClock.init_clock();
     m_extClock.init_clock();
 
+    m_isMediaFile = !IsNetworkStream(m_url);
+
     if (!StreamOpen()) {
         LOG_ERROR << PLAYTAG << "stream open failed";
         return;
+    }
+
+    if (m_isMediaFile) {
+        m_videoPacketQueue.Resize(10);
+        m_audioPacketQueue.Resize(10);
+    } else {
+        m_videoPacketQueue.Resize(1000);
+        m_audioPacketQueue.Resize(1000);
     }
 
     if (m_isAsyncDisplay && !m_thVideoDisplay.joinable()) {
@@ -326,7 +336,8 @@ void MediaPlayer::OnVideoFrame(AVFrame* frame)
     //LOG_INFO << PLAYTAG << "decode video frame index:" << m_videoFrameIndex << ", pts:" << frame->pts;
     int64_t curTime = av_gettime_relative();
     if (curTime - m_iLastCountTime > 4000000) {
-        LOG_INFO << PLAYTAG << "frame index:" << m_videoFrameIndex;
+        LOG_INFO << PLAYTAG << "frame index:" << m_videoFrameIndex << ", fps:" << m_videoFrameIndex - m_iLastCountFrameIndex;
+        m_iLastCountFrameIndex = m_videoFrameIndex;
         m_iLastCountTime = curTime;
     }
     if (m_isAsyncDisplay) {
@@ -385,16 +396,16 @@ void MediaPlayer::DisplayThread()
 void MediaPlayer::DisplayVideo(AVFrame* frame)
 {
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
-    //LOG_INFO << PLAYTAG << "===== video frameIndex:" << m_videoFrameIndex << ",pts:" << npts / 90;
     double pts = npts * m_videoTimebae;
     double now = av_gettime_relative() / 1000000.0;
-    if (m_lastVideoPts != 0.0 && ((pts - m_lastVideoPts) / m_speed) < 0.016) {
-        //帧率太高没有意义，太快的帧舍弃
-        return;
-    }
+    //LOG_INFO << PLAYTAG << "===== video frameIndex:" << m_videoFrameIndex << ", pts:" << npts << ", ts:" << pts;
+    //if (m_lastVideoPts != 0.0 && ((pts - m_lastVideoPts) / m_speed) < 0.016) {
+    //    //帧率太高没有意义，太快的帧舍弃
+    //    return;
+    //}
     m_lastVideoPts = pts;
     double clock = m_videoClock.get_clock();
-    double master = m_audioClock.get_clock() + 0.2;
+    double master = m_audioClock.get_clock();
     if (isnan(master)) {
         master = m_extClock.get_clock();
     }
@@ -403,14 +414,17 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
     // 如果使用wait,短时间内频繁同步音频时间戳，可以规避这个问题
     // m_videoClock.wait2(pts, master, m_speed);
 
-    while (true)
-    {
-        if (!m_videoClock.wait(clock, master)) {
-            av_usleep(1000.0);
-            continue;
-        }
-        else {
-            break;
+    if (m_speed <= 4.0) {
+        //只播关键帧时，音画同步有点问题，关闭音画同步
+        while (true)
+        {
+            if (!m_videoClock.wait(clock, master)) {
+                //av_usleep(1000.0);
+                continue;
+            }
+            else {
+                break;
+            }
         }
     }
     //更新时钟
@@ -438,25 +452,25 @@ void MediaPlayer::DisplayAudio(AVFrame* frame)
 {
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
     auto clock = m_audioClock.get_clock();
-    //LOG_INFO << PLAYTAG << "     audio frameIndex:" << m_audioFrameIndex << ",pts:" << npts / 8 << ", clock:" << clock;
     double pts = npts * m_audioTimebae;
     double now = av_gettime_relative() / 1000000.0;
-
-    //while (true)
-    //{
-    //    if (!m_audioClock.wait(pts, -1.0)) {
-    //        av_usleep(1000.0);
-    //        continue;
-    //    }
-    //    else {
-    //        break;
-    //    }
-    //}
+    //LOG_INFO << PLAYTAG << "audio frameIndex:" << m_audioFrameIndex << ", pts:" << pts << ", clock:" << clock;
+    while (true)
+    {
+        if (!m_audioClock.wait(pts, -1.0)) {
+            //av_usleep(1000.0);
+            continue;
+        }
+        else {
+            break;
+        }
+    }
     //g_filter2.WriteFrame(frame);
 
     //更新时钟
     m_audioClock.set_clock(pts);
     m_extClock.sync_clock_to_slave(m_audioClock.get_clock());
+
     AudioFrame outFrame;
     for (size_t i = 0; i < 8; i++)
     {

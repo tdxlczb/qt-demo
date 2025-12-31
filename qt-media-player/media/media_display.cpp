@@ -57,16 +57,12 @@ PlayError VideoConverter::InitSwsContext(const VideoSpec& srcSpec)
     if (m_pSwsCxtVideo) {
         sws_freeContext(m_pSwsCxtVideo);
     }
+    LOG_INFO << "converterId:" << m_converterId << "src width height format:" << srcSpec.width << srcSpec.height << srcSpec.format;
+    LOG_INFO << "converterId:" << m_converterId << "dst width height format:" << m_dstSpec.width << m_dstSpec.height << m_dstSpec.format;
     m_pSwsCxtVideo = sws_getContext(srcSpec.width, srcSpec.height, (AVPixelFormat)srcSpec.format,
         m_dstSpec.width, m_dstSpec.height, (AVPixelFormat)m_dstSpec.format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
     if (nullptr == m_pSwsCxtVideo) {
         LOG_ERROR << "converterId:" << m_converterId << " m_pSwsCxtVideo create failed";
-        LOG_ERROR << "converterId:" << m_converterId << " src width:" << srcSpec.width;
-        LOG_ERROR << "converterId:" << m_converterId << " src height:" << srcSpec.height;
-        LOG_ERROR << "converterId:" << m_converterId << " src format:" << srcSpec.format;
-        LOG_ERROR << "converterId:" << m_converterId << " dst width:" << m_dstSpec.width;
-        LOG_ERROR << "converterId:" << m_converterId << " dst height:" << m_dstSpec.height;
-        LOG_ERROR << "converterId:" << m_converterId << " dst format:" << m_dstSpec.format;
         return PlayError{ PlayErrorCode::kCreateConverterFailed,"" };
     }
 

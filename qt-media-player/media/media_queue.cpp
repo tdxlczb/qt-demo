@@ -89,6 +89,11 @@ void PacketQueue::Clear()
     m_queueCV.notify_all();
 }
 
+void PacketQueue::Resize(size_t maxQueueSize)
+{
+    m_maxQueueSize = maxQueueSize;
+}
+
 
 FrameQueue::FrameQueue(size_t maxQueueSize)
     : m_maxQueueSize(maxQueueSize)
@@ -140,6 +145,11 @@ void FrameQueue::Clear()
         av_frame_free(&frame);
     }
     m_queueCV.notify_all();
+}
+
+void FrameQueue::Resize(size_t maxQueueSize)
+{
+    m_maxQueueSize = maxQueueSize;
 }
 
 } // namespace mp

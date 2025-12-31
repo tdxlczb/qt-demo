@@ -72,6 +72,10 @@ private:
 
     // 主布局
     QHBoxLayout* mainLayout;
+
+
+    const int gridRows = 5;
+    const int gridCols = 6;
 };
 
 #endif // VIDEO_MANAGER_H
