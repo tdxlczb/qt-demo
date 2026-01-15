@@ -72,6 +72,13 @@ PlayError VideoConverter::InitSwsContext(const VideoSpec& srcSpec)
 
 PlayError VideoConverter::InitDstFrame()
 {
+    if (m_pFrameDst &&
+        m_pFrameDst->format == m_dstSpec.format &&
+        m_pFrameDst->width == m_dstSpec.width &&
+        m_pFrameDst->height == m_dstSpec.height) {
+        return PlayError{ PlayErrorCode::kNoError,"" };
+    }
+
     if (m_pFrameDst) {
         av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
@@ -121,12 +128,12 @@ PlayError VideoConverter::Input(AVFrame* pFrame, VideoFrame& outFrame)
         needSwsScale = true;
     }
 
-    if (nullptr == m_pFrameDst) {
-        auto err = InitDstFrame();
-        if (err.code != PlayErrorCode::kNoError) {
-            return err;
-        }
+    //if (nullptr == m_pFrameDst) {
+    auto err = InitDstFrame();
+    if (err.code != PlayErrorCode::kNoError) {
+        return err;
     }
+    //}
 
     if (nullptr == m_pSwsCxtVideo || needInitSwsContext) {
         auto err = InitSwsContext(m_srcSpec);
@@ -210,17 +217,9 @@ PlayError VideoConverter::Input(AVFrame* pFrame)
 
 void VideoConverter::UpdateDstSize(int iDstWidth, int iDstHeight)
 {
-    LOG_INFO << "converterId:" << m_converterId << " update converter size:" << iDstWidth << "," << iDstHeight;
-    if (m_dstSpec.width == iDstWidth && m_dstSpec.height == iDstHeight)
-        return;
-    int64_t curTime = av_gettime_relative();
-    //避免快速更改大小导致的重新初始化重采样器，限制1s内不更改重采样器
-    if (curTime - m_lastUpdateSizeTime < 1000000)
-        return;
-    m_lastUpdateSizeTime = curTime;
-
-    int iWidth = m_dstSpec.width;
-    int iHeight = m_dstSpec.height;
+    LOG_INFO << "converterId:" << m_converterId << " try update converter size:" << iDstWidth << "," << iDstHeight;
+    int iWidth = m_srcSpec.width;
+    int iHeight = m_srcSpec.height;
     int gcd = GetGCD(iWidth, iHeight);
     int times = 0;
     if (gcd > 0) {
@@ -238,21 +237,48 @@ void VideoConverter::UpdateDstSize(int iDstWidth, int iDstHeight)
     }
     if (iWidth >= m_srcSpec.width || iHeight >= m_srcSpec.height) {
         //如果重新计算出来的宽高大于源宽高的，则不更改重采样器
+        LOG_INFO << "converter size:" << iWidth << "," << iHeight << " is over origin size:" << m_srcSpec.width << "," << m_srcSpec.height;
         return;
     }
+    if (m_dstSpec.width == iWidth && m_dstSpec.height == iHeight) {
+        //如果重新计算出来的宽高等于目标宽高，则不更改重采样器
+        LOG_INFO << "change converter size repeat";
+        return;
+    }
+
+    //由于触屏电脑可能会多次快速触发大小的更改，这里不采用时间限时重采样器的更改，而是使用大小变化率来限制，大小变化率小的可以不更改重采样器
+    double scaleW = std::abs(iWidth - m_dstSpec.width) / (float)m_dstSpec.width;
+    double scaleH = std::abs(iHeight - m_dstSpec.height) / (float)m_dstSpec.height;
+    if (scaleW < 0.2 && scaleH < 0.2) {
+        LOG_INFO << "change converter size little";
+        return;
+    }
+
+    int64_t curTime = av_gettime_relative();
+    //避免快速更改大小导致的重新初始化重采样器，限制0.1s内不更改重采样器
+    if (curTime - m_lastUpdateSizeTime < 100000) {
+        LOG_INFO << "change converter size too fast";
+        return;
+    }
+
     //这里释放m_pSwsCxtVideo和m_pFrameDest触发重采样的重新初始化，加锁避免操作重叠
     std::lock_guard<std::mutex> lock(m_swsMutex);
     m_dstSpec.width = iWidth;
     m_dstSpec.height = iHeight;
+    LOG_INFO << "converterId:" << m_converterId << " actually update converter size:" << iWidth << "," << iHeight;
+
     if (m_pSwsCxtVideo) {
         sws_freeContext(m_pSwsCxtVideo);
         m_pSwsCxtVideo = nullptr;
     }
-    if (m_pFrameDst) {
-        av_freep(&m_pFrameDst->data[0]);
-        av_frame_free(&m_pFrameDst);
-        m_pFrameDst = nullptr;
-    }
+    //不能在这里更改重采样帧的内存，否则可能会出现外部使用该内存时，刚好触发此处的内存释放，导致崩溃
+    //if (m_pFrameDst) {
+    //    av_freep(&m_pFrameDst->data[0]);
+    //    av_frame_free(&m_pFrameDst);
+    //    m_pFrameDst = nullptr;
+    //}
+
+    m_lastUpdateSizeTime = curTime;
 }
 
 AudioConverter::AudioConverter(const AudioSpec& dstSpec, const std::string& id)
@@ -269,6 +295,7 @@ AudioConverter::~AudioConverter()
         m_pSwrCxtAudio = nullptr;
     }
     if (m_pFrameDst) {
+        av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
     }
 }
