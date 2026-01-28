@@ -29,6 +29,7 @@ private slots:
     void onStopClicked();
     void onPlayAllClicked();
     void onStopAllClicked();
+    void onSplitComboBoxChanged(int index);
     void onFileSelected(QListWidgetItem* item);
     //窗口被选中
     void on_Selected(PlayerWidget* pWidget);
@@ -44,6 +45,7 @@ private:
     void setupVideoGrid();
     void setupControlPanel();
     void createVideoCell(int row, int col);
+    void updateVideoGrid();
 
 private:
     Ui::VideoManager* ui;
@@ -59,7 +61,7 @@ private:
     // 右侧上层 - 视频网格
     QWidget* videoGridWidget;
     QGridLayout* videoGridLayout;
-    QVector<QVector<PlayerWidget*>> videoCells;  // 3x3 视频单元格
+    QVector<PlayerWidget*> videoCells;  //视频单元格
     PlayerWidget* m_pSelectWidget = nullptr;
 
     // 右侧下层 - 控制面板
@@ -68,14 +70,15 @@ private:
     //QPushButton* stopButton;
     //QPushButton* playAllButton;
     //QPushButton* stopAllButton;
-    QComboBox* comboBox;
+    QComboBox* decodeComboBox;
+    QComboBox* splitComboBox;
 
     // 主布局
     QHBoxLayout* mainLayout;
 
 
-    const int gridRows = 5;
-    const int gridCols = 6;
+    int gridRows = 2;
+    int gridCols = 2;
 };
 
 #endif // VIDEO_MANAGER_H

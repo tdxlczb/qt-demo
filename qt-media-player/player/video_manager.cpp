@@ -303,18 +303,20 @@ void VideoManager::setupVideoGrid()
     videoGridLayout->setSpacing(2);
     videoGridLayout->setContentsMargins(2, 2, 2, 2);
 
-    // 初始化视频单元格容器
-    videoCells.resize(gridRows);
-    for (int i = 0; i < gridRows; ++i) {
-        videoCells[i].resize(gridCols);
-    }
+    //// 初始化视频单元格容器
+    //videoCells.resize(gridRows);
+    //for (int i = 0; i < gridRows; ++i) {
+    //    videoCells[i].resize(gridCols);
+    //}
 
-    // 创建 3x3 视频单元格
-    for (int row = 0; row < gridRows; ++row) {
-        for (int col = 0; col < gridCols; ++col) {
-            createVideoCell(row, col);
-        }
-    }
+    //// 创建 3x3 视频单元格
+    //for (int row = 0; row < gridRows; ++row) {
+    //    for (int col = 0; col < gridCols; ++col) {
+    //        createVideoCell(row, col);
+    //    }
+    //}
+
+    updateVideoGrid();
 
     // 添加到右侧布局，拉伸因子为1使其自适应
     rightLayout->addWidget(videoGridWidget, 1);
@@ -357,17 +359,66 @@ void VideoManager::createVideoCell(int row, int col)
     //cellLayout->addWidget(statusLabel);
 
     // 存储到容器中
-    //videoCells[row][col] = cell;
     int index = row * gridCols + col;
     PlayerWidget* playWidget = new PlayerWidget(nullptr, index);
     connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoManager::on_Selected);
-    videoCells[row][col] = playWidget;
+    videoCells.push_back(playWidget);
     // 添加到网格布局
     videoGridLayout->addWidget(playWidget, row, col);
 
     if (index == 0) {
         on_Selected(playWidget);
     }
+}
+
+void VideoManager::updateVideoGrid()
+{
+    for (auto pWidget : videoCells)
+    {
+        videoGridLayout->removeWidget(pWidget);
+        pWidget->hide();
+    }
+
+    int index = 0;
+    int selectedIndex = 0;
+    for (int row = 0; row < gridRows; ++row) {
+        for (int col = 0; col < gridCols; ++col) {
+            if (videoCells.size() <= index) {
+                PlayerWidget* playWidget = new PlayerWidget(nullptr, index);
+                connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoManager::on_Selected);
+                videoCells.push_back(playWidget);
+            }
+            videoGridLayout->addWidget(videoCells[index], row, col);
+            videoCells[index]->show();
+            if (m_pSelectWidget == videoCells[index]) {
+                selectedIndex = index;
+            }
+            index++;
+        }
+    }
+
+    on_Selected(videoCells[selectedIndex]);
+
+    for (int r = 0; r < videoGridLayout->rowCount(); ++r) {
+        videoGridLayout->setRowStretch(r, 0);
+        videoGridLayout->setRowMinimumHeight(r, 0);
+    }
+    for (int c = 0; c < videoGridLayout->columnCount(); ++c) {
+        videoGridLayout->setColumnStretch(c, 0);
+        videoGridLayout->setColumnMinimumWidth(c, 0);
+    }
+    // 设置新权重
+    for (int row = 0; row < gridRows; ++row) {
+        videoGridLayout->setRowStretch(row, 1);
+    }
+    for (int col = 0; col < gridCols; ++col) {
+        videoGridLayout->setColumnStretch(col, 1);
+    }
+
+    videoGridLayout->update();
+    this->layout()->activate();
+    this->update();
+    this->repaint();
 }
 
 void VideoManager::setupControlPanel()
@@ -460,13 +511,32 @@ void VideoManager::setupControlPanel()
         "}"
     );
 
-    comboBox = new QComboBox();
-    comboBox->addItem("软解码");
-    comboBox->addItem("D3D9");
-    comboBox->addItem("D3D11");
-    comboBox->setCurrentIndex(0);
-    comboBox->setFixedSize(100, 30);
-    comboBox->setStyleSheet(
+    decodeComboBox = new QComboBox();
+    decodeComboBox->addItem("软解码");
+    decodeComboBox->addItem("D3D9");
+    decodeComboBox->addItem("D3D11");
+    decodeComboBox->setCurrentIndex(0);
+    decodeComboBox->setFixedSize(100, 30);
+    decodeComboBox->setStyleSheet(
+        "QComboBox {"
+        "    background-color: #27ae60;"
+        "    color: black;"
+        "    border: none;"
+        "    border-radius: 5px;"
+        "    font-weight: bold;"
+        "}"
+    );
+
+    splitComboBox = new QComboBox();
+    splitComboBox->addItem("1x1", QSize(1, 1));
+    splitComboBox->addItem("2x2", QSize(2, 2));
+    splitComboBox->addItem("3x3", QSize(3, 3));
+    splitComboBox->addItem("4x4", QSize(4, 4));
+    splitComboBox->addItem("5x5", QSize(5, 5));
+    splitComboBox->addItem("6x6", QSize(6, 6));
+    splitComboBox->setCurrentIndex(1);
+    splitComboBox->setFixedSize(100, 30);
+    splitComboBox->setStyleSheet(
         "QComboBox {"
         "    background-color: #27ae60;"
         "    color: black;"
@@ -482,7 +552,8 @@ void VideoManager::setupControlPanel()
     controlLayout->addWidget(stopButton);
     controlLayout->addWidget(playAllButton);
     controlLayout->addWidget(stopAllButton);
-    controlLayout->addWidget(comboBox);
+    controlLayout->addWidget(decodeComboBox);
+    controlLayout->addWidget(splitComboBox);
     controlLayout->addStretch();
 
     // 连接信号槽
@@ -490,6 +561,7 @@ void VideoManager::setupControlPanel()
     connect(stopButton, &QPushButton::clicked, this, &VideoManager::onStopClicked);
     connect(playAllButton, &QPushButton::clicked, this, &VideoManager::onPlayAllClicked);
     connect(stopAllButton, &QPushButton::clicked, this, &VideoManager::onStopAllClicked);
+    connect(splitComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onSplitComboBoxChanged(int)));
 
     // 添加到右侧布局
     rightLayout->addWidget(controlPanel);
@@ -501,7 +573,7 @@ void VideoManager::onPlayClicked()
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
     QString playUrl = fileListWidget->currentItem()->text();
     if (m_pSelectWidget) {
-        int decodeType = comboBox->currentIndex();
+        int decodeType = decodeComboBox->currentIndex();
         m_pSelectWidget->StartPlay(playUrl, decodeType);
     }
 }
@@ -519,24 +591,22 @@ void VideoManager::onPlayAllClicked()
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
     QString playUrl = fileListWidget->currentItem()->text();
     // 播放全部视频的逻辑
-    for (int row = 0; row < gridRows; ++row) {
-        for (int col = 0; col < gridCols; ++col) {
-            //QWidget* cell = videoCells[row][col];
-            //QLabel* statusLabel = cell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
-            //if (statusLabel && statusLabel->text() != "状态") {
-            //    statusLabel->setText("播放中...");
-            //    statusLabel->setStyleSheet("color: #2ecc71; font-size: 10px;");
-            //}
+    for (int i = 0; i < videoCells.size(); ++i) {
+        //QWidget* cell = videoCells[i];
+        //QLabel* statusLabel = cell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
+        //if (statusLabel && statusLabel->text() != "状态") {
+        //    statusLabel->setText("播放中...");
+        //    statusLabel->setStyleSheet("color: #2ecc71; font-size: 10px;");
+        //}
 
-            //// 设置单元格背景色表示播放状态
-            //cell->setStyleSheet(
-            //    "background-color: #2c3e50;"
-            //    "border: 2px solid #3498db;"
-            //    "border-radius: 3px;"
-            //);
-            int decodeType = comboBox->currentIndex();
-            videoCells[row][col]->StartPlay(playUrl, decodeType);
-        }
+        //// 设置单元格背景色表示播放状态
+        //cell->setStyleSheet(
+        //    "background-color: #2c3e50;"
+        //    "border: 2px solid #3498db;"
+        //    "border-radius: 3px;"
+        //);
+        int decodeType = decodeComboBox->currentIndex();
+        videoCells[i]->StartPlay(playUrl, decodeType);
     }
 
     // 这里添加实际的播放逻辑
@@ -548,29 +618,38 @@ void VideoManager::onPlayAllClicked()
 void VideoManager::onStopAllClicked()
 {
     // 停止全部视频的逻辑
-    for (int row = 0; row < gridRows; ++row) {
-        for (int col = 0; col < gridCols; ++col) {
-            //QWidget* cell = videoCells[row][col];
-            //QLabel* statusLabel = cell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
-            //if (statusLabel && statusLabel->text() != "状态") {
-            //    statusLabel->setText("已停止");
-            //    statusLabel->setStyleSheet("color: #e74c3c; font-size: 10px;");
-            //}
+    for (int i = 0; i < videoCells.size(); ++i) {
+        //QWidget* cell = videoCells[i];
+        //QLabel* statusLabel = cell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
+        //if (statusLabel && statusLabel->text() != "状态") {
+        //    statusLabel->setText("已停止");
+        //    statusLabel->setStyleSheet("color: #e74c3c; font-size: 10px;");
+        //}
 
-            //// 恢复单元格默认样式
-            //cell->setStyleSheet(
-            //    "background-color: #1a1a1a;"
-            //    "border: 1px solid #444;"
-            //    "border-radius: 3px;"
-            //);
-            videoCells[row][col]->StopPlay();
-        }
+        //// 恢复单元格默认样式
+        //cell->setStyleSheet(
+        //    "background-color: #1a1a1a;"
+        //    "border: 1px solid #444;"
+        //    "border-radius: 3px;"
+        //);
+        videoCells[i]->StopPlay();
+
     }
 
     // 这里添加实际的停止逻辑
     // for (auto& player : videoPlayers) {
     //     player->stop();
     // }
+}
+
+void VideoManager::onSplitComboBoxChanged(int index)
+{
+    qDebug() << "选项改变，当前索引:" << index;
+    auto data = splitComboBox->itemData(index);
+    auto size = data.toSize();
+    gridRows = size.width();
+    gridCols = size.height();
+    updateVideoGrid();
 }
 
 void VideoManager::onFileSelected(QListWidgetItem* item)
@@ -582,8 +661,8 @@ void VideoManager::onFileSelected(QListWidgetItem* item)
     // 比如在某个视频窗口中播放选中的文件
 
     // 示例：在第一个视频窗口中显示选中的文件名
-    if (videoCells.size() > 0 && videoCells[0].size() > 0) {
-        QWidget* firstCell = videoCells[0][0];
+    if (videoCells.size() > 0) {
+        QWidget* firstCell = videoCells[0];
         QLabel* numberLabel = firstCell->findChild<QLabel*>("", Qt::FindDirectChildrenOnly);
         if (numberLabel) {
             numberLabel->setText(fileName);
