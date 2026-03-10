@@ -11,8 +11,10 @@
 class BufferBase {
 public:
     virtual ~BufferBase() = default;
+    virtual size_t GetCapacity() = 0;
     virtual size_t GetSize() = 0;
     virtual size_t GetFreeSize() = 0;
+    virtual size_t ResetCapacity(size_t size) = 0;
 };
 
 template <typename T>
@@ -44,10 +46,31 @@ public:
         if (m_bufferSize <= 0)
             return 0;
         size_t popSize = (std::min)(m_bufferSize, size);
-        std::memcpy(buffer, m_buffer, popSize);
+        if (buffer) {
+            std::memcpy(buffer, m_buffer, popSize);
+        }
         std::memmove(m_buffer, m_buffer + popSize / sizeof(T), m_bufferSize - popSize);
         m_bufferSize -= popSize;
         return popSize;
+    }
+
+    size_t ResetCapacity(size_t size) {
+        std::lock_guard<std::mutex> lock(m_bufferMutex);
+        if (m_capacity >= size)
+            return m_capacity;
+
+        T* buffer = new T[size];
+        std::memset(buffer, 0, size);
+        std::memcpy(buffer, m_buffer, m_bufferSize);
+        m_capacity = size;
+        delete[] m_buffer;
+        m_buffer = buffer;
+        return m_capacity;
+    }
+
+    size_t GetCapacity() {
+        std::lock_guard<std::mutex> lock(m_bufferMutex);
+        return m_capacity;
     }
 
     size_t GetSize() {
@@ -105,6 +128,16 @@ public:
             throw std::runtime_error("type mismatch");
         }
         return 0;
+    }
+
+    size_t ResetCapacity(size_t size)
+    {
+        return m_jitterBuffer->ResetCapacity(size);
+    }
+
+    size_t GetCapacity()
+    {
+        return m_jitterBuffer->GetCapacity();
     }
 
     size_t GetSize()

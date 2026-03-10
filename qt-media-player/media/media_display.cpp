@@ -295,7 +295,7 @@ AudioConverter::~AudioConverter()
         m_pSwrCxtAudio = nullptr;
     }
     if (m_pFrameDst) {
-        av_freep(&m_pFrameDst->data[0]);
+        //av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
     }
 }
@@ -346,7 +346,7 @@ PlayError AudioConverter::InitSwrContext(const AudioSpec& srcSpec)
 PlayError AudioConverter::InitDstFrame()
 {
     if (m_pFrameDst) {
-        av_freep(&m_pFrameDst->data[0]);
+        //av_freep(&m_pFrameDst->data[0]);
         av_frame_free(&m_pFrameDst);
     }
 
@@ -359,15 +359,17 @@ PlayError AudioConverter::InitDstFrame()
     m_pFrameDst->channel_layout = av_get_default_channel_layout(m_dstSpec.channels);
     m_pFrameDst->channels = m_dstSpec.channels;
     m_pFrameDst->format = m_dstSpec.format;
-    m_pFrameDst->nb_samples = 1024; //这里必须设置值，否则av_samples_alloc申请不到内存 AVFrame内部nb_samples默认设置为1024
+    //m_pFrameDst->nb_samples = 1024; //这里必须设置值，否则av_samples_alloc申请不到内存 AVFrame内部nb_samples默认设置为1024
+    //有可能遇到有些流将多个音频packet组成一个packet，导致输入nb_samples非常大，输出nb_samples=1024不够用
+    m_pFrameDst->nb_samples = 1024 * 1024; // 需要申请更大的内存，不能使用av_samples_alloc，只能使用外部申请内存，或者av_frame_get_buffer
 
     //av_samples_alloc申请一块连续内存，pointers[i]的指针分别指向这块内存中各平面的起始位置，使用av_freep(&pointers[0])释放这块内存，只使用av_frame_free不能释放申请的内存
-    int nSize = av_samples_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->channels, m_pFrameDst->nb_samples, (AVSampleFormat)m_pFrameDst->format, 1);
-    //av_frame_get_buffer给每个平面单独申请内存，使用av_frame_free释放每个平面的内存
-    //int iRet = av_frame_get_buffer(m_pFrameDst, 64);
-    //if (AVERROR(iRet)) {
-    if (nSize <= 0) {
-        LOG_ERROR << "converterId:" << m_converterId << " av_frame_get_buffer error:" << nSize;
+    //int nSize = av_samples_alloc(m_pFrameDst->data, m_pFrameDst->linesize, m_pFrameDst->channels, m_pFrameDst->nb_samples, (AVSampleFormat)m_pFrameDst->format, 1);
+    //av_frame_get_buffer给每个平面单独申请内存，使用av_frame_free释放每个平面的内存，不需要再使用av_freep
+    int iRet = av_frame_get_buffer(m_pFrameDst, 64);
+    if (AVERROR(iRet)) {
+    //if (nSize <= 0) {
+        LOG_ERROR << "converterId:" << m_converterId << " av_frame_get_buffer error:" << iRet;
         return PlayError{ PlayErrorCode::kOutOfMemory,"" };
     }
     return PlayError{ PlayErrorCode::kNoError,"" };

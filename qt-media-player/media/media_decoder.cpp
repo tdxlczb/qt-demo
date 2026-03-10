@@ -1,4 +1,4 @@
-﻿#include "media_decoder.h"
+#include "media_decoder.h"
 #include "media_utils.h"
 #include "log.h"
 
@@ -132,8 +132,9 @@ void VideoDecoder::CloseDecoder()
     m_callback = nullptr;
     if (m_videoCodecContext)
     {
-        if (avcodec_is_open(m_videoCodecContext))
-            avcodec_close(m_videoCodecContext);
+        // avcodec_close不再使用，avcodec_free_context内部包含avcodec_close和avcodec_is_open判断
+        //if (avcodec_is_open(m_videoCodecContext))
+        //    avcodec_close(m_videoCodecContext);
         avcodec_free_context(&m_videoCodecContext);
         m_videoCodecContext = nullptr;
     }
@@ -282,8 +283,9 @@ void AudioDecoder::CloseDecoder()
     m_callback = nullptr;
     if (m_audioCodecContext)
     {
-        if (avcodec_is_open(m_audioCodecContext))
-            avcodec_close(m_audioCodecContext);
+        // avcodec_close不再使用，avcodec_free_context内部包含avcodec_close和avcodec_is_open判断
+        //if (avcodec_is_open(m_audioCodecContext))
+        //    avcodec_close(m_audioCodecContext);
         avcodec_free_context(&m_audioCodecContext);
         m_audioCodecContext = nullptr;
     }

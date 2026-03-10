@@ -172,9 +172,13 @@ void AudioRender::Write(const AudioFrame&frame)
     if(!m_audioBuffer || !m_audioBuffer->IsInit())
         return;
 
+    if (m_audioBuffer->GetCapacity() < frame.size) {
+        m_audioBuffer->ResetCapacity(frame.size);
+    }
+    //使用wait_for+时间，避免特殊情况下等待时无法触发notify_all()导致阻塞
     std::unique_lock<std::mutex> lock(m_audioBufferMutex);
-    m_audioBufferCV.wait(lock, [this, &frame]() {
-        return m_audioBuffer->GetFreeSize() > frame.size;
+    m_audioBufferCV.wait_for(lock, std::chrono::milliseconds(1000), [this, &frame]() {
+        return m_audioBuffer->GetFreeSize() >= frame.size;
         });
 
 #ifdef DEBUG_PCM
@@ -184,6 +188,10 @@ void AudioRender::Write(const AudioFrame&frame)
         g_pcmInput.flush();
     }
 #endif // DEBUG_PCM
+
+    if (m_audioBuffer->GetFreeSize() < frame.size) {
+        return;
+    }
     //qDebug() << "write size:" << frame.size;
 
     if (frame.spec.bitPerSample == 8)
