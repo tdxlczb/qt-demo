@@ -16,22 +16,16 @@ public:
     MediaClock();
     ~MediaClock();
 
-    bool wait(double pts, double master = -1.0);
-    bool wait2(double pts, double master = -1.0, double speed = 1.0);
-
-    double get_clock();
-
-    void set_clock_at(double pts, double time);
-
-    void set_clock(double pts);
-
-    void set_clock_speed(double speed);
-
-    void sync_clock_to_slave(double slave_clock);
-
-    void init_clock();
+    bool Wait(double pts, double master = -1.0);
+    bool Wait2(double pts, double master = -1.0, double speed = 1.0);
+    double GetClock();
+    void SetClockAt(double pts, double time);
+    void SetClock(double pts);
+    void SetClockSpeed(double speed);
+    void SyncClockToSlave(double slave_clock);
+    void InitClock();
 private:
-    double compute_target_delay(double delay, double pts, double master);
+    double ComputeTargetDelay(double delay, double pts, double master);
 private:
     std::mutex m_mutex;
     double m_startTs = 0.0;   //基于时钟的初始时间

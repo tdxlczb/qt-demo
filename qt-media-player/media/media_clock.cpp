@@ -24,7 +24,7 @@ const double kMaxFrameDuration = 10.0; //最大帧播放时间
 const double kRefreshTime = 0.01; //刷新时间
 
 //参考fflay的写法
-double MediaClock::compute_target_delay(double delay, double pts, double master)
+double MediaClock::ComputeTargetDelay(double delay, double pts, double master)
 {
     double sync_threshold, diff = 0.0;
     // pts表示当前的时钟，master表示用来同步的时钟，master为-1.0时，不进行同步
@@ -67,7 +67,7 @@ double MediaClock::compute_target_delay(double delay, double pts, double master)
     return delay;
 }
 
-bool MediaClock::wait(double pts, double master)
+bool MediaClock::Wait(double pts, double master)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
     if (m_startTs == 0.0 && !isnan(pts) && !isnan(master)) {
@@ -85,7 +85,7 @@ bool MediaClock::wait(double pts, double master)
     double last_duration = delay;
     // compute_target_delay根据视频和音频的不同步情况，调整当前正在播放的视频帧的播放时间last_duration，
     // 得到实际应该播放的时间delay
-    delay = compute_target_delay(last_duration, pts, master);
+    delay = ComputeTargetDelay(last_duration, pts, master);
 
     //delay /= speed;
     //if (pts < m_lastPts)
@@ -113,7 +113,7 @@ bool MediaClock::wait(double pts, double master)
     return true;
 }
 
-bool MediaClock::wait2(double pts, double master, double speed)
+bool MediaClock::Wait2(double pts, double master, double speed)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
     if (m_startTs == 0.0 && !isnan(pts) && !isnan(master)) {
@@ -131,20 +131,19 @@ bool MediaClock::wait2(double pts, double master, double speed)
     return true;
 }
 
-double MediaClock::get_clock()
+double MediaClock::GetClock()
 {
     std::lock_guard<std::mutex> locker(m_mutex);
     if (m_paused) {
         return m_pts;
-    }
-    else {
+    } else {
         double time = av_gettime_relative() / 1000000.0;
         double clock = m_ptsDrift + time - (time - m_lastUpdated) * (1.0 - m_speed);
         return clock;
     }
 }
 
-void MediaClock::set_clock_at(double pts, double time)
+void MediaClock::SetClockAt(double pts, double time)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pts = pts;
@@ -152,28 +151,28 @@ void MediaClock::set_clock_at(double pts, double time)
     m_ptsDrift = pts - time;
 }
 
-void MediaClock::set_clock(double pts)
+void MediaClock::SetClock(double pts)
 {
     double time = av_gettime_relative() / 1000000.0;
-    set_clock_at(pts, time);
+    SetClockAt(pts, time);
 }
 
-void MediaClock::set_clock_speed(double speed)
+void MediaClock::SetClockSpeed(double speed)
 {
-    set_clock(get_clock());
+    SetClock(GetClock());
     std::lock_guard<std::mutex> lock(m_mutex);
     m_speed = speed;
 }
 
-void MediaClock::sync_clock_to_slave(double slave_clock)
+void MediaClock::SyncClockToSlave(double slave_clock)
 {
-    double clock = get_clock();
+    double clock = GetClock();
     if (!isnan(slave_clock) && (isnan(clock) || fabs(clock - slave_clock) > kNoSyncThreshold))
-        set_clock(slave_clock);
+        SetClock(slave_clock);
 }
 
-void MediaClock::init_clock() {
-    set_clock(NAN);
+void MediaClock::InitClock() {
+    SetClock(NAN);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_startTs = 0.0;
     m_startPts = 0.0;

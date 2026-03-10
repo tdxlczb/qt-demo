@@ -40,6 +40,8 @@ public:
     std::string GetPlayUrl() const;
     void SetTag(const std::string& tag);
     void SetPlayEvent(PlayEvent* playEvent);
+    void ResetClock();
+    void WaitClock(double pts, bool isVideo);
 
     virtual void Play(const std::string& url, const PlayOptions& options);
     virtual void Stop();

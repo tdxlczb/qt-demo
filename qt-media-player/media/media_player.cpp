@@ -52,6 +52,57 @@ void MediaPlayer::SetPlayEvent(PlayEvent* playEvent)
     m_playEvent = playEvent;
 }
 
+void MediaPlayer::ResetClock()
+{
+    m_videoClock.InitClock();
+    m_audioClock.InitClock();
+    m_extClock.InitClock();
+}
+
+void MediaPlayer::WaitClock(double pts, bool isVideo)
+{
+    if (isVideo) {
+        double clock = m_videoClock.GetClock();
+        double master = m_audioClock.GetClock();
+        if (isnan(master)) {
+            master = m_extClock.GetClock();
+        }
+        // 使用Wait2如果遇到刚开始rtp包时间戳不准确的情况，可能会导致等待时间过长。
+        // 例如有的时候开始的包是pts是0.16s，过了一小会恢复正常的4688.503s，如果直接使用Wait2，可能会要等到最大阈值10s
+        // 如果使用Wait,短时间内频繁同步音频时间戳，可以规避这个问题
+        // m_videoClock.Wait2(pts, master, m_speed);
+
+        if (m_speed <= 4.0) {
+            //只播关键帧时，音画同步有点问题，关闭音画同步
+            while (true)
+            {
+                if (!m_videoClock.Wait(clock, master)) {
+                    //av_usleep(1000.0);
+                    continue;
+                } else {
+                    break;
+                }
+            }
+        }
+        //更新时钟
+        m_videoClock.SetClock(pts);
+        m_extClock.SyncClockToSlave(m_videoClock.GetClock());
+    } else {
+        //while (true)
+        //{
+        //    if (!m_audioClock.Wait(pts, -1.0)) {
+        //        //av_usleep(1000.0);
+        //        continue;
+        //    } else {
+        //        break;
+        //    }
+        //}
+        //更新时钟
+        m_audioClock.SetClock(pts);
+        m_extClock.SyncClockToSlave(m_audioClock.GetClock());
+    }
+}
+
 void MediaPlayer::Play(const std::string& url, const PlayOptions& options)
 {
     Stop();
@@ -132,9 +183,9 @@ void MediaPlayer::Resume()
 void MediaPlayer::Speed(double speed)
 {
     m_speed = speed;
-    m_videoClock.set_clock_speed(speed);
-    m_audioClock.set_clock_speed(speed);
-    m_extClock.set_clock_speed(speed);
+    m_videoClock.SetClockSpeed(speed);
+    m_audioClock.SetClockSpeed(speed);
+    m_extClock.SetClockSpeed(speed);
     //m_pRtspPlayer->speed(speed);
     //if (m_isMediaFile) {
     //    m_speed = speed;
@@ -222,9 +273,7 @@ void MediaPlayer::CloseDecoder()
 
 void MediaPlayer::DemuxThread()
 {
-    m_videoClock.init_clock();
-    m_audioClock.init_clock();
-    m_extClock.init_clock();
+    ResetClock();
 
     m_isMediaFile = !IsNetworkStream(m_url);
 
@@ -314,8 +363,8 @@ void MediaPlayer::AudioThread()
             int64_t npts = packet->pts == AV_NOPTS_VALUE ? 0 : packet->pts;
             double pts = npts * m_audioTimebae;
             //更新时钟
-            m_audioClock.set_clock(pts);
-            m_extClock.sync_clock_to_slave(m_audioClock.get_clock());
+            m_audioClock.SetClock(pts);
+            m_extClock.SyncClockToSlave(m_audioClock.GetClock());
         }
 
         av_packet_free(&packet);
@@ -404,32 +453,8 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
     //    return;
     //}
     m_lastVideoPts = pts;
-    double clock = m_videoClock.get_clock();
-    double master = m_audioClock.get_clock();
-    if (isnan(master)) {
-        master = m_extClock.get_clock();
-    }
-    // 使用wait2如果遇到刚开始rtp包时间戳不准确的情况，可能会导致等待时间过长。
-    // 例如有的时候开始的包是pts是0.16s，过了一小会恢复正常的4688.503s，如果直接使用wait2，可能会要等到最大阈值10s
-    // 如果使用wait,短时间内频繁同步音频时间戳，可以规避这个问题
-    // m_videoClock.wait2(pts, master, m_speed);
-
-    if (m_speed <= 4.0) {
-        //只播关键帧时，音画同步有点问题，关闭音画同步
-        while (true)
-        {
-            if (!m_videoClock.wait(clock, master)) {
-                //av_usleep(1000.0);
-                continue;
-            }
-            else {
-                break;
-            }
-        }
-    }
-    //更新时钟
-    m_videoClock.set_clock(pts);
-    m_extClock.sync_clock_to_slave(m_videoClock.get_clock());
+    
+    WaitClock(pts, true);
 
     VideoFrame outFrame;
     for (size_t i = 0; i < 8; i++)
@@ -451,25 +476,13 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
 void MediaPlayer::DisplayAudio(AVFrame* frame)
 {
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
-    auto clock = m_audioClock.get_clock();
+    auto clock = m_audioClock.GetClock();
     double pts = npts * m_audioTimebae;
     double now = av_gettime_relative() / 1000000.0;
     //LOG_INFO << PLAYTAG << "audio frameIndex:" << m_audioFrameIndex << ", pts:" << pts << ", clock:" << clock;
-    while (true)
-    {
-        if (!m_audioClock.wait(pts, -1.0)) {
-            //av_usleep(1000.0);
-            continue;
-        }
-        else {
-            break;
-        }
-    }
     //g_filter2.WriteFrame(frame);
 
-    //更新时钟
-    m_audioClock.set_clock(pts);
-    m_extClock.sync_clock_to_slave(m_audioClock.get_clock());
+    WaitClock(pts, false);
 
     AudioFrame outFrame;
     for (size_t i = 0; i < 8; i++)

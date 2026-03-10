@@ -272,10 +272,11 @@ void FFmpegPlayer::StreamDemux()
             }
             continue;
         }
+        bool isKey = packet->flags & AV_PKT_FLAG_KEY;
         int64_t curTime = av_gettime_relative();
         if (packet->stream_index == m_videoStreamIndex)
         {
-            //LOG_INFO << "========video packet pts:" << packet->pts;
+            //LOG_INFO << "video packet pts:" << packet->pts << ", key:" << isKey;
             m_videoPacketSize += packet->size;
             if (!m_isSyncDemux) {
                 m_videoPacketQueue.Push(packet, !m_isMediaFile);
