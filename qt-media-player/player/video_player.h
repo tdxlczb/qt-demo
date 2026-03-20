@@ -80,7 +80,8 @@ private:
     QPushButton* stopButton;
     QPushButton* seekForwardButton;
     QPushButton* seekBackwardButton;
-    QComboBox* comboBox;
+    QComboBox* speedComboBox;
+    QComboBox* decodeComboBox;
 
     // 主布局
     QVBoxLayout* mainLayout;

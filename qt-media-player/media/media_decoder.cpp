@@ -1,6 +1,6 @@
 #include "media_decoder.h"
 #include "media_utils.h"
-#include "log.h"
+#include "media_log.h"
 
 namespace mp {
 
@@ -177,7 +177,7 @@ bool VideoDecoder::SendPacket(AVPacket* packet)
         }
         else if (ret == AVERROR_INVALIDDATA) {
             // 警告性错误：记录日志但继续
-            //LOG_WARN << "Invalid packet: pts=" << packet->pts << " size=" << packet->size;
+            // LOG_WARN << "Invalid packet: pts=" << packet->pts << " size=" << packet->size;
             // 不要break，继续下一个包
         }
         else {

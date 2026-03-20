@@ -14,6 +14,7 @@
 
 const int kVideoRGBConverter = 1;
 const int kAudioS16Converter = 1;
+const int kRenderType = 1; //0-label渲染，1-opengl渲染
 
 using namespace mp;
 
@@ -31,18 +32,23 @@ PlayerWidget::PlayerWidget(QWidget* parent, int winIndex)
     this->setStyleSheet("background-color: #F0F0F0;");
     //this->setStyleSheet("border: 2px solid red; background-color: #F0F0F0;");
 
-    //auto VideoRender = new VideoRGBRender(this);
-    //auto VideoRender = new PlayGLWidget(this);
-    auto VideoRender = new OpenGLRenderWidget(this);//render背景颜色#808080
-    //auto VideoRender = new SDLRenderWidget(this);
-    m_pVideoRender = VideoRender;
-    m_pAudioRender = new AudioRender(true);
-
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 2, 2, 2);  // 设置边距是为了选中时可以设置border
     layout->setSpacing(0);                   // 可选：去掉间距
-    layout->addWidget(VideoRender);
 
+    if (kRenderType == 0) {
+        auto VideoRender = new VideoRGBRender(this);
+        m_pVideoRender = VideoRender;
+        layout->addWidget(VideoRender);
+    } else {
+        auto VideoRender = new OpenGLRenderWidget(this);//render背景颜色#808080
+        m_pVideoRender = VideoRender;
+        layout->addWidget(VideoRender);
+    }
+    //auto VideoRender = new PlayGLWidget(this);
+    //auto VideoRender = new SDLRenderWidget(this);
+
+    m_pAudioRender = new AudioRender(true);
     m_pFrameQuality = new FrameQuality();
 }
 
@@ -182,25 +188,30 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
             return;
     }
 
+    // 渲染支持的格式
+    bool isRenderSuportFormat = (frame.spec.format == kVideoFmtYUV420P || frame.spec.format == kVideoFmtYUVJ420P || frame.spec.format == kVideoFmtNV12);
+
     VideoFrame outFrame;
-    if (frame.spec.format != kVideoFmtYUV420P && frame.spec.format != kVideoFmtYUVJ420P && frame.spec.format != kVideoFmtNV12) {
+    if (kRenderType == 0 || !isRenderSuportFormat) {
         auto converter = m_hashVideoConverter.value(kVideoRGBConverter);
         if (converter)
             converter->Input(frame, outFrame);
-    }
-    else {
+    } else {
         outFrame = frame;
     }
 
+    //static int packetIndex = 0;
+    //packetIndex++;
+    //qInfo() << "video packet Index:" << packetIndex << ", pts:" << outFrame.pts << ", size:" << outFrame.size;
     m_pVideoRender->UpdateContent(outFrame);
     if (m_pMediaPlayer) {
         emit sig_PlayTime((int)outFrame.pts, m_pMediaPlayer->GetDuration());
     }
     //auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
-    //if (m_pFishEyeWidget) {
-    //    cv::Mat matIn = cv::Mat(frame.spec.height, frame.spec.width, CV_8UC3, frame.data);//传递处理后的效果图
-    //    m_pFishEyeWidget->UpdateContent(matIn);
-    //}
+    if (m_pFishEyeWidget && outFrame.spec.format == kVideoFmtRGB) {
+        cv::Mat matIn = cv::Mat(outFrame.spec.height, outFrame.spec.width, CV_8UC3, outFrame.data);//传递处理后的效果图
+        m_pFishEyeWidget->UpdateContent(matIn);
+    }
     //auto t2 = std::chrono::high_resolution_clock().now().time_since_epoch();
     //auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
     //qDebug() << "delta time:" << duration;

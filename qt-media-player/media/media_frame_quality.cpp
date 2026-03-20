@@ -2,7 +2,7 @@
 #include "media_utils.h"
 #include "media_display.h"
 #include "opencv2/opencv.hpp"
-#include "log.h"
+#include "media_log.h"
 
 namespace mp {
 

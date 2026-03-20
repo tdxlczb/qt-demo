@@ -1,5 +1,5 @@
 #include "media_queue.h"
-#include "log.h"
+#include "media_log.h"
 extern "C"
 {
 #include <libavcodec/avcodec.h>

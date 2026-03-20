@@ -366,23 +366,39 @@ void VideoPlayer::setupControlArea()
         "}"
     );
 
-    comboBox = new QComboBox();
-    comboBox->addItem("0.125x", 0.125);
-    comboBox->addItem("0.25x", 0.25);
-    comboBox->addItem("0.5x", 0.5);
-    comboBox->addItem("0.75x", 0.75);
-    comboBox->addItem("1.0x", 1.0);
-    comboBox->addItem("1.5x", 1.5);
-    comboBox->addItem("2.0x", 2.0);
-    comboBox->addItem("4.0x", 4.0);
-    comboBox->addItem("8.0x", 8.0);
-    comboBox->addItem("16.0x", 16.0);
-    comboBox->setCurrentIndex(4);
-    comboBox->setFixedSize(60, 30);
-    comboBox->setStyleSheet(
+    speedComboBox = new QComboBox();
+    speedComboBox->addItem("0.125x", 0.125);
+    speedComboBox->addItem("0.25x", 0.25);
+    speedComboBox->addItem("0.5x", 0.5);
+    speedComboBox->addItem("0.75x", 0.75);
+    speedComboBox->addItem("1.0x", 1.0);
+    speedComboBox->addItem("1.5x", 1.5);
+    speedComboBox->addItem("2.0x", 2.0);
+    speedComboBox->addItem("4.0x", 4.0);
+    speedComboBox->addItem("8.0x", 8.0);
+    speedComboBox->addItem("16.0x", 16.0);
+    speedComboBox->setCurrentIndex(4);
+    speedComboBox->setFixedSize(60, 30);
+    speedComboBox->setStyleSheet(
         "QComboBox {"
         "    background-color: #27ae60;"
         "    color: #FFFFFF;"
+        "    border: none;"
+        "    border-radius: 5px;"
+        "    font-weight: bold;"
+        "}"
+    );
+
+    decodeComboBox = new QComboBox();
+    decodeComboBox->addItem("软解码");
+    decodeComboBox->addItem("D3D9");
+    decodeComboBox->addItem("D3D11");
+    decodeComboBox->setCurrentIndex(0);
+    decodeComboBox->setFixedSize(100, 30);
+    decodeComboBox->setStyleSheet(
+        "QComboBox {"
+        "    background-color: #27ae60;"
+        "    color: black;"
         "    border: none;"
         "    border-radius: 5px;"
         "    font-weight: bold;"
@@ -396,7 +412,8 @@ void VideoPlayer::setupControlArea()
     controlLayout->addWidget(stopButton);
     controlLayout->addWidget(seekBackwardButton);
     controlLayout->addWidget(seekForwardButton);
-    controlLayout->addWidget(comboBox);
+    controlLayout->addWidget(speedComboBox);
+    controlLayout->addWidget(decodeComboBox);
     controlLayout->addStretch(); // 右侧弹簧
 
     // 连接信号槽
@@ -407,10 +424,10 @@ void VideoPlayer::setupControlArea()
     connect(seekForwardButton, &QPushButton::clicked, this, &VideoPlayer::onSeekForwardClicked);
 
     // 绑定currentIndexChanged信号 - 选项改变时触发
-    QObject::connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    QObject::connect(speedComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         [this](int index) {
             qDebug() << "选项改变，当前索引:" << index;
-            auto data = comboBox->itemData(index);
+            auto data = speedComboBox->itemData(index);
             if (m_pPlayerWidget) {
                 double speed = data.toDouble();
                 m_pPlayerWidget->ChangeSpeed(speed);
@@ -432,6 +449,8 @@ void VideoPlayer::onPlayClicked()
     if (playUrl.isEmpty())
     {
         //playUrl = "E:/code/media/BaiduSyncdisk2.mp4";
+        //playUrl = "rtsp://admin:admin@123@172.16.25.11:554/unicast/c1/s0/live";
+        //playUrl = R"(E:\code\media\traffic.mp4)";
         //playUrl = "rtsp://172.16.19.69/live/test";
         
         
@@ -442,11 +461,12 @@ void VideoPlayer::onPlayClicked()
         //playUrl = "rtsp://admin:itc20232024@172.16.19.6:554/cam/realmonitor?channel=1&subtype=0";
         //playUrl = "rtsp://172.16.19.40:554/rtp/34020000001110000001_34020000001320000001_3?token=xCO73xOfG5uekWf4";
         //playUrl = "rtsp://172.16.25.11:554/unicast/c1/s1/live/";//宇视
-        playUrl = "rtsp://admin:admin@123@172.16.25.11:554/c2/b1764374400/e1764378000/replay/s0/";//宇视
+        playUrl = "rtsp://admin:admin@123@172.16.25.11:554/c1/b1773975600/e1774022399/replay/s0/";//宇视
 
         infoTextEdit->setPlainText(playUrl);
     }
-    m_pPlayerWidget->StartPlay(playUrl);
+    int decodeType = decodeComboBox->currentIndex();
+    m_pPlayerWidget->StartPlay(playUrl, decodeType);
     m_pPlayerWidget->show();
     videoLabel->hide();
 }
@@ -469,12 +489,12 @@ void VideoPlayer::onStopClicked()
 
 void VideoPlayer::onSeekForwardClicked()
 {
-    m_pPlayerWidget->SeekTime(60);
+    m_pPlayerWidget->SeekTime(300);
 }
 
 void VideoPlayer::onSeekBackwardClicked()
 {
-    m_pPlayerWidget->SeekTime(-60);
+    m_pPlayerWidget->SeekTime(-300);
 }
 
 void VideoPlayer::onOpenClicked()

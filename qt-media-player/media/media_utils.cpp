@@ -12,7 +12,7 @@ extern "C"
 #include <libavcodec/avcodec.h>
 }
 
-#include "log.h"
+#include "media_log.h"
 
 //获取最大公约数
 int GetGCD(int a, int b) {

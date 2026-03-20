@@ -12,7 +12,7 @@ extern "C"
 #include <libswresample/swresample.h>
 }
 
-#include "log.h"
+#include "media_log.h"
 #include "media/media_utils.h"
 
 namespace mp {
@@ -57,8 +57,8 @@ PlayError VideoConverter::InitSwsContext(const VideoSpec& srcSpec)
     if (m_pSwsCxtVideo) {
         sws_freeContext(m_pSwsCxtVideo);
     }
-    LOG_INFO << "converterId:" << m_converterId << "src width height format:" << srcSpec.width << srcSpec.height << srcSpec.format;
-    LOG_INFO << "converterId:" << m_converterId << "dst width height format:" << m_dstSpec.width << m_dstSpec.height << m_dstSpec.format;
+    LOG_INFO << "converterId:" << m_converterId << " src width height format:" << srcSpec.width << "x" << srcSpec.height << "," << srcSpec.format;
+    LOG_INFO << "converterId:" << m_converterId << " dst width height format:" << m_dstSpec.width << "x" << m_dstSpec.height << "," << m_dstSpec.format;
     m_pSwsCxtVideo = sws_getContext(srcSpec.width, srcSpec.height, (AVPixelFormat)srcSpec.format,
         m_dstSpec.width, m_dstSpec.height, (AVPixelFormat)m_dstSpec.format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
     if (nullptr == m_pSwsCxtVideo) {

@@ -1,5 +1,5 @@
 #include "media_player.h"
-#include "log.h"
+#include "media_log.h"
 #include "media_utils.h"
 #include "media_audio_filter.h"
 #include "media_decoder.h"

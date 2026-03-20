@@ -147,7 +147,7 @@ void RtspPlayerImpl::onRecvRTP(mediakit::RtpPacket::Ptr rtp, const mediakit::Sdp
 #pragma comment(lib,R"(E:\code\github\czb\ZLMediaKit\release\windows\Debug\Release\zlmplayer.lib)")
 #endif // USE_ORIGIN_ZLM
 
-#include "log.h"
+#include "media_log.h"
 
 extern "C"
 {

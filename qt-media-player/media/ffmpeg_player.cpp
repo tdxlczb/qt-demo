@@ -10,7 +10,7 @@ extern "C"
 #include <libavutil/time.h>
 }
 
-#include "log.h"
+#include "media_log.h"
 #include "media/media_utils.h"
 #include "media/media_decoder.h"
 
