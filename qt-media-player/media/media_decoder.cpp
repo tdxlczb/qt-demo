@@ -24,7 +24,7 @@ static AVPixelFormat GetHwFormat(AVCodecContext* pCodecContext, const enum AVPix
         }
     }
     LOG_WARN << "HwPixFmt not found " << pDecoder->GetHwPixFmt();
-    pDecoder->QuitHwDecode();
+    pDecoder->TryQuitHwDecode();
     return AV_PIX_FMT_NONE;
 }
 
@@ -41,9 +41,35 @@ const AVPixelFormat& VideoDecoder::GetHwPixFmt() const
     return m_hwPixFmt;
 }
 
-void VideoDecoder::QuitHwDecode()
+void VideoDecoder::TryQuitHwDecode()
+{
+    m_tryQuitHwCount = 1;
+    m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
+}
+
+bool VideoDecoder::QuitHwDecode()
 {
     m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
+    LOG_INFO << "QuitHwDecode";
+    if (m_videoCodecContext) {
+        avcodec_close(m_videoCodecContext);
+    }
+    if (m_videoCodecContext->hw_device_ctx) {
+        av_buffer_unref(&m_videoCodecContext->hw_device_ctx);
+        m_videoCodecContext->hw_device_ctx = nullptr;
+    }
+    m_videoCodecContext->opaque = nullptr;
+    m_videoCodecContext->get_format = m_getFormat;
+
+    int ret = avcodec_open2(m_videoCodecContext, m_pCodec, NULL);
+    if (ret != 0) {
+        LOG_ERROR << "video avcodec_open2 failed," << ret << ":" << av_error_string(ret);
+        CloseDecoder();
+        m_tryQuitHwCount++;
+        return false;
+    }
+    m_tryQuitHwCount = 0;
+    return true;
 }
 
 bool VideoDecoder::OpenDecoder(AVCodecID id, const std::string& hwdevice, AVCodecParameters* codecpar)
@@ -69,10 +95,10 @@ bool VideoDecoder::OpenDecoder(AVCodecID id, const std::string& hwdevice, AVCode
             return false;
         }
     }
-
+    
     //m_videoCodecContext->err_recognition |= AV_EF_EXPLODE;//设置解码器的错误恢复标志，可以跳过错误的帧，从而减少花屏现象
     m_videoCodecContext->opaque = this; //用于回调里获取的指针
-    m_videoCodecContext->thread_count = 0;
+    m_videoCodecContext->thread_count = 0; // 这里开启多少线程，解码器就会缓存多少个packet，如果缓存packet太多，会导致解码延迟太高
 
     if (!hwdevice.empty()) {
         m_hwDeviceType = av_hwdevice_find_type_by_name(hwdevice.c_str());
@@ -115,15 +141,26 @@ bool VideoDecoder::OpenDecoder(AVCodecID id, const std::string& hwdevice, AVCode
             }
             m_videoCodecContext->hw_device_ctx = av_buffer_ref(g_d3d11_device);//这里使用av_buffer_ref，就能安全释放m_videoCodecContext，避免复用的device被删除
         }
+        m_getFormat = m_videoCodecContext->get_format; //保存原来的方法，退出硬解码时使用
         m_videoCodecContext->get_format = GetHwFormat;
     }
-
+    m_pCodec = videoCodec; //解码器，退出硬解码时使用
     ret = avcodec_open2(m_videoCodecContext, videoCodec, nullptr);
     if (ret != 0) {
         LOG_ERROR << "video avcodec_open2 failed," << ret << ":" << av_error_string(ret);
         CloseDecoder();
         return false;
     }
+
+    // 硬解码时，例如amd设备支持的dxva2解码器最大分辨率比视频分辨率小，可能会出现初始avcodec_open2打开硬解码时，get_format查找硬解码格式时都能成功
+    // 但是在avcodec_send_packet中触发get_format查找不到硬解码，因此需要在触发这个问题后重新初始软解码器
+    if (m_tryQuitHwCount > 0) {
+        if (!QuitHwDecode()) {
+            CloseDecoder();
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -176,9 +213,15 @@ bool VideoDecoder::SendPacket(AVPacket* packet)
             return true;
         }
         else if (ret == AVERROR_INVALIDDATA) {
+            // 输入数据有问题，可能数据不完整:Invalid data found when processing input
             // 警告性错误：记录日志但继续
             // LOG_WARN << "Invalid packet: pts=" << packet->pts << " size=" << packet->size;
-            // 不要break，继续下一个包
+            if (m_tryQuitHwCount > 0 && m_tryQuitHwCount <= 10) {//如果是因为硬解被退出了导致的这个报错，则终止解帧并传出错误，尝试次数太多则放弃
+                LOG_ERROR << "hwdecode error, try quit hwdecode:" << m_tryQuitHwCount;
+                QuitHwDecode();
+                return false;
+            }
+            return false;
         }
         else {
             // 其他错误
@@ -268,7 +311,7 @@ bool AudioDecoder::OpenDecoder(AVCodecID id, AVCodecParameters* codecpar)
             return false;
         }
     }
-
+    m_audioCodecContext->thread_count = 0;
     ret = avcodec_open2(m_audioCodecContext, audioCodec, nullptr);
     if (ret != 0) {
         LOG_ERROR << "audio avcodec_open2 failed," << ret << ":" << av_error_string(ret);
