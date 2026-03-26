@@ -278,7 +278,7 @@ bool RtspPlayer::StreamOpen()
             static int packetIndex = 0;
             packetIndex++;
             //LOG_INFO << "audio packet Index:" << packetIndex << ", pts:" << packet->pts;
-            if (m_pAudioDecoder->IsOpen() && m_speed == 1.0)
+            if (m_pAudioDecoder->IsOpen())
                 m_audioPacketQueue.Push(av_packet_clone(packet), true);
         }
         else {
@@ -289,8 +289,17 @@ bool RtspPlayer::StreamOpen()
             packet->dts = packet->pts;
             //packet->pts -= 420831312;
             //packet->dts -= 420831312;
-            static int packetIndex = 0;
-            packetIndex++;
+            //static int packetIndex = 0;
+            //packetIndex++;
+            //static int packetCount = 0;
+            //packetCount++;
+            //static int64_t lastTime = 0;
+            //auto now = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            //if (now - lastTime >= 1000000) {
+            //    LOG_INFO << "video packet count:" << packetCount << ", last pts:" << packet->pts * m_videoTimebae << ", size:" << packet->size;
+            //    packetCount = 0;
+            //    lastTime = now;
+            //}
             //LOG_INFO << "video packet Index:" << packetIndex << ", pts:" << packet->pts * m_videoTimebae << ", size:" << packet->size;
             int framePlayInterval = (packet->pts - m_lastVideoPts) * m_videoTimebae * 1000 / m_speed; //帧播放间隔
             //if (pkt.isKey) {
@@ -304,16 +313,16 @@ bool RtspPlayer::StreamOpen()
                 //LOG_INFO << "===== start video packet Index:" << packetIndex << ", pts:" << packet->pts << ", framePlayInterval:" << framePlayInterval << ", m_isDiscardPacket:" << m_isDiscardPacket;
             //}
 
-            if (m_speed > 4.0 && !pkt.isKey)
-                return;
+            //if (m_speed > 4.0 && !pkt.isKey)
+            //    return;
             //LOG_INFO << "video packet Index:" << packetIndex << ", pts:" << packet->pts << ", ts:" << packet->pts * m_videoTimebae << ", size:" << packet->size;
             //if (m_isDiscardPacket && !pkt.isKey)
             //    return;
 
             m_lastVideoPts = packet->pts;
 
-            static int packetIndex1 = 0;
-            packetIndex1++;
+            //static int packetIndex1 = 0;
+            //packetIndex1++;
             //LOG_INFO << "===== start video packet Index:" << packetIndex1 << ", pts:" << packet->pts << ", ts:" << packet->pts * m_videoTimebae << ", framePlayInterval:" << framePlayInterval;
             m_videoPacketQueue.Push(av_packet_clone(packet), true);//推送到队列需要拷贝内存，否则所有帧都使用同一块内存解码画面异常
             //if (m_pVideoDecoder)

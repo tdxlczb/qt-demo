@@ -61,6 +61,11 @@ void MediaPlayer::ResetClock()
 
 void MediaPlayer::WaitClock(double pts, bool isVideo)
 {
+    // 遇到一种特殊情况出现时钟异常，例如从4倍速变成8倍速，一会后再回到4倍速，时间同步出现异常
+    // 解码器使用8个线程时，会缓存8个packet才会解出一个frame
+    // 当开启8倍速时，音频时钟由于解码非常快，会立刻更新最新一帧的pts，但是视频时钟更新的pts会是8个packet之前的pts
+    // 8倍速的音频时钟会和8个packet之前的视频时钟差距越来越大，如果这个流关键帧间隔为2s，8个packet就导致差距16s左右
+    // 当大于时钟设置的最大帧播放时间(10s)时，就会导致时钟同步出现异常，最简单的做法就是将最大帧播放时间设置为20s，但是这种方法治标不治本，后续可能需要考虑优化
     if (isVideo) {
         double clock = m_videoClock.GetClock();
         double master = m_audioClock.GetClock();
@@ -320,6 +325,11 @@ void MediaPlayer::VideoThread()
             continue;
         }
 
+        if (m_speed > 4.0 && !(packet->flags & AV_PKT_FLAG_KEY)) {
+            av_packet_free(&packet);
+            continue;
+        }
+
         m_videoPacketIndex++;
         if (m_pVideoDecoder) {
             m_pVideoDecoder->SendPacket(packet);
@@ -354,18 +364,18 @@ void MediaPlayer::AudioThread()
 
         m_audioPacketIndex++;
 
-        if (m_speed >= 0.5 && m_speed <= 2.0) {
-            if (m_pAudioDecoder) {
-                m_pAudioDecoder->SendPacket(packet);
-            }
+        //if (m_speed >= 0.5 && m_speed <= 2.0) {
+        if (m_pAudioDecoder) {
+            m_pAudioDecoder->SendPacket(packet);
         }
-        else {
-            int64_t npts = packet->pts == AV_NOPTS_VALUE ? 0 : packet->pts;
-            double pts = npts * m_audioTimebae;
-            //更新时钟
-            m_audioClock.SetClock(pts);
-            m_extClock.SyncClockToSlave(m_audioClock.GetClock());
-        }
+        //}
+        //else {
+        //    int64_t npts = packet->pts == AV_NOPTS_VALUE ? 0 : packet->pts;
+        //    double pts = npts * m_audioTimebae;
+        //    //更新时钟
+        //    m_audioClock.SetClock(pts);
+        //    m_extClock.SyncClockToSlave(m_audioClock.GetClock());
+        //}
 
         av_packet_free(&packet);
     }
@@ -453,7 +463,17 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
     //    return;
     //}
     m_lastVideoPts = pts;
-    
+
+    //static int packetCount = 0;
+    //packetCount++;
+    //static int64_t lastTime = 0;
+    //auto nowts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    //if (nowts - lastTime >= 1000000) {
+    //    qInfo() << "video packet count:" << packetCount << ", last pts:" << pts << ", clock:" << m_videoClock.GetClock() << ", master:" << m_audioClock.GetClock();
+    //    packetCount = 0;
+    //    lastTime = nowts;
+    //}
+
     WaitClock(pts, true);
 
     VideoFrame outFrame;
@@ -476,11 +496,20 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
 void MediaPlayer::DisplayAudio(AVFrame* frame)
 {
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
-    auto clock = m_audioClock.GetClock();
     double pts = npts * m_audioTimebae;
     double now = av_gettime_relative() / 1000000.0;
-    //LOG_INFO << PLAYTAG << "audio frameIndex:" << m_audioFrameIndex << ", pts:" << pts << ", clock:" << clock;
+    //LOG_INFO << PLAYTAG << "audio frameIndex:" << m_audioFrameIndex << ", pts:" << pts;
     //g_filter2.WriteFrame(frame);
+
+    //static int packetCount = 0;
+    //packetCount++;
+    //static int64_t lastTime = 0;
+    //auto nowts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    //if (nowts - lastTime >= 1000000) {
+    //    qInfo() << "========= autio packet count:" << packetCount << ", last pts:" << pts << ", clock:" << m_audioClock.GetClock();
+    //    packetCount = 0;
+    //    lastTime = nowts;
+    //}
 
     WaitClock(pts, false);
 

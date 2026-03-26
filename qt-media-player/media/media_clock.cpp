@@ -20,7 +20,7 @@ const double kMinSyncThreshold = 0.04; // 最小同步阈值
 const double kMaxSyncThreshold = 0.1; // 最大同步阈值
 const double kFrameDuplicationThreshold = 0.1;// 帧重复阈值,AV_SYNC_FRAMEDUP_THRESHOLD
 const double kNoSyncThreshold = 10.0; // 不同步阈值
-const double kMaxFrameDuration = 10.0; //最大帧播放时间
+const double kMaxFrameDuration = 20.0; //最大帧播放时间
 const double kRefreshTime = 0.01; //刷新时间
 
 //参考fflay的写法
