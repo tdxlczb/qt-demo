@@ -8,8 +8,6 @@
 #include "media/media_player.h"
 #include "media/media_display.h"
 #include "media/media_frame_quality.h"
-#include "media/ffmpeg_player.h"
-#include "media/rtsp_player.h"
 #include "fisheye_widget.h"
 
 const int kVideoRGBConverter = 1;
@@ -85,13 +83,11 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     else if(decodeType == 2) {
         opt.hwdevice = "d3d11va";
     }
+    opt.demuxerId = 1;
 
     if (!m_pMediaPlayer) {
-        //m_pMediaPlayer = new mp::MediaPlayer();
-        //m_pMediaPlayer = new mp::FFmpegPlayer();
-        m_pMediaPlayer = new mp::RtspPlayer();
+        m_pMediaPlayer = new mp::MediaPlayer();
     }
-
     m_pMediaPlayer->SetPlayEvent(this);
     m_pMediaPlayer->Play(url.toStdString(), opt);
 

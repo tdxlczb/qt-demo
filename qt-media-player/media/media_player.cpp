@@ -3,6 +3,8 @@
 #include "media_utils.h"
 #include "media_audio_filter.h"
 #include "media_decoder.h"
+#include "ffmpeg_demuxer.h"
+#include "zlm_demuxer.h"
 
 extern "C"
 {
@@ -16,8 +18,8 @@ namespace mp {
 * 较新版本的av_packet_free、av_frame_free内部都先执行了av_packet_unref、av_frame_unref，因此没必要再多调一次
 */
 
-MediaPlayer::MediaPlayer()
-    : m_uid(uuid32())
+MediaPlayer::MediaPlayer(const std::string& context)
+    : MediaContext(context)
 {
     avformat_network_init();
 }
@@ -27,24 +29,69 @@ MediaPlayer::~MediaPlayer()
     avformat_network_deinit();
 }
 
-std::string MediaPlayer::GetId() const
+
+void MediaPlayer::OnDemuxStatus(DemuxStatus status)
 {
-    return m_uid;
+    if (status == DemuxStatus::StreamOver) {
+        m_isStreamOver = true;
+        if (m_playEvent)
+            m_playEvent->onClose(PlayError());
+    }
 }
 
-std::string MediaPlayer::GetTag() const
+bool MediaPlayer::OnStream(const StreamInfo& info, AVCodecParameters* codecpar)
 {
-    return m_tag;
+    bool result = false;
+    if (info.mediaType == AVMEDIA_TYPE_VIDEO) {
+        m_videoTimebae = info.GetTimebase();
+        result = CreateVideoDecoder(codecpar);
+    } else if (info.mediaType == AVMEDIA_TYPE_AUDIO) {
+        m_audioTimebae = info.GetTimebase();
+        result = CreateAudioDecoder(codecpar);
+    }
+    return result;
 }
+
+void MediaPlayer::OnPacket(AVPacket* pPkt)
+{
+    //是否是坏帧
+    if (pPkt->flags & AV_PKT_FLAG_CORRUPT) {
+        LOG_ERROR_T << "ignore AV_PKT_FLAG_CORRUPT";
+        av_packet_unref(pPkt);
+        return;
+    }
+
+
+    bool isKey = pPkt->flags & AV_PKT_FLAG_KEY;
+    if (pPkt->stream_index == AVMEDIA_TYPE_VIDEO) {
+
+        //static int64_t packetIndex = 0;
+        //static int64_t packetCount = 0;
+        //static int64_t lastTime = 0;
+        //packetIndex++;
+        //packetCount++;
+        //int64_t now = av_gettime_relative();
+        //if (now - lastTime >= 1000000) {
+        //    double ts = pPkt->pts * m_videoTimebae;
+        //    LOG_INFO_T << "video packetIndex:" << packetIndex << ", packetCount:" << packetCount << ", ts:" << ts;
+        //    packetCount = 0;
+        //    lastTime = now;
+        //}
+
+        m_videoPacketSize += pPkt->size;
+        m_videoPacketQueue.Push(pPkt, true);
+    } else if (pPkt->stream_index == AVMEDIA_TYPE_AUDIO) {
+        m_audioPacketSize += pPkt->size;
+        m_audioPacketQueue.Push(pPkt, true);
+    }
+}
+
+void MediaPlayer::OnPlayError(const PlayError& error)
+{}
 
 std::string MediaPlayer::GetPlayUrl() const
 {
     return m_url;
-}
-
-void MediaPlayer::SetTag(const std::string& tag)
-{
-    m_tag = tag;
 }
 
 void MediaPlayer::SetPlayEvent(PlayEvent* playEvent)
@@ -110,9 +157,17 @@ void MediaPlayer::WaitClock(double pts, bool isVideo)
 
 void MediaPlayer::Play(const std::string& url, const PlayOptions& options)
 {
+    LOG_INFO_T << "try play url:" << m_url;
+
     Stop();
     m_url = url;
     m_options = options;
+
+    if (options.demuxerId == 0) {
+        m_demuxer = std::make_shared<FFmpegDemuxer>(GetContext());
+    } else if (options.demuxerId == 1) {
+        m_demuxer = std::make_shared<ZlmDemuxer>(GetContext());
+    }
 
     m_isThreadRun.store(true);
     if (!m_thDemuxer.joinable())
@@ -156,6 +211,9 @@ void MediaPlayer::Stop()
 void MediaPlayer::Pause()
 {
     m_pauseReq.store(true);
+    if (m_demuxer)
+        m_demuxer->Pause();
+
     //if (m_isPaused.load()) {
     //    // 恢复读取（FFmpeg 4.0+）
     //    if (m_formatContext->iformat && strcmp(m_formatContext->iformat->name, "rtsp") == 0) {
@@ -183,6 +241,8 @@ void MediaPlayer::Pause()
 
 void MediaPlayer::Resume()
 {
+    if (m_demuxer)
+        m_demuxer->Resume();
 }
 
 void MediaPlayer::Speed(double speed)
@@ -191,6 +251,10 @@ void MediaPlayer::Speed(double speed)
     m_videoClock.SetClockSpeed(speed);
     m_audioClock.SetClockSpeed(speed);
     m_extClock.SetClockSpeed(speed);
+
+    if (m_demuxer)
+        m_demuxer->Speed(speed);
+
     //m_pRtspPlayer->speed(speed);
     //if (m_isMediaFile) {
     //    m_speed = speed;
@@ -206,25 +270,32 @@ void MediaPlayer::Seek(int64_t seconds)
         m_seekPos = seconds;
         m_seekReq.store(true);
     }
+    if (m_demuxer)
+        m_demuxer->Seek(seconds);
 }
 
 void MediaPlayer::SeekTo(int64_t seconds)
-{
-}
+{}
 
 int64_t MediaPlayer::GetDuration()
 {
-
+    if (m_demuxer)
+        m_demuxer->GetDuration();
     return 0;
 }
 
 bool MediaPlayer::StreamOpen()
 {
+    if (m_demuxer)
+        return m_demuxer->Open(m_url, m_options, this);
     return false;
 }
 
 void MediaPlayer::StreamClose()
 {
+    if (m_demuxer)
+        m_demuxer->Close();
+
     CloseDecoder();
     m_videoStreamIndex = -1;
     m_audioStreamIndex = -1;
@@ -232,14 +303,16 @@ void MediaPlayer::StreamClose()
 
 void MediaPlayer::StreamDemux()
 {
+    if (m_demuxer)
+        m_demuxer->Start();
 }
 
-bool MediaPlayer::CreateVideoDecoder(AVCodecID id, AVCodecParameters* codecpar)
+bool MediaPlayer::CreateVideoDecoder(AVCodecParameters* codecpar)
 {
     if (!m_pVideoDecoder) {
-        m_pVideoDecoder = std::make_unique<VideoDecoder>();
+        m_pVideoDecoder = std::make_unique<VideoDecoder>(GetContext());
     }
-    if (!m_pVideoDecoder->OpenDecoder(id, m_options.hwdevice, codecpar)) {
+    if (!m_pVideoDecoder->OpenDecoder(m_options, codecpar)) {
         return false;
     }
     m_pVideoDecoder->SetOnDecodeFrame(std::bind(&MediaPlayer::OnVideoFrame, this, std::placeholders::_1));
@@ -249,12 +322,12 @@ bool MediaPlayer::CreateVideoDecoder(AVCodecID id, AVCodecParameters* codecpar)
     return true;
 }
 
-bool MediaPlayer::CreateAudioDecoder(AVCodecID id, AVCodecParameters* codecpar)
+bool MediaPlayer::CreateAudioDecoder(AVCodecParameters* codecpar)
 {
     if (!m_pAudioDecoder) {
-        m_pAudioDecoder = std::make_unique<AudioDecoder>();
+        m_pAudioDecoder = std::make_unique<AudioDecoder>(GetContext());
     }
-    if (!m_pAudioDecoder->OpenDecoder(id, codecpar)) {
+    if (!m_pAudioDecoder->OpenDecoder(m_options, codecpar)) {
         return false;
     }
     m_pAudioDecoder->SetOnDecodeFrame(std::bind(&MediaPlayer::OnAudioFrame, this, std::placeholders::_1));
@@ -283,7 +356,7 @@ void MediaPlayer::DemuxThread()
     m_isMediaFile = !IsNetworkStream(m_url);
 
     if (!StreamOpen()) {
-        LOG_ERROR << PLAYTAG << "stream open failed";
+        LOG_ERROR_T << "stream open failed";
         return;
     }
 
@@ -298,9 +371,9 @@ void MediaPlayer::DemuxThread()
     if (m_isAsyncDisplay && !m_thVideoDisplay.joinable()) {
         m_thVideoDisplay = std::thread(&MediaPlayer::DisplayThread, this);
     }
-    LOG_INFO << PLAYTAG << "play start";
+    LOG_INFO_T << "play start";
     StreamDemux();
-    LOG_INFO << PLAYTAG << "play end";
+    LOG_INFO_T << "play end";
 }
 
 void MediaPlayer::VideoThread()
@@ -392,17 +465,16 @@ void MediaPlayer::OnVideoFrame(AVFrame* frame)
     }
 
     m_videoFrameIndex++;
-    //LOG_INFO << PLAYTAG << "decode video frame index:" << m_videoFrameIndex << ", pts:" << frame->pts;
+    //LOG_INFO_T << "decode video frame index:" << m_videoFrameIndex << ", pts:" << frame->pts;
     int64_t curTime = av_gettime_relative();
     if (curTime - m_iLastCountTime > 4000000) {
-        LOG_INFO << PLAYTAG << "frame index:" << m_videoFrameIndex << ", fps:" << m_videoFrameIndex - m_iLastCountFrameIndex;
+        //LOG_INFO_T << "frame index:" << m_videoFrameIndex << ", fps:" << m_videoFrameIndex - m_iLastCountFrameIndex;
         m_iLastCountFrameIndex = m_videoFrameIndex;
         m_iLastCountTime = curTime;
     }
     if (m_isAsyncDisplay) {
         m_videoFrameQueue.Push(frame);
-    }
-    else {
+    } else {
         DisplayVideo(frame);
     }
 }
@@ -433,8 +505,7 @@ void MediaPlayer::OnAudioFrame(AVFrame* frame)
             // 4. 释放处理后的帧
             av_frame_free(&filteredFrame);
         }
-    }
-    else {
+    } else {
         DisplayAudio(frame);
     }
 }
@@ -457,7 +528,7 @@ void MediaPlayer::DisplayVideo(AVFrame* frame)
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
     double pts = npts * m_videoTimebae;
     double now = av_gettime_relative() / 1000000.0;
-    //LOG_INFO << PLAYTAG << "===== video frameIndex:" << m_videoFrameIndex << ", pts:" << npts << ", ts:" << pts;
+    //LOG_INFO_T << "===== video frameIndex:" << m_videoFrameIndex << ", pts:" << npts << ", ts:" << pts;
     //if (m_lastVideoPts != 0.0 && ((pts - m_lastVideoPts) / m_speed) < 0.016) {
     //    //帧率太高没有意义，太快的帧舍弃
     //    return;
@@ -498,7 +569,7 @@ void MediaPlayer::DisplayAudio(AVFrame* frame)
     int64_t npts = frame->pts == AV_NOPTS_VALUE ? 0 : frame->pts;
     double pts = npts * m_audioTimebae;
     double now = av_gettime_relative() / 1000000.0;
-    //LOG_INFO << PLAYTAG << "audio frameIndex:" << m_audioFrameIndex << ", pts:" << pts;
+    //LOG_INFO_T << "audio frameIndex:" << m_audioFrameIndex << ", pts:" << pts;
     //g_filter2.WriteFrame(frame);
 
     //static int packetCount = 0;
@@ -526,7 +597,7 @@ void MediaPlayer::DisplayAudio(AVFrame* frame)
     outFrame.spec.channels = frame->channels;
     outFrame.spec.format = frame->format;
 
-    if (m_playEvent) {
+    if (m_playEvent && m_speed == 1.0) {
         m_playEvent->onAudioFrame(outFrame);
     }
 

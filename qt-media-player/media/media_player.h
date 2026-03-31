@@ -5,16 +5,16 @@
 #include <atomic>
 
 #include "media_define.h"
+#include "media_context.h"
 #include "media_play_event.h"
 #include "media_queue.h"
 #include "media_clock.h"
+#include "media_demuxer.h"
 
 extern "C"
 {
 #include <libavcodec/codec_id.h>
 }
-
-#define PLAYTAG  m_tag + " " 
 
 struct AVCodecParameters;
 
@@ -29,16 +29,19 @@ namespace mp {
 class AudioSpeedFilter;
 class VideoDecoder;
 class AudioDecoder;
-class MediaPlayer
+class MediaDemuxer;
+class MediaPlayer : public MediaContext, public DemuxEvent
 {
 public:
-    MediaPlayer();
+    MediaPlayer(const std::string& context = "tag");
     virtual ~MediaPlayer();
 
-    std::string GetId() const;
-    std::string GetTag() const;
+    void OnDemuxStatus(DemuxStatus status) override;
+    bool OnStream(const StreamInfo& info, AVCodecParameters* codecpar) override;
+    void OnPacket(AVPacket* pPkt) override;
+    void OnPlayError(const PlayError& error) override;
+
     std::string GetPlayUrl() const;
-    void SetTag(const std::string& tag);
     void SetPlayEvent(PlayEvent* playEvent);
     void ResetClock();
     void WaitClock(double pts, bool isVideo);
@@ -56,8 +59,8 @@ protected:
     virtual bool StreamOpen();
     virtual void StreamClose();
     virtual void StreamDemux();
-    bool CreateVideoDecoder(AVCodecID id, AVCodecParameters* codecpar);
-    bool CreateAudioDecoder(AVCodecID id, AVCodecParameters* codecpar);
+    bool CreateVideoDecoder(AVCodecParameters* codecpar);
+    bool CreateAudioDecoder(AVCodecParameters* codecpar);
     void CloseDecoder();
 
     void DemuxThread();
@@ -75,11 +78,11 @@ protected:
     void DisplayAudio(AVFrame* frame);
 
 protected:
-    const std::string m_uid; //类的唯一id
-    std::string m_tag = "tag"; //标记，主要用于绑定外部播放窗口，日志区分
     std::string m_url;
     PlayOptions m_options;
     PlayEvent* m_playEvent = nullptr;
+    std::shared_ptr<MediaDemuxer> m_demuxer = nullptr;
+
     std::atomic_bool m_isThreadRun{ false }; //atomic在gcc编译器中不可使用=进行初始化
     std::thread m_thDemuxer;
     std::thread m_thVideoDecoder;

@@ -9,10 +9,12 @@ namespace mp {
 enum class PlayErrorCode
 {
     kNoError = 0,
+    kOtherError,             //其他错误，未定义的错误
     kCreateConverterFailed,  //视频/音频格式重采样器创建失败
     kNoConverter,            //没有视频/音频格式重采样器
     kConverteFailed,         //视频/音频格式重采样失败
-    kOutOfMemory             //内存不足
+    kOutOfMemory,            //内存不足
+    kHWDecodeError           //硬解码出错
 };
 
 //using PlayErrorCode = int;
@@ -79,6 +81,29 @@ struct AudioFrame
 struct PlayOptions
 {
     std::string hwdevice;
+    int demuxerId = 0; // 0-ffmpeg，1-zlm
+};
+
+/**
+ * 有理数，有些数据需要用分数来避免浮点精度问题
+ */
+struct RationalNumber {
+    int64_t num = 0; ///< Numerator
+    int64_t den = 1; ///< Denominator
+};
+
+struct StreamInfo {
+    std::string url;
+    int streamIndex = -1;//流索引，不一定就是AVMediaType的值
+    int mediaType = -1;//AVMediaType::AVMEDIA_TYPE_UNKNOWN
+    int codecId = 0; //AVCodecID::AV_CODEC_ID_NONE
+    RationalNumber timebase;
+    double fps = 0.0;
+    VideoSpec videoSpec;
+    AudioSpec audioSpec;
+    double GetTimebase() const {
+        return timebase.num / (double)timebase.den;
+    }
 };
 
 //AVPixelFormat

@@ -45,6 +45,11 @@ private:
 #define LOG_WARN    QSStream(2)
 #define LOG_ERROR   QSStream(3)
 
+#define LOG_DEBUG_T   QSStream(0) << "[" <<GetContext() << "] "
+#define LOG_INFO_T    QSStream(1) << "[" <<GetContext() << "] "
+#define LOG_WARN_T    QSStream(2) << "[" <<GetContext() << "] "
+#define LOG_ERROR_T   QSStream(3) << "[" <<GetContext() << "] "
+
 
 #include <string>
 #include <sstream>
