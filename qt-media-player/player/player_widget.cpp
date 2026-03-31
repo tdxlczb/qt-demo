@@ -135,6 +135,20 @@ void PlayerWidget::StopPlay()
 
     if (m_pAudioRender)
         m_pAudioRender->Stop();
+
+    //释放重采样器，避免内存泄漏
+    for (auto it = m_hashVideoConverter.begin(); it != m_hashVideoConverter.end(); ++it) {
+        mp::VideoConverter* converter = it.value();
+        delete converter;
+        converter = nullptr;
+    }
+    m_hashVideoConverter.clear();
+    for (auto it = m_hashAudioConverter.begin(); it != m_hashAudioConverter.end(); ++it) {
+        mp::AudioConverter* converter = it.value();
+        delete converter;
+        converter = nullptr;
+    }
+    m_hashAudioConverter.clear();
 }
 
 void PlayerWidget::PlayPause()

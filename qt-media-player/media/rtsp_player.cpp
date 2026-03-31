@@ -23,8 +23,7 @@ public:
     using Super = PlayerImp<RtspPlayer, PlayerBase>;
 
     RtspPlayerImpl(const toolkit::EventPoller::Ptr& poller)
-        : Super(poller) {
-    }
+        : Super(poller) {}
 
     ~RtspPlayerImpl() override {}
 
@@ -160,12 +159,10 @@ namespace mp {
 
 RtspPlayer::RtspPlayer()
     : MediaPlayer()
-{
-}
+{}
 
 RtspPlayer::~RtspPlayer()
-{
-}
+{}
 
 void RtspPlayer::Play(const std::string& url, const PlayOptions& options)
 {
@@ -238,29 +235,53 @@ bool RtspPlayer::StreamOpen()
     m_pZlmPlayer = std::make_shared<zlmplayer::ZlmPlayer>();
     m_pZlmPlayer->SetOnPlayStatus([this](zlmplayer::PlayStatus status) {
         if (status == zlmplayer::PlayStatus::Success) {
-            auto videoStream = m_pZlmPlayer->GetVideoStream();
-            if (videoStream.codecId < 0) {
-                return;
+
+        }
+        });
+
+    m_pZlmPlayer->SetOnStream([this](const zlmplayer::StreamInfo& sinfo) {
+        if (sinfo.mediaType == AVMEDIA_TYPE_VIDEO) {
+            auto videoStream = sinfo;
+            if (videoStream.codecId >= 0) {
+                m_videoTimebae = (double)1 / videoStream.clockRate;
+                AVCodecID vCodeId = getAVCodecId(videoStream.codecId);
+                AVCodecParameters* codecpar = avcodec_parameters_alloc();
+                codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+                codecpar->codec_id = vCodeId;
+                codecpar->width = videoStream.width;
+                codecpar->height = videoStream.height;
+                //这里需要使用av_malloc重新拷贝，否则avcodec_parameters_free中释放内存崩溃
+                uint8_t* extra = (uint8_t*)av_malloc(videoStream.extrasize);
+                std::memcpy(extra, videoStream.extradata, videoStream.extrasize);
+                codecpar->extradata = extra;
+                codecpar->extradata_size = videoStream.extrasize;
+                CreateVideoDecoder(vCodeId, codecpar);
+                avcodec_parameters_free(&codecpar);
             }
-            m_videoTimebae = (double)1 / videoStream.clockRate;
-            AVCodecID vCodeId = getAVCodecId(videoStream.codecId);
-            CreateVideoDecoder(vCodeId, nullptr);
-            auto audioStream = m_pZlmPlayer->GetAudioStream();
+
+        } else if (sinfo.mediaType == AVMEDIA_TYPE_AUDIO) {
+            auto audioStream = sinfo;
             if (audioStream.codecId >= 0) {
                 m_audioTimebae = (double)1 / audioStream.clockRate;
                 AVCodecID aCodeId = getAVCodecId(audioStream.codecId);
-                AVCodecParameters* audioCodecParameters = avcodec_parameters_alloc();
-                audioCodecParameters->codec_id = aCodeId;
-                audioCodecParameters->codec_type = AVMEDIA_TYPE_AUDIO;
-                audioCodecParameters->sample_rate = audioStream.sampleRate;
-                audioCodecParameters->format = getSampleFormat(audioStream.sampleBit);
-                audioCodecParameters->channels = audioStream.channels;
-                audioCodecParameters->channel_layout = av_get_default_channel_layout(audioStream.channels);
-                av_channel_layout_default(&audioCodecParameters->ch_layout, audioStream.channels);
-                CreateAudioDecoder(aCodeId, audioCodecParameters);
-                avcodec_parameters_free(&audioCodecParameters);
+                AVCodecParameters* codecpar = avcodec_parameters_alloc();
+                codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+                codecpar->codec_id = aCodeId;
+                codecpar->sample_rate = audioStream.sampleRate;
+                codecpar->format = getSampleFormat(audioStream.sampleBit);
+                codecpar->channels = audioStream.channels;
+                codecpar->channel_layout = av_get_default_channel_layout(audioStream.channels);
+                uint8_t* extra = (uint8_t*)av_malloc(audioStream.extrasize);
+                std::memcpy(extra, audioStream.extradata, audioStream.extrasize);
+                codecpar->extradata = extra;
+                codecpar->extradata_size = audioStream.extrasize;
+                av_channel_layout_default(&codecpar->ch_layout, audioStream.channels);
+                CreateAudioDecoder(aCodeId, codecpar);
+                avcodec_parameters_free(&codecpar);
+
             }
         }
+
         });
     m_pZlmPlayer->SetOnPacket([this](const zlmplayer::Packet& pkt) {
         AVPacket* packet = av_packet_alloc();
@@ -278,10 +299,12 @@ bool RtspPlayer::StreamOpen()
             static int packetIndex = 0;
             packetIndex++;
             //LOG_INFO << "audio packet Index:" << packetIndex << ", pts:" << packet->pts;
-            if (m_pAudioDecoder->IsOpen())
-                m_audioPacketQueue.Push(av_packet_clone(packet), true);
-        }
-        else {
+            // 
+            //这里拷贝是因为zlm源数据packet是循环使用一块内存缓冲区，后续使用队列处理packet需要拷贝内存，否则会出现解码画面异常
+            auto pkt = av_packet_clone(packet);//当AVPacket的buf为NULL时，会从data里拷贝内存，否则会继续使用buf的内存
+            m_audioPacketQueue.Push(pkt, true);
+            av_packet_free(&pkt); //使用了av_packet_clone后要清理内存，否则会出现内存泄漏
+        } else {
             if (m_firstVideoPts <= 0) {
                 m_firstVideoPts = pkt.pts;
             }
@@ -324,7 +347,11 @@ bool RtspPlayer::StreamOpen()
             //static int packetIndex1 = 0;
             //packetIndex1++;
             //LOG_INFO << "===== start video packet Index:" << packetIndex1 << ", pts:" << packet->pts << ", ts:" << packet->pts * m_videoTimebae << ", framePlayInterval:" << framePlayInterval;
-            m_videoPacketQueue.Push(av_packet_clone(packet), true);//推送到队列需要拷贝内存，否则所有帧都使用同一块内存解码画面异常
+
+            //这里拷贝是因为zlm源数据packet是循环使用一块内存缓冲区，后续使用队列处理packet需要拷贝内存，否则会出现解码画面异常
+            auto pkt = av_packet_clone(packet);//当AVPacket的buf为NULL时，会从data里拷贝内存，否则会继续使用buf的内存
+            m_videoPacketQueue.Push(pkt, true);
+            av_packet_free(&pkt); //使用了av_packet_clone后要清理内存，否则会出现内存泄漏
             //if (m_pVideoDecoder)
             //    m_pVideoDecoder->SendPacket(av_packet_clone(packet));
             //LOG_INFO << "===== end video packet Index:" << m_videoPacketIndex;
