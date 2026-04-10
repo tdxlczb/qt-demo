@@ -12,6 +12,44 @@
         <file>res/icon/Up.png</file>
         <file>res/icon/UpLeft.png</file>
         <file>res/icon/UpRight.png</file>
+        <file>res/icon/icon1/DownLoad.png</file>
+        <file>res/icon/icon1/Fish.png</file>
+        <file>res/icon/icon1/FullScreen.png</file>
+        <file>res/icon/icon1/FullScreenExit.png</file>
+        <file>res/icon/icon1/History.png</file>
+        <file>res/icon/icon1/Record.png</file>
+        <file>res/icon/icon1/RecordStop.png</file>
+        <file>res/icon/icon1/Snap.png</file>
+        <file>res/icon/icon1/SoundOff.png</file>
+        <file>res/icon/icon1/SoundOn.png</file>
+        <file>res/icon/icon1/Tag.png</file>
+        <file>res/icon/icon1/Talk.png</file>
+        <file>res/icon/icon1/TalkStop.png</file>
+        <file>res/icon/icon1/Zoom.png</file>
+        <file>res/icon/icon2/DownLoad.png</file>
+        <file>res/icon/icon2/Fish.png</file>
+        <file>res/icon/icon2/FullScreen.png</file>
+        <file>res/icon/icon2/FullScreenExit.png</file>
+        <file>res/icon/icon2/History.png</file>
+        <file>res/icon/icon2/Record.png</file>
+        <file>res/icon/icon2/RecordStop.png</file>
+        <file>res/icon/icon2/Snap.png</file>
+        <file>res/icon/icon2/SoundOff.png</file>
+        <file>res/icon/icon2/SoundOn.png</file>
+        <file>res/icon/icon2/Tag.png</file>
+        <file>res/icon/icon2/Talk.png</file>
+        <file>res/icon/icon2/TalkStop.png</file>
+        <file>res/icon/icon2/Time.png</file>
+        <file>res/icon/icon2/TimePostion.png</file>
+        <file>res/icon/icon2/Zoom.png</file>
         <file>res/icon/More.png</file>
+        <file>res/icon/Pause.png</file>
+        <file>res/icon/PlayBackward.png</file>
+        <file>res/icon/PlayForward.png</file>
+        <file>res/icon/SpeedDown.png</file>
+        <file>res/icon/SpeedDownUn.png</file>
+        <file>res/icon/SpeedUp.png</file>
+        <file>res/icon/SpeedUpUn.png</file>
+        <file>res/icon/Stop.png</file>
     </qresource>
 </RCC>

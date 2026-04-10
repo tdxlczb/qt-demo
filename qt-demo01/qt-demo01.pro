@@ -8,10 +8,14 @@ CONFIG += c++11
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
+include(toolbar/toolbar.pri)
+include(video_monitor/video_monitor.pri)
+
 SOURCES += \
     custom_border_widget.cpp \
     custom_child_widget.cpp \
     custom_toolbar.cpp \
+    function_widget.cpp \
     main.cpp \
     main_widget.cpp \
     main_window.cpp \
@@ -25,6 +29,7 @@ HEADERS += \
     custom_border_widget.h \
     custom_child_widget.h \
     custom_toolbar.h \
+    function_widget.h \
     main_widget.h \
     main_window.h \
     mask_widget.h \
@@ -47,6 +52,19 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     res.qrc
+
+
+BUILD_DIR = $$PWD/build
+CONFIG(debug, debug|release) {
+    BUILD_DIR = $$BUILD_DIR/debug
+}else{
+    BUILD_DIR = $$BUILD_DIR/release
+}
+MOC_DIR     = $$BUILD_DIR/moc
+RCC_DIR     = $$BUILD_DIR/rcc
+UI_DIR      = $$BUILD_DIR/ui
+OBJECTS_DIR = $$BUILD_DIR/obj
+DESTDIR     = $$BUILD_DIR/product
 
 # 打印qt版本号
 message(Qt Version = $$[QT_VERSION])

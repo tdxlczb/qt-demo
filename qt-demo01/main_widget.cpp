@@ -9,6 +9,7 @@
 #include <QMenu>
 #include <QScreen>
 
+#include "function_widget.h"
 #include "test01_widget.h"
 #include "test02_widget.h"
 #include "test03_widget.h"
@@ -30,39 +31,43 @@ MainWidget::MainWidget(QWidget *parent)
     palette.setColor(QPalette::Window, QColor(255, 255, 255));
     this->setPalette(palette);
 
+    HWND parentHwnd = (HWND)(40510956);
+    FunctionWidget* pWidget = new FunctionWidget();
+    pWidget->show();
+
     //CustomToolBar * pToolBar = new CustomToolBar();
     //pToolBar->show();
 
     //Test02Widget* pWidget2 = new Test02Widget();
     //pWidget2->show();
 
-    Test03Widget* pWidget3 = new Test03Widget();
-    pWidget3->show();
+    //Test03Widget* pWidget3 = new Test03Widget();
+    //pWidget3->show();
 
-    Test01Widget* pWidget = new Test01Widget();
-    {
-        //HWND hwnd = (HWND)pWidget->winId();
-        //HWND parentHwnd = (HWND)(2954348);
-        //if (!SetParent(hwnd, parentHwnd)) {
-        //    qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
-        //}
-    }
-    pWidget->move(200, 200);
-    pWidget->show();
+    //Test01Widget* pWidget = new Test01Widget();
+    //{
+    //    HWND hwnd = (HWND)pWidget->winId();
+    //    HWND parentHwnd = (HWND)(2954348);
+    //    if (!SetParent(hwnd, parentHwnd)) {
+    //        qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
+    //    }
+    //}
+    //pWidget->move(200, 200);
+    //pWidget->show();
 
-    CustomTransparentChildWidget* pChild = new CustomTransparentChildWidget(pWidget);
-    //CustomChildWidget* pChild = new CustomChildWidget(pWidget);
-    {
-        HWND hwnd = (HWND)pChild->winId();
-        HWND parentHwnd = (HWND)pWidget->winId();
-        if (!SetParent(hwnd, parentHwnd)) {
-            qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
-        }
-    }
-    //pChild->move(100, 100);
-    SetWindowPos((HWND)pChild->winId(), HWND_TOP, 100, 200, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
-    //SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    pChild->show();
+    //CustomTransparentChildWidget* pChild = new CustomTransparentChildWidget(pWidget);
+    ////CustomChildWidget* pChild = new CustomChildWidget(pWidget);
+    //{
+    //    HWND hwnd = (HWND)pChild->winId();
+    //    HWND parentHwnd = (HWND)pWidget->winId();
+    //    if (!SetParent(hwnd, parentHwnd)) {
+    //        qCritical() << QString("%1 SetParent %2 Error:").arg((qintptr)hwnd).arg((qintptr)parentHwnd) << GetLastError();
+    //    }
+    //}
+    ////pChild->move(100, 100);
+    //SetWindowPos((HWND)pChild->winId(), HWND_TOP, 100, 200, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    ////SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    //pChild->show();
 
     QVBoxLayout* vBoxLayout = new QVBoxLayout(this);
     setLayout(vBoxLayout);
@@ -72,13 +77,12 @@ MainWidget::MainWidget(QWidget *parent)
 
     vBoxLayout->addWidget(button01);
     vBoxLayout->addWidget(button02);
-    connect(button01,&QPushButton::clicked,[this,pWidget, pChild](){
+    connect(button01,&QPushButton::clicked,[this](){
         qDebug() << "button01 clicked";
         //pWidget->ShowMask(true);
-
     });
 
-    connect(button02,&QPushButton::clicked,[this,pWidget, pChild](){
+    connect(button02,&QPushButton::clicked,[this](){
         qDebug() << "button01 clicked";
         //pWidget->ShowMask(false);
     });
