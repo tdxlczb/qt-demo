@@ -8,6 +8,7 @@
 #include "media/media_player.h"
 #include "media/media_display.h"
 #include "media/media_frame_quality.h"
+#include "media/media_player_manager.h"
 #include "fisheye_widget.h"
 
 const int kVideoRGBConverter = 1;
@@ -83,13 +84,15 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
     else if(decodeType == 2) {
         opt.hwdevice = "d3d11va";
     }
-    opt.demuxerId = 1;
+    opt.demuxerId = 0;
 
-    if (!m_pMediaPlayer) {
-        m_pMediaPlayer = new mp::MediaPlayer();
-    }
-    m_pMediaPlayer->SetPlayEvent(this);
-    m_pMediaPlayer->Play(url.toStdString(), opt);
+    PlayInfo info;
+    info.context = "tag";
+    info.options = opt;
+    info.url = url.toStdString();
+    PlayerManager::Instance().Play(info, this);
+
+    m_playUrl = info.url;
 
     //m_pFishEyeWidget = new FishEyeWidget();
     //m_pFishEyeWidget->resize(1000, 800);
@@ -118,13 +121,7 @@ void PlayerWidget::StartPlay(const QString& url, int decodeType)
 
 void PlayerWidget::StopPlay()
 {
-    if (m_pMediaPlayer)
-    {
-        m_pMediaPlayer->SetPlayEvent(nullptr);
-        m_pMediaPlayer->Stop();
-        delete m_pMediaPlayer;
-        m_pMediaPlayer = nullptr;
-    }
+    PlayerManager::Instance().Stop(m_playUrl, this);
 
     if (m_pVideoRender)
         m_pVideoRender->ClearContent();
@@ -149,39 +146,33 @@ void PlayerWidget::StopPlay()
 
 void PlayerWidget::PlayPause()
 {
-    if (m_pMediaPlayer) {
-        if (m_isPaused) {
-            m_pMediaPlayer->Resume();
-            m_isPaused = false;
-        }
-        else {
-            m_pMediaPlayer->Pause();
-            m_isPaused = true;
-        }
+    if (m_isPaused) {
+        PlayerManager::Instance().Resume(m_playUrl);
+        m_isPaused = false;
+    } else {
+        PlayerManager::Instance().Pause(m_playUrl);
+        m_isPaused = true;
     }
 }
 
 void PlayerWidget::ChangeSpeed(double speed)
 {
-    if (m_pMediaPlayer) {
-        m_pMediaPlayer->Speed(speed);
-    }
+    PlayerManager::Instance().Speed(m_playUrl, speed);
 }
 
 void PlayerWidget::SeekPercent(int value)
 {
-    if (m_pMediaPlayer) {
-        int seekSeconds = m_pMediaPlayer->GetDuration() * value / 100;
-        m_pMediaPlayer->Seek(seekSeconds);
+    auto pMediaPlayer = PlayerManager::Instance().GetPlayer(m_playUrl);
+    if (pMediaPlayer) {
+        int seekSeconds = pMediaPlayer->GetDuration() * value / 100;
+        pMediaPlayer->Seek(seekSeconds);
     }
 }
 
 void PlayerWidget::SeekTime(int value)
 {
-    if (m_pMediaPlayer) {
-        m_totalSeekTime += value;
-        m_pMediaPlayer->Seek(m_playCurrentPts - m_playStartPts + m_totalSeekTime);
-    }
+    m_totalSeekTime += value;
+    PlayerManager::Instance().Seek(m_playUrl, m_playCurrentPts - m_playStartPts + m_totalSeekTime);
 }
 
 #include <chrono>
@@ -214,9 +205,7 @@ void PlayerWidget::onVideoFrame(const VideoFrame& frame)
     //packetIndex++;
     //qInfo() << "video packet Index:" << packetIndex << ", pts:" << outFrame.pts << ", size:" << outFrame.size;
     m_pVideoRender->UpdateContent(outFrame);
-    if (m_pMediaPlayer) {
-        emit sig_PlayTime((int)outFrame.pts, m_pMediaPlayer->GetDuration());
-    }
+    OnUpdateTime(outFrame.pts);
     //auto t1 = std::chrono::high_resolution_clock().now().time_since_epoch();
     if (m_pFishEyeWidget && outFrame.spec.format == kVideoFmtRGB) {
         cv::Mat matIn = cv::Mat(outFrame.spec.height, outFrame.spec.width, CV_8UC3, outFrame.data);//传递处理后的效果图
@@ -246,6 +235,14 @@ void PlayerWidget::onAudioFrame(const AudioFrame& frame)
 void PlayerWidget::onClose(const PlayError& error)
 {
 
+}
+
+void PlayerWidget::OnUpdateTime(double pts)
+{
+    auto pMediaPlayer = PlayerManager::Instance().GetPlayer(m_playUrl);
+    if (pMediaPlayer) {
+        emit sig_PlayTime((int)pts, pMediaPlayer->GetDuration());
+    }
 }
 
 void PlayerWidget::mousePressEvent(QMouseEvent* event)

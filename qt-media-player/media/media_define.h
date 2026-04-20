@@ -106,6 +106,14 @@ struct StreamInfo {
     }
 };
 
+struct PlayInfo
+{
+    std::string url;
+    std::string context;
+    PlayOptions options;
+};
+
+
 //AVPixelFormat
 const int kVideoFmtRGB = 2;  //AV_PIX_FMT_RGB24
 const int kVideoFmtYUV420P = 0;  //AV_PIX_FMT_YUV420P

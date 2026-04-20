@@ -5,7 +5,7 @@
 #include <QDebug>
 #include "player/player_widget.h"
 #include "player/video_player.h"
-#include "player/video_manager.h"
+#include "player/video_monitor.h"
 
 
 MainWidget::MainWidget(QWidget *parent) :
@@ -27,8 +27,8 @@ MainWidget::MainWidget(QWidget *parent) :
     VideoPlayer* pMediaPlayer = new VideoPlayer(nullptr);
     pMediaPlayer->show();
 
-    //VideoManager* pVideoManager = new VideoManager(nullptr);
-    //pVideoManager->show();
+    VideoMonitor* pVideoMonitor = new VideoMonitor(nullptr);
+    pVideoMonitor->show();
 
     //PlayerWidget* pPlayerWidget = new PlayerWidget(nullptr, 0);
     //pPlayerWidget->show();

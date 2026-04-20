@@ -1,26 +1,26 @@
-#include "video_manager.h"
-#include "ui_video_manager.h"
+#include "video_monitor.h"
+#include "ui_video_monitor.h"
 #include <QDebug>
 #include <QTextStream>
 #include "player/player_widget.h"
 
-VideoManager::VideoManager(QWidget* parent) :
+VideoMonitor::VideoMonitor(QWidget* parent) :
     QWidget(parent),
-    ui(new Ui::VideoManager)
+    ui(new Ui::VideoMonitor)
 {
     ui->setupUi(this);
     setupUI();
-    setWindowTitle("VideoManager");
+    setWindowTitle("VideoMonitor");
     setMinimumSize(1000, 500);//视频区域800x450,按照16:9
     resize(1480, 770);//视频区域1280x720,按照16:9
 }
 
-VideoManager::~VideoManager()
+VideoMonitor::~VideoMonitor()
 {
     delete ui;
 }
 
-QList<QString> VideoManager::readUrlList()
+QList<QString> VideoMonitor::readUrlList()
 {
     QList<QString> urlList;
     QString filePath = "url_list.txt";
@@ -50,7 +50,7 @@ QList<QString> VideoManager::readUrlList()
     return urlList;
 }
 
-void VideoManager::saveUrlList(const QList<QString>& urlList)
+void VideoMonitor::saveUrlList(const QList<QString>& urlList)
 {
     QString filePath = "url_list.txt";
     QFile file(filePath);
@@ -63,7 +63,7 @@ void VideoManager::saveUrlList(const QList<QString>& urlList)
     file.close();
 }
 
-void VideoManager::setupUI()
+void VideoMonitor::setupUI()
 {
     // 主布局 - 左右分层
     mainLayout = new QHBoxLayout(this);
@@ -77,7 +77,7 @@ void VideoManager::setupUI()
     setupRightPanel();
 }
 
-void VideoManager::setupLeftPanel()
+void VideoMonitor::setupLeftPanel()
 {
     // 左侧面板 - 固定宽度200，高度自适应
     leftPanel = new QWidget;
@@ -99,7 +99,7 @@ void VideoManager::setupLeftPanel()
     mainLayout->addWidget(leftPanel);
 }
 
-void VideoManager::setupUrlList()
+void VideoMonitor::setupUrlList()
 {
     // 文件列表
     fileListWidget = new QListWidget;
@@ -160,12 +160,12 @@ void VideoManager::setupUrlList()
         });
 
     // 连接信号槽
-    connect(fileListWidget, &QListWidget::itemClicked, this, &VideoManager::onFileSelected);
+    connect(fileListWidget, &QListWidget::itemClicked, this, &VideoMonitor::onFileSelected);
 
     leftLayout->addWidget(fileListWidget);
 }
 
-void VideoManager::setupUrlListControlPanel()
+void VideoMonitor::setupUrlListControlPanel()
 {
     // 控制面板 - 固定高度50
     QWidget* controlPanel = new QWidget;
@@ -271,7 +271,7 @@ void VideoManager::setupUrlListControlPanel()
 
 }
 
-void VideoManager::setupRightPanel()
+void VideoMonitor::setupRightPanel()
 {
     // 右侧面板 - 自适应大小
     rightPanel = new QWidget;
@@ -292,7 +292,7 @@ void VideoManager::setupRightPanel()
     mainLayout->addWidget(rightPanel, 1);
 }
 
-void VideoManager::setupVideoGrid()
+void VideoMonitor::setupVideoGrid()
 {
     // 视频网格区域 - 自适应大小
     videoGridWidget = new QWidget;
@@ -322,7 +322,7 @@ void VideoManager::setupVideoGrid()
     rightLayout->addWidget(videoGridWidget, 1);
 }
 
-void VideoManager::createVideoCell(int row, int col)
+void VideoMonitor::createVideoCell(int row, int col)
 {
     //// 创建单个视频单元格
     //QWidget* cell = new QWidget;
@@ -361,7 +361,7 @@ void VideoManager::createVideoCell(int row, int col)
     // 存储到容器中
     int index = row * gridCols + col;
     PlayerWidget* playWidget = new PlayerWidget(nullptr, index);
-    connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoManager::on_Selected);
+    connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoMonitor::on_Selected);
     videoCells.push_back(playWidget);
     // 添加到网格布局
     videoGridLayout->addWidget(playWidget, row, col);
@@ -371,7 +371,7 @@ void VideoManager::createVideoCell(int row, int col)
     }
 }
 
-void VideoManager::updateVideoGrid()
+void VideoMonitor::updateVideoGrid()
 {
     for (auto pWidget : videoCells)
     {
@@ -385,7 +385,7 @@ void VideoManager::updateVideoGrid()
         for (int col = 0; col < gridCols; ++col) {
             if (videoCells.size() <= index) {
                 PlayerWidget* playWidget = new PlayerWidget(nullptr, index);
-                connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoManager::on_Selected);
+                connect(playWidget, &PlayerWidget::sig_Selected, this, &VideoMonitor::on_Selected);
                 videoCells.push_back(playWidget);
             }
             videoGridLayout->addWidget(videoCells[index], row, col);
@@ -421,7 +421,7 @@ void VideoManager::updateVideoGrid()
     this->repaint();
 }
 
-void VideoManager::setupControlPanel()
+void VideoMonitor::setupControlPanel()
 {
     // 控制面板 - 固定高度50
     QWidget* controlPanel = new QWidget;
@@ -557,17 +557,17 @@ void VideoManager::setupControlPanel()
     controlLayout->addStretch();
 
     // 连接信号槽
-    connect(playButton, &QPushButton::clicked, this, &VideoManager::onPlayClicked);
-    connect(stopButton, &QPushButton::clicked, this, &VideoManager::onStopClicked);
-    connect(playAllButton, &QPushButton::clicked, this, &VideoManager::onPlayAllClicked);
-    connect(stopAllButton, &QPushButton::clicked, this, &VideoManager::onStopAllClicked);
+    connect(playButton, &QPushButton::clicked, this, &VideoMonitor::onPlayClicked);
+    connect(stopButton, &QPushButton::clicked, this, &VideoMonitor::onStopClicked);
+    connect(playAllButton, &QPushButton::clicked, this, &VideoMonitor::onPlayAllClicked);
+    connect(stopAllButton, &QPushButton::clicked, this, &VideoMonitor::onStopAllClicked);
     connect(splitComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onSplitComboBoxChanged(int)));
 
     // 添加到右侧布局
     rightLayout->addWidget(controlPanel);
 }
 
-void VideoManager::onPlayClicked()
+void VideoMonitor::onPlayClicked()
 {
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
@@ -578,14 +578,14 @@ void VideoManager::onPlayClicked()
     }
 }
 
-void VideoManager::onStopClicked()
+void VideoMonitor::onStopClicked()
 {
     if (m_pSelectWidget) {
         m_pSelectWidget->StopPlay();
     }
 }
 
-void VideoManager::onPlayAllClicked()
+void VideoMonitor::onPlayAllClicked()
 {
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000002_5?token=G9dSZrnumeb1TDSf";//2560
     //QString playUrl = "rtsp://172.16.19.44:554/rtp/34020000001180000195_34020000001310000006_5?token=WSGLtsoIcY7bf25L";//2880
@@ -615,7 +615,7 @@ void VideoManager::onPlayAllClicked()
     // }
 }
 
-void VideoManager::onStopAllClicked()
+void VideoMonitor::onStopAllClicked()
 {
     // 停止全部视频的逻辑
     for (int i = 0; i < videoCells.size(); ++i) {
@@ -642,7 +642,7 @@ void VideoManager::onStopAllClicked()
     // }
 }
 
-void VideoManager::onSplitComboBoxChanged(int index)
+void VideoMonitor::onSplitComboBoxChanged(int index)
 {
     qDebug() << "选项改变，当前索引:" << index;
     auto data = splitComboBox->itemData(index);
@@ -652,7 +652,7 @@ void VideoManager::onSplitComboBoxChanged(int index)
     updateVideoGrid();
 }
 
-void VideoManager::onFileSelected(QListWidgetItem* item)
+void VideoMonitor::onFileSelected(QListWidgetItem* item)
 {
     if (!item) return;
 
@@ -670,7 +670,7 @@ void VideoManager::onFileSelected(QListWidgetItem* item)
     }
 }
 
-void VideoManager::on_Selected(PlayerWidget* pWidget)
+void VideoMonitor::on_Selected(PlayerWidget* pWidget)
 {
     if (m_pSelectWidget) {
         m_pSelectWidget->setStyleSheet("background-color: #F0F0F0; border: none;");

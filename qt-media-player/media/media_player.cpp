@@ -29,7 +29,6 @@ MediaPlayer::~MediaPlayer()
     avformat_network_deinit();
 }
 
-
 void MediaPlayer::OnDemuxStatus(DemuxStatus status)
 {
     if (status == DemuxStatus::StreamOver) {
@@ -157,7 +156,7 @@ void MediaPlayer::WaitClock(double pts, bool isVideo)
 
 void MediaPlayer::Play(const std::string& url, const PlayOptions& options)
 {
-    LOG_INFO_T << "try play url:" << m_url;
+    LOG_INFO_T << "try play url:" << url;
 
     Stop();
     m_url = url;

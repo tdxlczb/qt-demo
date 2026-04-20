@@ -33,7 +33,9 @@ class MediaDemuxer;
 class MediaPlayer : public MediaContext, public DemuxEvent
 {
 public:
-    MediaPlayer(const std::string& context = "tag");
+    using Ptr = std::shared_ptr<MediaPlayer>;
+
+    MediaPlayer(const std::string& context = "");
     virtual ~MediaPlayer();
 
     void OnDemuxStatus(DemuxStatus status) override;

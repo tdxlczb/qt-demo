@@ -43,6 +43,8 @@ signals:
     void sig_Selected(PlayerWidget* pWidget);
 
 private:
+    void OnUpdateTime(double pts);
+private:
     void mousePressEvent(QMouseEvent* event) override;
     //void mouseReleaseEvent(QMouseEvent* event) override;
     //void mouseDoubleClickEvent(QMouseEvent* event) override;
@@ -61,9 +63,9 @@ private:
 
 private:
     int m_winIndex = 0;
+    std::string m_playUrl;
     VideoRender* m_pVideoRender = nullptr;
-    AudioRender* m_pAudioRender = nullptr;
-    mp::MediaPlayer* m_pMediaPlayer = nullptr;
+    AudioRender* m_pAudioRender = nullptr; 
     FishEyeWidget* m_pFishEyeWidget = nullptr;
     mp::FrameQuality* m_pFrameQuality = nullptr;
 

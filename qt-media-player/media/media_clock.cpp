@@ -42,7 +42,7 @@ double MediaClock::ComputeTargetDelay(double delay, double pts, double master)
         // sync_threshold是视频时钟和音频时钟不同步的阈值，就取为delay也就是last_duration的值，并且在0.04到0.1秒之间。
         // 如果-sync_threshold < diff < sync_threshold的话就不需要调整last_duration了。
         sync_threshold = (std::max)(kMinSyncThreshold, (std::min)(kMaxSyncThreshold, delay));
-        if (!isnan(diff) && fabs(diff) < kMaxFrameDuration) {
+        if (!std::isnan(diff) && fabs(diff) < kMaxFrameDuration) {
 
             // 如果视频时钟比音频时钟慢了的时间超过了sync_threshold，则将delay（也就是last_duration）减小diff，加快视频的速度。
             if (diff <= -sync_threshold)
@@ -70,13 +70,13 @@ double MediaClock::ComputeTargetDelay(double delay, double pts, double master)
 bool MediaClock::Wait(double pts, double master)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
-    if (m_startTs == 0.0 && !isnan(pts) && !isnan(master)) {
+    if (m_startTs == 0.0 && !std::isnan(pts) && !std::isnan(master)) {
         m_startTs = master;
         m_startPts = pts;
     }
 
     double delay = pts - m_lastPts;
-    if (isnan(delay) || delay <= 0 || delay > kMaxFrameDuration) {
+    if (std::isnan(delay) || delay <= 0 || delay > kMaxFrameDuration) {
         delay = m_lastDelay;
     }
 
@@ -116,7 +116,7 @@ bool MediaClock::Wait(double pts, double master)
 bool MediaClock::Wait2(double pts, double master, double speed)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
-    if (m_startTs == 0.0 && !isnan(pts) && !isnan(master)) {
+    if (m_startTs == 0.0 && !std::isnan(pts) && !std::isnan(master)) {
         m_startTs = master;
         m_startPts = pts;
     }
@@ -167,7 +167,7 @@ void MediaClock::SetClockSpeed(double speed)
 void MediaClock::SyncClockToSlave(double slave_clock)
 {
     double clock = GetClock();
-    if (!isnan(slave_clock) && (isnan(clock) || fabs(clock - slave_clock) > kNoSyncThreshold))
+    if (!std::isnan(slave_clock) && (std::isnan(clock) || fabs(clock - slave_clock) > kNoSyncThreshold))
         SetClock(slave_clock);
 }
 

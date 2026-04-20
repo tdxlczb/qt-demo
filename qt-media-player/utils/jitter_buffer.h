@@ -132,22 +132,34 @@ public:
 
     size_t ResetCapacity(size_t size)
     {
-        return m_jitterBuffer->ResetCapacity(size);
+        if (m_jitterBuffer)
+            return m_jitterBuffer->ResetCapacity(size);
+        else
+            return 0;
     }
 
     size_t GetCapacity()
     {
-        return m_jitterBuffer->GetCapacity();
+        if (m_jitterBuffer)
+            return m_jitterBuffer->GetCapacity();
+        else
+            return 0;
     }
 
     size_t GetSize()
     {
-        return m_jitterBuffer->GetSize();
+        if (m_jitterBuffer)
+            return m_jitterBuffer->GetSize();
+        else
+            return 0;
     }
 
     size_t GetFreeSize()
     {
-        return m_jitterBuffer->GetFreeSize();
+        if (m_jitterBuffer)
+            return m_jitterBuffer->GetFreeSize();
+        else
+            return 0;
     }
 
 private:
