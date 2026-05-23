@@ -13,33 +13,50 @@ namespace mp {
 class MediaClock
 {
 public:
-    MediaClock();
+    MediaClock(const std::string& name = "");
     ~MediaClock();
 
-    bool Wait(double pts, double master = -1.0);
+    // 等待直到帧应该显示的时间，返回true表示可以显示，false表示还需要继续等待
+    // pts表示视频帧的pts，clock表示视频时钟，master表示主时钟，mater<0表示不同步
+    bool Wait(double pts, double clock, double master);
     bool Wait2(double pts, double master = -1.0, double speed = 1.0);
+    // 获取当前时钟时间
     double GetClock();
+    // 基于指定系统时间设置时钟PTS
     void SetClockAt(double pts, double time);
+    // 设置时钟PTS
     void SetClock(double pts);
+    // 设置播放速度
     void SetClockSpeed(double speed);
+    // 同步到从时钟：当偏差超过阈值时强制同步
     void SyncClockToSlave(double slave_clock);
-    void InitClock();
+    // 初始化时钟
+    void InitClock(const std::string& name = "");
 private:
-    double ComputeTargetDelay(double delay, double pts, double master);
+    // 计算考虑同步后的目标延迟
+    double ComputeTargetDelay(double delay, double clock, double master);
+    // 获取当前系统时间
+    double GetSystemTime();
 private:
+    std::string m_name;
     std::mutex m_mutex;
-    double m_startTs = 0.0;   //基于时钟的初始时间
-    double m_startPts = 0.0;  //初始的pts时间
-    double m_lastPts = 0.0;   //上次的pts时间
-    double m_lastDelay = 0.0; //上次的帧延迟时间
-    double m_frameTimer = 0.0; // 基于cpu时间的帧时间
 
-    double m_pts = NAN;
-    double m_lastUpdated = 0.0;
-    double m_ptsDrift = 0.0;//pts基于系统时钟(av_gettime_relative)的偏移量，m_pts - m_lastUpdated
-    double m_speed = 1.0;
-    int m_paused = 0;
+    // 帧计时相关
+    double m_frameTimer = 0.0;        // 帧播放计时器（系统时钟时间）
+    double m_lastPts = NAN;           // 上一帧的PTS
+    double m_lastDelay = NAN;         // 上一帧的实际延迟
+
+    // 时钟相关
+    double m_pts = NAN;               // 当前时钟PTS
+    double m_lastUpdated = 0.0;       // 最后一次更新时钟的系统时间
+    double m_ptsDrift = 0.0;          // PTS相对于系统时钟的漂移量
+    double m_speed = 1.0;             // 播放速度
+    bool m_paused = false;            // 是否暂停
+
+    double m_startTs = 0.0;           // 开始时的主时钟时间
+    double m_startPts = 0.0;          // 开始时的PTS
 };
+
 
 } // namespace mp
 

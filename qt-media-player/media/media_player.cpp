@@ -26,6 +26,7 @@ MediaPlayer::MediaPlayer(const std::string& context)
 
 MediaPlayer::~MediaPlayer()
 {
+    Stop();
     avformat_network_deinit();
 }
 
@@ -100,9 +101,9 @@ void MediaPlayer::SetPlayEvent(PlayEvent* playEvent)
 
 void MediaPlayer::ResetClock()
 {
-    m_videoClock.InitClock();
-    m_audioClock.InitClock();
-    m_extClock.InitClock();
+    m_videoClock.InitClock("video");
+    m_audioClock.InitClock("audio");
+    m_extClock.InitClock("ext");
 }
 
 void MediaPlayer::WaitClock(double pts, bool isVideo)
@@ -115,7 +116,7 @@ void MediaPlayer::WaitClock(double pts, bool isVideo)
     if (isVideo) {
         double clock = m_videoClock.GetClock();
         double master = m_audioClock.GetClock();
-        if (isnan(master)) {
+        if (std::isnan(master)) {
             master = m_extClock.GetClock();
         }
         // 使用Wait2如果遇到刚开始rtp包时间戳不准确的情况，可能会导致等待时间过长。
@@ -127,7 +128,7 @@ void MediaPlayer::WaitClock(double pts, bool isVideo)
             //只播关键帧时，音画同步有点问题，关闭音画同步
             while (true)
             {
-                if (!m_videoClock.Wait(clock, master)) {
+                if (!m_videoClock.Wait(pts, clock, master)) {
                     //av_usleep(1000.0);
                     continue;
                 } else {
@@ -179,6 +180,9 @@ void MediaPlayer::Stop()
 {
     m_url = "";
     m_options = PlayOptions{};
+    if (m_demuxer) {
+        m_playEvent = nullptr;
+    }
 
     m_isThreadRun.store(false);
     if (m_thVideoDisplay.joinable()) {
@@ -377,6 +381,7 @@ void MediaPlayer::DemuxThread()
 
 void MediaPlayer::VideoThread()
 {
+    LOG_INFO_T << "VideoDecoder thread start";
     while (m_isThreadRun.load())
     {
         //播放流时，流结束就退出循环
@@ -408,12 +413,13 @@ void MediaPlayer::VideoThread()
         }
         av_packet_free(&packet);
     }
-
+    LOG_INFO_T << "VideoDecoder thread end";
     m_videoPacketQueue.Clear();//线程退出时清空队列，避免队列阻塞等待卡死
 }
 
 void MediaPlayer::AudioThread()
 {
+    LOG_INFO_T << "AudioDecoder thread start";
     while (m_isThreadRun.load())
     {
         //播放流时，流结束就退出循环
@@ -451,6 +457,7 @@ void MediaPlayer::AudioThread()
 
         av_packet_free(&packet);
     }
+    LOG_INFO_T << "AudioDecoder thread start";
     m_audioPacketQueue.Clear();//线程退出时清空队列，避免队列阻塞等待卡死
 }
 
